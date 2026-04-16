@@ -4,7 +4,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ptyCreate: (options) => ipcRenderer.invoke('pty:create', options),
   ptyWrite: (pid, data) => ipcRenderer.send('pty:write', { pid, data }),
   ptyResize: (pid, cols, rows) => ipcRenderer.send('pty:resize', { pid, cols, rows }),
-  onPtyData: (cb) => ipcRenderer.on('pty:data', (_, data) => cb(data)),
+  ptyKill: (pid) => ipcRenderer.invoke('pty:kill', pid),
+  onPtyData: (cb) => ipcRenderer.on('pty:data', (_, { pid, data }) => cb(pid, data)),
   onPtyExit: (cb) => ipcRenderer.on('pty:exit', (_, info) => cb(info)),
-  getHomedir: () => ipcRenderer.invoke('app:homedir')
+  getHomedir: () => ipcRenderer.invoke('app:homedir'),
+  fsReadDir: (dirPath) => ipcRenderer.invoke('fs:read-dir', { dirPath }),
+  fsCreateFile: (filePath) => ipcRenderer.invoke('fs:create-file', { filePath }),
+  fsCreateDir: (dirPath) => ipcRenderer.invoke('fs:create-dir', { dirPath }),
+  fsRename: (oldPath, newPath) => ipcRenderer.invoke('fs:rename', { oldPath, newPath }),
+  fsDelete: (targetPath) => ipcRenderer.invoke('fs:delete', { targetPath }),
+  fsCopy: (srcPath, destDir) => ipcRenderer.invoke('fs:copy', { srcPath, destDir }),
+  getCwd: () => ipcRenderer.invoke('fs:get-cwd'),
+  fsSetRoot: (dirPath) => ipcRenderer.invoke('fs:set-root', { dirPath })
 })

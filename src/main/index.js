@@ -1,9 +1,11 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import os from 'os'
 import { PtyManager } from './pty-manager'
+import { FileManager } from './file-manager'
 
 const ptyManager = new PtyManager()
+const fileManager = new FileManager()
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -42,7 +44,78 @@ app.whenReady().then(() => {
     ptyManager.resize(pid, cols, rows)
   })
 
+  ipcMain.handle('pty:kill', (_, pid) => {
+    ptyManager.kill(pid)
+  })
+
   ipcMain.handle('app:homedir', () => os.homedir())
+
+  ipcMain.handle('fs:read-dir', async (_, { dirPath }) => {
+    try {
+      return await fileManager.readDir(dirPath)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle('fs:create-file', async (_, { filePath }) => {
+    try {
+      return await fileManager.createFile(filePath)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle('fs:create-dir', async (_, { dirPath }) => {
+    try {
+      return await fileManager.createDir(dirPath)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle('fs:rename', async (_, { oldPath, newPath }) => {
+    try {
+      return await fileManager.rename(oldPath, newPath)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle('fs:delete', async (_, { targetPath }) => {
+    try {
+      const win = BrowserWindow.getFocusedWindow()
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'warning',
+        buttons: ['Удалить', 'Отмена'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Подтверждение удаления',
+        message: `Удалить "${targetPath}"?`
+      })
+      if (response !== 0) return { success: false, error: 'Cancelled' }
+      return await fileManager.delete(targetPath)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle('fs:copy', async (_, { srcPath, destDir }) => {
+    try {
+      return await fileManager.copy(srcPath, destDir)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle('fs:get-cwd', () => {
+    return fileManager.getCwd()
+  })
+
+  ipcMain.handle('fs:set-root', (_, { dirPath }) => {
+    fileManager.setRoot(dirPath)
+    return { success: true }
+  })
 
   createWindow()
 })
