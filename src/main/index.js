@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import os from 'os'
+import log from 'electron-log'
+import { autoUpdater } from 'electron-updater'
 import { PtyManager } from './pty-manager'
 import { FileManager } from './file-manager'
 
@@ -32,6 +34,14 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  autoUpdater.logger = log
+  try {
+    autoUpdater.checkForUpdatesAndNotify()
+  } catch (e) {
+    log.info('auto-updater: no update server configured', e.message)
+  }
+
+
   ipcMain.handle('pty:create', (event, options) => {
     return ptyManager.create({ ...options, webContents: event.sender })
   })
