@@ -77,7 +77,7 @@ async function init() {
         fileTree.setRoot(tab.rootPath)
         window.electronAPI.fsSetRoot(tab.rootPath)
       }
-      document.getElementById('title').textContent = tab.termTitle || 'eTty'
+      document.title = tab.termTitle || 'eTty'
       btnUp.disabled = tab.rootPath === '/'
     },
     onAddTab: async () => {
@@ -106,6 +106,25 @@ async function init() {
   })
 
   function setupTabHandlers(tab) {
+    // Kitty keyboard protocol: перехватываем modifier+Enter до xterm.js
+    tab.term.attachCustomKeyEventHandler((event) => {
+      if (event.type === 'keydown' && event.key === 'Enter') {
+        if (event.shiftKey && !event.ctrlKey) {
+          window.electronAPI.ptyWrite(tab.pid, '\x1b[13;2u')
+          return false
+        }
+        if (event.ctrlKey && !event.shiftKey) {
+          window.electronAPI.ptyWrite(tab.pid, '\x1b[13;5u')
+          return false
+        }
+        if (event.ctrlKey && event.shiftKey) {
+          window.electronAPI.ptyWrite(tab.pid, '\x1b[13;6u')
+          return false
+        }
+      }
+      return true
+    })
+
     // Ввод: терминал → PTY
     tab.term.onData((data) => {
       window.electronAPI.ptyWrite(tab.pid, data)
@@ -119,7 +138,7 @@ async function init() {
     // Заголовок окна — только для активного таба
     tab.term.onTitleChange((title) => {
       if (tabBar.getActive()?.pid === tab.pid) {
-        document.getElementById('title').textContent = title || 'eTty'
+        document.title = title || 'eTty'
       }
     })
 
