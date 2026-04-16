@@ -46,7 +46,13 @@ export class PtyManager {
       cols: cols || 80,
       rows: rows || 24,
       cwd,
-      env: { ...process.env, ZDOTDIR: zdotdir }
+      env: {
+        ...process.env,
+        ZDOTDIR: zdotdir,
+        PATH: process.env.PATH
+          ? `/usr/local/bin:${process.env.PATH}`
+          : '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+      }
     })
 
     this.sessions.set(ptyProcess.pid, { pty: ptyProcess, webContents })

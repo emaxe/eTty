@@ -60,6 +60,16 @@ app.whenReady().then(() => {
 
   ipcMain.handle('app:homedir', () => os.homedir())
 
+  ipcMain.handle('window:get-position', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return win.getPosition()
+  })
+
+  ipcMain.on('window:move', (event, { x, y }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    win.setPosition(Math.round(x), Math.round(y))
+  })
+
   ipcMain.handle('fs:read-dir', async (_, { dirPath }) => {
     try {
       return await fileManager.readDir(dirPath)
