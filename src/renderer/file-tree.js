@@ -8,10 +8,22 @@ export class FileTree {
     this._rootContainer = null
     this._contextMenu = new ContextMenu()
     this._clipboard = null // { path }
+    this._isBusy = false
+    this._showHidden = false
+    this._dirTimers = new Map()
   }
 
   getCwd() {
     return this._cwd
+  }
+
+  setIsBusy(busy) {
+    this._isBusy = busy
+  }
+
+  setShowHidden(val) {
+    this._showHidden = val
+    this._refreshList(this._rootContainer, this._cwd, 1)
   }
 
   async setRoot(newPath) {
@@ -39,6 +51,8 @@ export class FileTree {
     this._rootContainer = children
     this._container.appendChild(children)
     await this._refreshList(this._rootContainer, cwd, 1)
+
+    window.electronAPI.onFsDirChanged((data) => this._handleDirChanged(data))
 
     this._container.addEventListener('contextmenu', (e) => {
       const rootUl = this._rootContainer.querySelector(':scope > ul')
@@ -76,13 +90,21 @@ export class FileTree {
       arrow.classList.toggle('expanded', isOpen)
     })
 
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      this._showMenuRoot(e.clientX, e.clientY)
+    })
+
     return { row, children }
   }
 
   async _loadDir(dirPath) {
     const result = await window.electronAPI.fsReadDir(dirPath)
     if (!result || result.error) return null
-    return result.sort((a, b) => {
+    window.electronAPI.fsWatchDir(dirPath)
+    let entries = this._showHidden ? result : result.filter(e => !e.name.startsWith('.'))
+    return entries.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
       return a.name.localeCompare(b.name)
     })
@@ -104,6 +126,7 @@ export class FileTree {
     li.className = 'tree-node'
     li.dataset.path = entry.path
     li.dataset.isDir = entry.isDirectory ? '1' : '0'
+    li.dataset.depth = depth
 
     const row = document.createElement('div')
     row.className = 'tree-node-row'
@@ -140,13 +163,16 @@ export class FileTree {
         if (isOpen) {
           childrenEl.classList.remove('open')
           arrow.classList.remove('expanded')
+          window.electronAPI.fsUnwatchDir(entry.path)
         } else {
           if (!loaded) {
-            const entries = await this._loadDir(entry.path)
+            const entries = await this._loadDir(entry.path) // also calls fsWatchDir
             if (entries) {
               childrenEl.appendChild(this._buildList(entries, entry.path, depth + 1))
             }
             loaded = true
+          } else {
+            window.electronAPI.fsWatchDir(entry.path)
           }
           childrenEl.classList.add('open')
           arrow.classList.add('expanded')
@@ -164,6 +190,14 @@ export class FileTree {
         this._showMenuFile(e.clientX, e.clientY, entry, row)
       }
     })
+
+    if (!entry.isDirectory) {
+      row.addEventListener('dblclick', () => {
+        if (this._isBusy) return
+        const escaped = entry.path.replace(/'/g, "'\\''")
+        this._writeToPty?.(`open '${escaped}'\n`)
+      })
+    }
 
     return li
   }
@@ -183,6 +217,9 @@ export class FileTree {
   _showMenuFile(x, y, entry, row) {
     const parentDir = this._parentDir(entry.path)
     const parentContainer = this._findContainerForDir(parentDir)
+    const rel = entry.path.startsWith(this._cwd + '/')
+      ? entry.path.slice(this._cwd.length + 1)
+      : entry.path
     this._contextMenu.show([
       { label: 'Новый файл', action: () => this._createInline('file', parentDir, parentContainer, 0) },
       { label: 'Новая папка', action: () => this._createInline('dir', parentDir, parentContainer, 0) },
@@ -191,12 +228,22 @@ export class FileTree {
       { label: 'Удалить', action: () => this._deleteEntry(entry, row) },
       { separator: true },
       { label: 'Копировать', action: () => { this._clipboard = { path: entry.path } } },
-      { label: 'Копировать путь', action: () => navigator.clipboard.writeText(entry.path) }
+      { label: 'Копировать путь', action: () => navigator.clipboard.writeText(entry.path) },
+      { label: 'Копировать относительный путь', action: () => navigator.clipboard.writeText(rel) }
     ], x, y)
   }
 
   _showMenuDir(x, y, entry, childrenEl, arrow, childDepth, row) {
+    const rel = entry.path.startsWith(this._cwd + '/')
+      ? entry.path.slice(this._cwd.length + 1)
+      : entry.path
     this._contextMenu.show([
+      { label: 'cd в директорию', disabled: this._isBusy, action: () => {
+          const escaped = entry.path.replace(/'/g, "'\\''")
+          this._writeToPty?.(`cd '${escaped}'\r`)
+        }
+      },
+      { separator: true },
       { label: 'Новый файл', action: () => this._createInlineInDir('file', entry.path, childrenEl, arrow, childDepth) },
       { label: 'Новая папка', action: () => this._createInlineInDir('dir', entry.path, childrenEl, arrow, childDepth) },
       { separator: true },
@@ -206,12 +253,22 @@ export class FileTree {
       { label: 'Копировать', action: () => { this._clipboard = { path: entry.path } } },
       { label: 'Вставить', action: () => this._paste(entry.path, childrenEl, childDepth) },
       { label: 'Копировать путь', action: () => navigator.clipboard.writeText(entry.path) },
-      { separator: true },
-      { label: 'cd в директорию', action: () => {
-          const escaped = entry.path.replace(/'/g, "'\\''")
+      { label: 'Копировать относительный путь', action: () => navigator.clipboard.writeText(rel) }
+    ], x, y)
+  }
+
+  _showMenuRoot(x, y) {
+    this._contextMenu.show([
+      { label: 'cd в директорию', disabled: this._isBusy, action: () => {
+          const escaped = this._cwd.replace(/'/g, "'\\''")
           this._writeToPty?.(`cd '${escaped}'\r`)
         }
-      }
+      },
+      { separator: true },
+      { label: 'Новый файл', action: () => this._createInline('file', this._cwd, this._rootContainer, 1) },
+      { label: 'Новая папка', action: () => this._createInline('dir', this._cwd, this._rootContainer, 1) },
+      { separator: true },
+      { label: 'Копировать путь', action: () => navigator.clipboard.writeText(this._cwd) }
     ], x, y)
   }
 
@@ -359,6 +416,23 @@ export class FileTree {
     } else {
       container.appendChild(newUl)
     }
+  }
+
+  _handleDirChanged({ dirPath }) {
+    clearTimeout(this._dirTimers.get(dirPath))
+    this._dirTimers.set(dirPath, setTimeout(() => {
+      this._dirTimers.delete(dirPath)
+      if (dirPath === this._cwd) {
+        this._refreshList(this._rootContainer, dirPath, 1)
+        return
+      }
+      const li = this._container.querySelector(`li[data-path="${CSS.escape(dirPath)}"]`)
+      if (!li) return
+      const childrenEl = li.querySelector('.tree-children')
+      if (!childrenEl || !childrenEl.classList.contains('open')) return
+      const depth = parseInt(li.dataset.depth, 10)
+      this._refreshList(childrenEl, dirPath, depth + 1)
+    }, 300))
   }
 
   // Find the container div for a given dir path in the tree

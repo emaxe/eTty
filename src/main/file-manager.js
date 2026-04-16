@@ -1,9 +1,12 @@
 import fs from 'fs/promises'
+import { watch } from 'fs'
 import path from 'path'
+import os from 'os'
 
 export class FileManager {
   constructor() {
-    this.cwd = process.cwd()
+    this.cwd = os.homedir()
+    this._watchers = new Map()
   }
 
   validatePath(targetPath) {
@@ -75,5 +78,31 @@ export class FileManager {
 
   getCwd() {
     return { cwd: this.cwd }
+  }
+
+  watchDir(dirPath, webContents) {
+    if (this._watchers.has(dirPath)) return
+    let timer
+    try {
+      const watcher = watch(dirPath, { persistent: false }, () => {
+        clearTimeout(timer)
+        timer = setTimeout(() => {
+          if (!webContents.isDestroyed()) webContents.send('fs:dir-changed', { dirPath })
+        }, 300)
+      })
+      watcher.on('error', () => this.unwatchDir(dirPath))
+      this._watchers.set(dirPath, watcher)
+    } catch {
+      // directory inaccessible or deleted
+    }
+  }
+
+  unwatchDir(dirPath) {
+    const w = this._watchers.get(dirPath)
+    if (w) { w.close(); this._watchers.delete(dirPath) }
+  }
+
+  unwatchAll() {
+    for (const [dirPath] of this._watchers) this.unwatchDir(dirPath)
   }
 }

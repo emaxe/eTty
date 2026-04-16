@@ -57,6 +57,7 @@ async function init() {
   const fileTreeContainerEl = document.getElementById('file-tree-container')
   const btnUp = document.getElementById('btn-up')
   const btnHome = document.getElementById('btn-home')
+  const btnToggleHidden = document.getElementById('btn-toggle-hidden')
 
   const { cwd: startCwd } = await window.electronAPI.getCwd()
 
@@ -69,6 +70,14 @@ async function init() {
   const fileTree = new FileTree(fileTreeContainerEl, writeToPtyActive)
   await fileTree.init(startCwd)
 
+  function updateNavButtons() {
+    const tab = tabBar.getActive()
+    const busy = tab?.isBusy ?? false
+    btnUp.disabled = busy || (tab?.rootPath === '/')
+    btnHome.disabled = busy
+    fileTree.setIsBusy(busy)
+  }
+
   const tabBar = new TabBar({
     tabBarEl,
     terminalContainerEl,
@@ -78,13 +87,14 @@ async function init() {
         window.electronAPI.fsSetRoot(tab.rootPath)
       }
       document.title = tab.termTitle || 'eTty'
-      btnUp.disabled = tab.rootPath === '/'
+      updateNavButtons()
     },
     onAddTab: async () => {
       const active = tabBar.getActive()
       const cwd = active ? active.rootPath : startCwd
       const tabData = await createTab(cwd)
       const tab = tabBar.addTab(tabData)
+      tab.isBusy = false
       setupTabHandlers(tab)
     },
     onCloseTab: (index) => {
@@ -155,8 +165,19 @@ async function init() {
             fileTree.setRoot(newPath)
             window.electronAPI.fsSetRoot(newPath)
           }
-          btnUp.disabled = newPath === '/'
+          updateNavButtons()
         }
+      }
+      return false
+    })
+
+    // OSC 133 — отслеживание занятости терминала
+    tab.term.parser.registerOscHandler(133, (data) => {
+      const wasBusy = tab.isBusy
+      if (data.startsWith('C')) tab.isBusy = true
+      else if (data.startsWith('A')) tab.isBusy = false
+      if (wasBusy !== tab.isBusy && tabBar.getActive()?.pid === tab.pid) {
+        updateNavButtons()
       }
       return false
     })
@@ -172,12 +193,21 @@ async function init() {
   // Первый таб
   const firstTabData = await createTab(startCwd)
   const firstTab = tabBar.addTab(firstTabData)
+  firstTab.isBusy = false
   setupTabHandlers(firstTab)
 
   // Кнопки навигации сайдбара
   btnUp.disabled = startCwd === '/'
   btnUp.addEventListener('click', () => writeToPtyActive('cd ..\n'))
   btnHome.addEventListener('click', () => writeToPtyActive('cd ~\n'))
+
+  let showHidden = false
+  btnToggleHidden.addEventListener('click', () => {
+    showHidden = !showHidden
+    btnToggleHidden.classList.toggle('active', showHidden)
+    btnToggleHidden.title = showHidden ? 'Скрыть скрытые файлы' : 'Показать скрытые файлы'
+    fileTree.setShowHidden(showHidden)
+  })
 
   // Resize handle — изменение ширины сайдбара
   const sidebar = document.getElementById('sidebar')

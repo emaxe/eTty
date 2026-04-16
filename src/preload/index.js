@@ -15,5 +15,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fsDelete: (targetPath) => ipcRenderer.invoke('fs:delete', { targetPath }),
   fsCopy: (srcPath, destDir) => ipcRenderer.invoke('fs:copy', { srcPath, destDir }),
   getCwd: () => ipcRenderer.invoke('fs:get-cwd'),
-  fsSetRoot: (dirPath) => ipcRenderer.invoke('fs:set-root', { dirPath })
+  fsSetRoot: (dirPath) => ipcRenderer.invoke('fs:set-root', { dirPath }),
+  fsWatchDir: (dirPath) => ipcRenderer.invoke('fs:watch-dir', { dirPath }),
+  fsUnwatchDir: (dirPath) => ipcRenderer.invoke('fs:unwatch-dir', { dirPath }),
+  onFsDirChanged: (cb) => ipcRenderer.on('fs:dir-changed', (_, data) => cb(data))
 })

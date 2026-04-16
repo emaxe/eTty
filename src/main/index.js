@@ -127,10 +127,19 @@ app.whenReady().then(() => {
     return { success: true }
   })
 
+  ipcMain.handle('fs:watch-dir', (event, { dirPath }) => {
+    fileManager.watchDir(dirPath, event.sender)
+  })
+
+  ipcMain.handle('fs:unwatch-dir', (_, { dirPath }) => {
+    fileManager.unwatchDir(dirPath)
+  })
+
   createWindow()
 })
 
 app.on('window-all-closed', () => {
   ptyManager.killAll()
+  fileManager.unwatchAll()
   app.quit()
 })

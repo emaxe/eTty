@@ -11,31 +11,27 @@ html, body {
 }
 
 #titlebar {
-  height: 36px;
+  height: 38px;
   display: flex;
   align-items: center;
-  justify-content: center;
   background: #181825;
-  color: #cdd6f4;
-  font-size: 13px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-app-region: drag;
   -webkit-user-select: none;
   user-select: none;
   padding-left: 70px; /* пространство для macOS traffic lights */
+  border-bottom: 1px solid #313244;
+  flex-shrink: 0;
 }
 
 /* Tab bar */
 #tab-bar {
-  height: 32px;
-  background: #181825;
+  flex: 1;
   display: flex;
   align-items: center;
   overflow-x: auto;
   overflow-y: hidden;
-  border-bottom: 1px solid #313244;
+  height: 100%;
   -webkit-app-region: no-drag;
-  flex-shrink: 0;
 }
 
 #tab-bar::-webkit-scrollbar {
@@ -63,6 +59,7 @@ html, body {
   background: #1e1e2e;
   color: #cdd6f4;
   border-bottom: 2px solid #89b4fa;
+  margin-bottom: -1px; /* перекрываем border-bottom тайтлбара */
 }
 
 .tab-folder {
@@ -123,7 +120,7 @@ html, body {
 #workspace {
   display: flex;
   flex-direction: row;
-  height: calc(100vh - 36px - 32px);
+  height: calc(100vh - 38px);
   overflow: hidden;
 }
 
@@ -170,6 +167,16 @@ html, body {
 #sidebar-nav button:disabled {
   opacity: 0.3;
   cursor: default;
+}
+
+#btn-toggle-hidden {
+  margin-left: auto;
+  font-size: 11px;
+}
+
+#btn-toggle-hidden.active {
+  background: #45475a;
+  color: #cdd6f4;
 }
 
 #file-tree-container {
@@ -340,6 +347,15 @@ html, body {
 
 .context-menu-item:hover {
   background: #313244;
+}
+
+.context-menu-item.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.context-menu-item.disabled:hover {
+  background: transparent;
 }
 
 .context-menu-separator {

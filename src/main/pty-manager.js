@@ -27,7 +27,11 @@ export class PtyManager {
         `[[ -f "${userZshrc}" ]] && builtin source "${userZshrc}"`,
         `autoload -Uz add-zsh-hook`,
         `_etty_cwd() { printf '\\033]7;file://%s\\007' "$PWD"; }`,
+        `_etty_preexec() { printf '\\033]133;C\\007' }`,
+        `_etty_precmd_state() { printf '\\033]133;A\\007' }`,
         `add-zsh-hook precmd _etty_cwd`,
+        `add-zsh-hook preexec _etty_preexec`,
+        `add-zsh-hook precmd _etty_precmd_state`,
         `_etty_cwd`
       ].join('\n') + '\n'
     )

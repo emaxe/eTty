@@ -20,10 +20,15 @@ export class ContextMenu {
       const el = document.createElement('div')
       el.className = 'context-menu-item'
       el.textContent = item.label
-      el.addEventListener('click', () => {
-        this.hide()
-        item.action()
-      })
+      if (item.disabled) {
+        el.classList.add('disabled')
+        el.addEventListener('click', (e) => e.stopPropagation())
+      } else {
+        el.addEventListener('click', () => {
+          this.hide()
+          item.action()
+        })
+      }
       menu.appendChild(el)
     }
 
