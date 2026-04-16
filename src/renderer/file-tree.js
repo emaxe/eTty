@@ -1,9 +1,10 @@
 import { ContextMenu } from './context-menu.js'
 
 export class FileTree {
-  constructor(container, writeToPty = null) {
+  constructor(container, terminalActions = null) {
     this._container = container
-    this._writeToPty = writeToPty
+    this._writeToPty = terminalActions?.writeToPty ?? null
+    this._focusTerminal = terminalActions?.focusTerminal ?? null
     this._cwd = null
     this._rootContainer = null
     this._contextMenu = new ContextMenu()
@@ -241,6 +242,7 @@ export class FileTree {
       { label: 'cd в директорию', disabled: this._isBusy, action: () => {
           const escaped = entry.path.replace(/'/g, "'\\''")
           this._writeToPty?.(`cd '${escaped}'\r`)
+          this._focusTerminal?.()
         }
       },
       { separator: true },
@@ -262,6 +264,7 @@ export class FileTree {
       { label: 'cd в директорию', disabled: this._isBusy, action: () => {
           const escaped = this._cwd.replace(/'/g, "'\\''")
           this._writeToPty?.(`cd '${escaped}'\r`)
+          this._focusTerminal?.()
         }
       },
       { separator: true },

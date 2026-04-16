@@ -61,13 +61,20 @@ async function init() {
 
   const { cwd: startCwd } = await window.electronAPI.getCwd()
 
-  // FileTree получает активный writeToPty через замыкание на tabBar
-  const writeToPtyActive = (data) => {
+  const focusActiveTerminal = () => {
     const tab = tabBar.getActive()
-    if (tab) window.electronAPI.ptyWrite(tab.pid, '\r\x1b[2K' + data)
+    if (tab) tab.term.focus()
   }
 
-  const fileTree = new FileTree(fileTreeContainerEl, writeToPtyActive)
+  const writeToPtyActive = (data) => {
+    const tab = tabBar.getActive()
+    if (tab) {
+      window.electronAPI.ptyWrite(tab.pid, '\x15' + data)
+      tab.term.focus()
+    }
+  }
+
+  const fileTree = new FileTree(fileTreeContainerEl, { writeToPty: writeToPtyActive, focusTerminal: focusActiveTerminal })
   await fileTree.init(startCwd)
 
   function updateNavButtons() {
