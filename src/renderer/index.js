@@ -64,7 +64,7 @@ async function init() {
   // FileTree получает активный writeToPty через замыкание на tabBar
   const writeToPtyActive = (data) => {
     const tab = tabBar.getActive()
-    if (tab) window.electronAPI.ptyWrite(tab.pid, data)
+    if (tab) window.electronAPI.ptyWrite(tab.pid, '\r\x1b[2K' + data)
   }
 
   const fileTree = new FileTree(fileTreeContainerEl, writeToPtyActive)
@@ -131,6 +131,15 @@ async function init() {
           if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, '\x1b[13;6u')
           return false
         }
+      }
+      // Не-ASCII печатаемые символы (кириллица, акцентированные буквы и т.д.):
+      // xterm.js не устанавливает _keyDownHandled корректно в non-screenReader режиме,
+      // из-за чего _keyPress повторно обрабатывает событие с неверным charCode на macOS.
+      // Отправляем символ вручную и блокируем xterm.js-обработку.
+      if (event.key.length === 1 && event.key.charCodeAt(0) > 127 &&
+          !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, event.key)
+        return false
       }
       return true
     })
@@ -208,6 +217,40 @@ async function init() {
     btnToggleHidden.title = showHidden ? 'Скрыть скрытые файлы' : 'Показать скрытые файлы'
     fileTree.setShowHidden(showHidden)
   })
+
+  // Кастомный drag тайтлбара — работает даже когда вкладки заполняют всю ширину
+  const titlebarEl = document.getElementById('titlebar')
+  let dragState = null
+  let titlebarDidDrag = false
+
+  titlebarEl.addEventListener('mousedown', async (e) => {
+    if (e.button !== 0) return
+    titlebarDidDrag = false
+    const [winX, winY] = await window.electronAPI.windowGetPosition()
+    dragState = { startScreenX: e.screenX, startScreenY: e.screenY, startWinX: winX, startWinY: winY }
+  })
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragState) return
+    const dx = e.screenX - dragState.startScreenX
+    const dy = e.screenY - dragState.startScreenY
+    if (!titlebarDidDrag && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      titlebarDidDrag = true
+    }
+    if (titlebarDidDrag) {
+      window.electronAPI.windowMove(dragState.startWinX + dx, dragState.startWinY + dy)
+    }
+  })
+
+  document.addEventListener('mouseup', () => { dragState = null })
+
+  // Отменяем click по вкладке если был drag
+  titlebarEl.addEventListener('click', (e) => {
+    if (titlebarDidDrag) {
+      e.stopImmediatePropagation()
+      titlebarDidDrag = false
+    }
+  }, true)
 
   // Resize handle — изменение ширины сайдбара
   const sidebar = document.getElementById('sidebar')

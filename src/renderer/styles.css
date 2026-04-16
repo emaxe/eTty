@@ -15,7 +15,6 @@ html, body {
   display: flex;
   align-items: center;
   background: #181825;
-  -webkit-app-region: drag;
   -webkit-user-select: none;
   user-select: none;
   padding-left: 70px; /* пространство для macOS traffic lights */
@@ -31,7 +30,6 @@ html, body {
   overflow-x: auto;
   overflow-y: hidden;
   height: 100%;
-  -webkit-app-region: no-drag;
 }
 
 #tab-bar::-webkit-scrollbar {

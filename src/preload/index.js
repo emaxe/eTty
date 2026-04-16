@@ -18,5 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fsSetRoot: (dirPath) => ipcRenderer.invoke('fs:set-root', { dirPath }),
   fsWatchDir: (dirPath) => ipcRenderer.invoke('fs:watch-dir', { dirPath }),
   fsUnwatchDir: (dirPath) => ipcRenderer.invoke('fs:unwatch-dir', { dirPath }),
-  onFsDirChanged: (cb) => ipcRenderer.on('fs:dir-changed', (_, data) => cb(data))
+  onFsDirChanged: (cb) => ipcRenderer.on('fs:dir-changed', (_, data) => cb(data)),
+  windowGetPosition: () => ipcRenderer.invoke('window:get-position'),
+  windowMove: (x, y) => ipcRenderer.send('window:move', { x, y })
 })
