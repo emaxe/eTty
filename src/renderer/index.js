@@ -108,17 +108,17 @@ async function init() {
   function setupTabHandlers(tab) {
     // Kitty keyboard protocol: перехватываем modifier+Enter до xterm.js
     tab.term.attachCustomKeyEventHandler((event) => {
-      if (event.type === 'keydown' && event.key === 'Enter') {
+      if (event.key === 'Enter') {
         if (event.shiftKey && !event.ctrlKey) {
-          window.electronAPI.ptyWrite(tab.pid, '\x1b[13;2u')
+          if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, '\x1b[13;2u')
           return false
         }
         if (event.ctrlKey && !event.shiftKey) {
-          window.electronAPI.ptyWrite(tab.pid, '\x1b[13;5u')
+          if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, '\x1b[13;5u')
           return false
         }
         if (event.ctrlKey && event.shiftKey) {
-          window.electronAPI.ptyWrite(tab.pid, '\x1b[13;6u')
+          if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, '\x1b[13;6u')
           return false
         }
       }
