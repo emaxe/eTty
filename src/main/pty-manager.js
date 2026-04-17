@@ -49,6 +49,8 @@ export class PtyManager {
       env: {
         ...process.env,
         ZDOTDIR: zdotdir,
+        LANG: process.env.LANG || 'en_US.UTF-8',
+        LC_CTYPE: process.env.LC_CTYPE || 'en_US.UTF-8',
         PATH: process.env.PATH
           ? `/usr/local/bin:${process.env.PATH}`
           : '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
