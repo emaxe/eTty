@@ -229,8 +229,8 @@ export class FileTree {
       { label: 'Удалить', action: () => this._deleteEntry(entry, row) },
       { separator: true },
       { label: 'Копировать', action: () => { this._clipboard = { path: entry.path } } },
-      { label: 'Копировать путь', action: () => navigator.clipboard.writeText(entry.path) },
-      { label: 'Копировать относительный путь', action: () => navigator.clipboard.writeText(rel) }
+      { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(entry.path); this._focusTerminal?.() } },
+      { label: 'Копировать относительный путь', action: () => { navigator.clipboard.writeText(rel); this._focusTerminal?.() } }
     ], x, y)
   }
 
@@ -254,8 +254,8 @@ export class FileTree {
       { separator: true },
       { label: 'Копировать', action: () => { this._clipboard = { path: entry.path } } },
       { label: 'Вставить', action: () => this._paste(entry.path, childrenEl, childDepth) },
-      { label: 'Копировать путь', action: () => navigator.clipboard.writeText(entry.path) },
-      { label: 'Копировать относительный путь', action: () => navigator.clipboard.writeText(rel) }
+      { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(entry.path); this._focusTerminal?.() } },
+      { label: 'Копировать относительный путь', action: () => { navigator.clipboard.writeText(rel); this._focusTerminal?.() } }
     ], x, y)
   }
 
@@ -271,7 +271,7 @@ export class FileTree {
       { label: 'Новый файл', action: () => this._createInline('file', this._cwd, this._rootContainer, 1) },
       { label: 'Новая папка', action: () => this._createInline('dir', this._cwd, this._rootContainer, 1) },
       { separator: true },
-      { label: 'Копировать путь', action: () => navigator.clipboard.writeText(this._cwd) }
+      { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(this._cwd); this._focusTerminal?.() } }
     ], x, y)
   }
 

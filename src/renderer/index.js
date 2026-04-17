@@ -58,6 +58,9 @@ async function init() {
   const btnUp = document.getElementById('btn-up')
   const btnHome = document.getElementById('btn-home')
   const btnToggleHidden = document.getElementById('btn-toggle-hidden')
+  const btnToggleSidebar = document.getElementById('btn-toggle-sidebar')
+  const sidebar = document.getElementById('sidebar')
+  const resizeHandle = document.getElementById('resize-handle')
 
   const { cwd: startCwd } = await window.electronAPI.getCwd()
 
@@ -282,6 +285,14 @@ async function init() {
   btnUp.addEventListener('click', () => writeToPtyActive('cd ..\n'))
   btnHome.addEventListener('click', () => writeToPtyActive('cd ~\n'))
 
+  let sidebarVisible = true
+  btnToggleSidebar.addEventListener('click', () => {
+    sidebarVisible = !sidebarVisible
+    sidebar.style.display = sidebarVisible ? '' : 'none'
+    resizeHandle.style.display = sidebarVisible ? '' : 'none'
+    tabBar.getActive()?.fitAddon.fit()
+  })
+
   let showHidden = false
   btnToggleHidden.addEventListener('click', () => {
     showHidden = !showHidden
@@ -325,8 +336,6 @@ async function init() {
   }, true)
 
   // Resize handle — изменение ширины сайдбара
-  const sidebar = document.getElementById('sidebar')
-  const resizeHandle = document.getElementById('resize-handle')
   resizeHandle.addEventListener('mousedown', (e) => {
     e.preventDefault()
     resizeHandle.classList.add('dragging')
