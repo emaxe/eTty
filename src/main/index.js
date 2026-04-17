@@ -6,9 +6,11 @@ import { autoUpdater } from 'electron-updater'
 import { PtyManager } from './pty-manager'
 import { FileManager } from './file-manager'
 import { saveTabState, loadTabState, deleteTabState, hasTabState, validatePath } from './tab-state'
+import { HistoryManager } from './history-manager'
 
 const ptyManager = new PtyManager()
 const fileManager = new FileManager()
+const historyManager = new HistoryManager()
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -43,8 +45,28 @@ app.whenReady().then(() => {
   }
 
 
-  ipcMain.handle('pty:create', (event, options) => {
-    return ptyManager.create({ ...options, webContents: event.sender })
+  ipcMain.handle('pty:create', async (event, options) => {
+    const tabId = options.tabId || crypto.randomUUID()
+    await historyManager.ensureHistoryDir()
+
+    const historyFile = historyManager.getTabHistoryPath(tabId)
+    const isRestore = await historyManager.tabHistoryExists(tabId)
+
+    if (isRestore) {
+      await historyManager.prepareHistoryForRestoredTab(tabId)
+    } else {
+      await historyManager.prepareHistoryForNewTab(tabId)
+    }
+
+    const initialHistSize = await historyManager.getFileSize(historyFile)
+
+    return ptyManager.create({
+      ...options,
+      tabId,
+      historyFile,
+      initialHistSize,
+      webContents: event.sender
+    })
   })
 
   ipcMain.on('pty:write', (_, { pid, data }) => {
@@ -55,8 +77,16 @@ app.whenReady().then(() => {
     ptyManager.resize(pid, cols, rows)
   })
 
-  ipcMain.handle('pty:kill', (_, pid) => {
-    ptyManager.kill(pid)
+  ipcMain.handle('pty:kill', async (_, pid) => {
+    const session = ptyManager.getSession(pid)
+    if (session?.tabId) {
+      // Remove from sessions FIRST to prevent double-merge on app exit
+      ptyManager.sessions.delete(pid)
+      await historyManager.mergeTabToGlobal(session.tabId, session.initialHistSize)
+      session.pty.kill()
+    } else {
+      ptyManager.kill(pid)
+    }
   })
 
   ipcMain.handle('app:homedir', () => os.homedir())
@@ -146,6 +176,10 @@ app.whenReady().then(() => {
     fileManager.unwatchDir(dirPath)
   })
 
+  ipcMain.handle('history:cleanup', async (_, activeTabIds) => {
+    await historyManager.cleanupOrphanedHistories(activeTabIds || [])
+  })
+
   // --- Tab state: restore dialog ---
   ipcMain.handle('tabs:export-state', (event, tabs) => {
     return saveTabState(tabs)
@@ -165,7 +199,8 @@ app.whenReady().then(() => {
       }
       validated.push({
         rootPath: valid ? tab.rootPath : homedir,
-        isActive: tab.isActive
+        isActive: tab.isActive,
+        tabId: tab.tabId
       })
     }
     return validated
@@ -194,6 +229,9 @@ app.whenReady().then(() => {
     if (mainWindow._tabStateSaved) return
     e.preventDefault()
     try {
+      // Merge all tab histories to global before exit
+      await historyManager.mergeAllTabsToGlobal(ptyManager)
+
       const tabs = await mainWindow.webContents.executeJavaScript(
         'window.__exportTabState ? window.__exportTabState() : []'
       )

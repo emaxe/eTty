@@ -31,7 +31,7 @@ const TERM_THEME = {
   brightWhite: '#a6adc8'
 }
 
-async function createTab(cwd) {
+async function createTab(cwd, tabId) {
   const term = new Terminal({
     cursorBlink: true,
     fontSize: 14,
@@ -46,9 +46,10 @@ async function createTab(cwd) {
   term.loadAddon(new WebLinksAddon())
   term.loadAddon(new SearchAddon())
 
-  const { pid } = await window.electronAPI.ptyCreate({ cols: 80, rows: 24, cwd })
+  tabId = tabId || crypto.randomUUID()
+  const { pid } = await window.electronAPI.ptyCreate({ cols: 80, rows: 24, cwd, tabId })
 
-  return { term, fitAddon, pid, rootPath: cwd }
+  return { term, fitAddon, pid, rootPath: cwd, tabId }
 }
 
 async function init() {
@@ -218,7 +219,7 @@ async function init() {
     const oldCount = tabBar.tabs.length
     let activeIndex = oldCount
     for (let i = 0; i < savedTabs.length; i++) {
-      const tabData = await createTab(savedTabs[i].rootPath)
+      const tabData = await createTab(savedTabs[i].rootPath, savedTabs[i].tabId)
       const tab = tabBar.addTab(tabData)
       tab.isBusy = false
       setupTabHandlers(tab)
@@ -251,7 +252,7 @@ async function init() {
       if (shouldRestore) {
         let activeIndex = 0
         for (let i = 0; i < savedTabs.length; i++) {
-          const tabData = await createTab(savedTabs[i].rootPath)
+          const tabData = await createTab(savedTabs[i].rootPath, savedTabs[i].tabId)
           const tab = tabBar.addTab(tabData)
           tab.isBusy = false
           setupTabHandlers(tab)
@@ -271,6 +272,10 @@ async function init() {
     firstTab.isBusy = false
     setupTabHandlers(firstTab)
   }
+
+  // Cleanup orphaned history files
+  const activeTabIds = tabBar.tabs.map(t => t.tabId).filter(Boolean)
+  window.electronAPI.historyCleanup(activeTabIds)
 
   // Menu: restore tabs trigger
   window.electronAPI.onTabsTriggerRestore(async () => {

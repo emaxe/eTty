@@ -10,7 +10,7 @@ export class PtyManager {
     this.sessions = new Map()
   }
 
-  _createZdotdir() {
+  _createZdotdir(historyFile) {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'etty-'))
     const home = os.homedir()
     const userZshenv = path.join(home, '.zshenv')
@@ -21,10 +21,22 @@ export class PtyManager {
       `[[ -f "${userZshenv}" ]] && builtin source "${userZshenv}"\n`
     )
 
+    const historyLines = historyFile
+      ? [
+          `HISTFILE="${historyFile}"`,
+          `HISTSIZE=5000`,
+          `SAVEHIST=5000`,
+          `setopt INC_APPEND_HISTORY`,
+          `setopt HIST_IGNORE_DUPS`,
+          `setopt HIST_IGNORE_SPACE`
+        ]
+      : []
+
     fs.writeFileSync(
       path.join(tmpDir, '.zshrc'),
       [
         `[[ -f "${userZshrc}" ]] && builtin source "${userZshrc}"`,
+        ...historyLines,
         `autoload -Uz add-zsh-hook`,
         `_etty_cwd() { printf '\\033]7;file://%s\\007' "$PWD"; }`,
         `_etty_preexec() { printf '\\033]133;C\\007' }`,
@@ -39,8 +51,8 @@ export class PtyManager {
     return tmpDir
   }
 
-  create({ cols, rows, cwd, webContents }) {
-    const zdotdir = this._createZdotdir()
+  create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize }) {
+    const zdotdir = this._createZdotdir(historyFile)
     const ptyProcess = spawn(SHELL_PATH, [], {
       name: 'xterm-256color',
       cols: cols || 80,
@@ -57,7 +69,7 @@ export class PtyManager {
       }
     })
 
-    this.sessions.set(ptyProcess.pid, { pty: ptyProcess, webContents })
+    this.sessions.set(ptyProcess.pid, { pty: ptyProcess, webContents, tabId, historyFile, initialHistSize: initialHistSize || 0 })
 
     ptyProcess.onData((data) => {
       if (!webContents.isDestroyed()) {
@@ -77,6 +89,10 @@ export class PtyManager {
 
   write(pid, data) {
     this.sessions.get(pid)?.pty.write(data)
+  }
+
+  getSession(pid) {
+    return this.sessions.get(pid) || null
   }
 
   resize(pid, cols, rows) {

@@ -13,7 +13,7 @@ export class TabBar {
     this._addBtn.addEventListener('click', () => this.onAddTab())
   }
 
-  addTab({ pid, term, fitAddon, rootPath }) {
+  addTab({ pid, term, fitAddon, rootPath, tabId }) {
     const folderName = rootPath.split('/').filter(Boolean).pop() || '/'
     const container = document.createElement('div')
     container.className = 'terminal-pane'
@@ -23,7 +23,7 @@ export class TabBar {
     const element = this._createTabEl(folderName, '')
     this.tabBarEl.insertBefore(element, this._addBtn)
 
-    const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '' }
+    const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '', tabId }
     this.tabs.push(tab)
 
     term.onTitleChange((title) => {
@@ -107,7 +107,8 @@ export class TabBar {
       .filter(t => t.rootPath)
       .map((t, i) => ({
         rootPath: t.rootPath,
-        isActive: i === this.activeIndex
+        isActive: i === this.activeIndex,
+        tabId: t.tabId
       }))
   }
 
