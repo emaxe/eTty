@@ -20,5 +20,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fsUnwatchDir: (dirPath) => ipcRenderer.invoke('fs:unwatch-dir', { dirPath }),
   onFsDirChanged: (cb) => ipcRenderer.on('fs:dir-changed', (_, data) => cb(data)),
   windowGetPosition: () => ipcRenderer.invoke('window:get-position'),
-  windowMove: (x, y) => ipcRenderer.send('window:move', { x, y })
+  windowMove: (x, y) => ipcRenderer.send('window:move', { x, y }),
+  tabsHasSavedState: () => ipcRenderer.invoke('tabs:has-saved-state'),
+  tabsLoadSavedState: () => ipcRenderer.invoke('tabs:load-saved-state'),
+  tabsDeleteSavedState: () => ipcRenderer.invoke('tabs:delete-saved-state'),
+  tabsShowRestoreDialog: (tabCount) => ipcRenderer.invoke('tabs:show-restore-dialog', tabCount),
+  tabsStateChanged: () => ipcRenderer.send('tabs:state-changed'),
+  onTabsTriggerRestore: (cb) => ipcRenderer.on('tabs:trigger-restore', () => cb())
 })

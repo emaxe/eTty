@@ -102,6 +102,15 @@ export class TabBar {
     return el
   }
 
+  exportState() {
+    return this.tabs
+      .filter(t => t.rootPath)
+      .map((t, i) => ({
+        rootPath: t.rootPath,
+        isActive: i === this.activeIndex
+      }))
+  }
+
   _updateTabLabel(tab) {
     tab.element.querySelector('.tab-folder').textContent = tab.folderName
     tab.element.querySelector('.tab-title').textContent = tab.termTitle

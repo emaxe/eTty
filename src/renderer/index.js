@@ -206,11 +206,76 @@ async function init() {
     }
   }
 
-  // Первый таб
-  const firstTabData = await createTab(startCwd)
-  const firstTab = tabBar.addTab(firstTabData)
-  firstTab.isBusy = false
-  setupTabHandlers(firstTab)
+  // Expose tab state export for main process (before-quit)
+  window.__exportTabState = () => tabBar.exportState()
+
+  // Restore tabs from saved state (used by menu trigger)
+  async function restoreTabs(savedTabs) {
+    // Create new tabs first
+    const oldCount = tabBar.tabs.length
+    let activeIndex = oldCount
+    for (let i = 0; i < savedTabs.length; i++) {
+      const tabData = await createTab(savedTabs[i].rootPath)
+      const tab = tabBar.addTab(tabData)
+      tab.isBusy = false
+      setupTabHandlers(tab)
+      if (savedTabs[i].isActive) activeIndex = oldCount + i
+    }
+    // Switch to restored active tab
+    tabBar.switchTo(activeIndex)
+    // Remove old tabs (in reverse to keep indices stable)
+    for (let i = oldCount - 1; i >= 0; i--) {
+      const tab = tabBar.tabs[i]
+      window.electronAPI.ptyKill(tab.pid)
+      tab.term.dispose()
+      tab.container.remove()
+      tab.element.remove()
+      tabBar.tabs.splice(i, 1)
+      if (tabBar.activeIndex > i) tabBar.activeIndex--
+    }
+    tabBar.switchTo(tabBar.activeIndex)
+    await window.electronAPI.tabsDeleteSavedState()
+    window.electronAPI.tabsStateChanged()
+  }
+
+  // Check for saved state on startup
+  let restored = false
+  const hasSaved = await window.electronAPI.tabsHasSavedState()
+  if (hasSaved) {
+    const savedTabs = await window.electronAPI.tabsLoadSavedState()
+    if (savedTabs && savedTabs.length > 0) {
+      const shouldRestore = await window.electronAPI.tabsShowRestoreDialog(savedTabs.length)
+      if (shouldRestore) {
+        let activeIndex = 0
+        for (let i = 0; i < savedTabs.length; i++) {
+          const tabData = await createTab(savedTabs[i].rootPath)
+          const tab = tabBar.addTab(tabData)
+          tab.isBusy = false
+          setupTabHandlers(tab)
+          if (savedTabs[i].isActive) activeIndex = i
+        }
+        if (savedTabs.length > 0) tabBar.switchTo(activeIndex)
+        restored = true
+      }
+      await window.electronAPI.tabsDeleteSavedState()
+      window.electronAPI.tabsStateChanged()
+    }
+  }
+
+  if (!restored) {
+    const firstTabData = await createTab(startCwd)
+    const firstTab = tabBar.addTab(firstTabData)
+    firstTab.isBusy = false
+    setupTabHandlers(firstTab)
+  }
+
+  // Menu: restore tabs trigger
+  window.electronAPI.onTabsTriggerRestore(async () => {
+    const savedTabs = await window.electronAPI.tabsLoadSavedState()
+    if (savedTabs && savedTabs.length > 0) {
+      await restoreTabs(savedTabs)
+    }
+  })
 
   // Кнопки навигации сайдбара
   btnUp.disabled = startCwd === '/'

@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import { join } from 'path'
 import os from 'os'
 import log from 'electron-log'
 import { autoUpdater } from 'electron-updater'
 import { PtyManager } from './pty-manager'
 import { FileManager } from './file-manager'
+import { saveTabState, loadTabState, deleteTabState, hasTabState, validatePath } from './tab-state'
 
 const ptyManager = new PtyManager()
 const fileManager = new FileManager()
@@ -145,7 +146,118 @@ app.whenReady().then(() => {
     fileManager.unwatchDir(dirPath)
   })
 
-  createWindow()
+  // --- Tab state: restore dialog ---
+  ipcMain.handle('tabs:export-state', (event, tabs) => {
+    return saveTabState(tabs)
+  })
+
+  ipcMain.handle('tabs:has-saved-state', () => hasTabState())
+
+  ipcMain.handle('tabs:load-saved-state', async () => {
+    const state = await loadTabState()
+    if (!state) return null
+    const homedir = os.homedir()
+    const validated = []
+    for (const tab of state.tabs) {
+      const valid = await validatePath(tab.rootPath)
+      if (!valid) {
+        log.warn('tab-state: path not found, using homedir:', tab.rootPath)
+      }
+      validated.push({
+        rootPath: valid ? tab.rootPath : homedir,
+        isActive: tab.isActive
+      })
+    }
+    return validated
+  })
+
+  ipcMain.handle('tabs:delete-saved-state', () => deleteTabState())
+
+  ipcMain.handle('tabs:show-restore-dialog', async (event, tabCount) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'question',
+      buttons: ['Восстановить', 'Не восстанавливать'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Восстановление вкладок',
+      message: `Восстановить ${tabCount} вкладок?`,
+      detail: 'Вкладки из предыдущей сессии можно восстановить.'
+    })
+    return response === 0 // true = restore
+  })
+
+  const mainWindow = createWindow()
+
+  // Save tab state when window is closing (before webContents is destroyed)
+  mainWindow.on('close', async (e) => {
+    if (mainWindow._tabStateSaved) return
+    e.preventDefault()
+    try {
+      const tabs = await mainWindow.webContents.executeJavaScript(
+        'window.__exportTabState ? window.__exportTabState() : []'
+      )
+      if (tabs.length > 0) {
+        await saveTabState(tabs)
+      }
+    } catch (err) {
+      log.error('tab-state: failed to save on close', err.message)
+    }
+    mainWindow._tabStateSaved = true
+    mainWindow.close()
+  })
+
+  // --- App menu with "Restore tabs" ---
+  const buildMenu = async () => {
+    const hasSaved = await hasTabState()
+    const template = [
+      ...(process.platform === 'darwin' ? [{
+        label: app.name,
+        submenu: [
+          { role: 'about' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { role: 'quit' }
+        ]
+      }] : []),
+      { role: 'editMenu' },
+      {
+        label: 'Вкладки',
+        submenu: [
+          {
+            label: 'Восстановить вкладки',
+            enabled: hasSaved,
+            click: () => {
+              mainWindow.webContents.send('tabs:trigger-restore')
+            }
+          }
+        ]
+      },
+      {
+        label: 'Вид',
+        submenu: [
+          { role: 'reload' },
+          { role: 'forceReload' },
+          { role: 'toggleDevTools' },
+          { type: 'separator' },
+          { role: 'resetZoom' },
+          { role: 'zoomIn' },
+          { role: 'zoomOut' },
+          { type: 'separator' },
+          { role: 'togglefullscreen' }
+        ]
+      },
+      { role: 'windowMenu' }
+    ]
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+  }
+
+  buildMenu()
+
+  ipcMain.on('tabs:state-changed', () => buildMenu())
 })
 
 app.on('window-all-closed', () => {
