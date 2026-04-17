@@ -107,6 +107,7 @@ async function init() {
       const tab = tabBar.addTab(tabData)
       tab.isBusy = false
       setupTabHandlers(tab)
+      tab.fitAddon.fit()
     },
     onCloseTab: (index) => {
       const tab = tabBar.tabs[index]
@@ -223,6 +224,7 @@ async function init() {
       const tab = tabBar.addTab(tabData)
       tab.isBusy = false
       setupTabHandlers(tab)
+      tab.fitAddon.fit()
       if (savedTabs[i].isActive) activeIndex = oldCount + i
     }
     // Switch to restored active tab
@@ -256,6 +258,7 @@ async function init() {
           const tab = tabBar.addTab(tabData)
           tab.isBusy = false
           setupTabHandlers(tab)
+          tab.fitAddon.fit()
           if (savedTabs[i].isActive) activeIndex = i
         }
         if (savedTabs.length > 0) tabBar.switchTo(activeIndex)
@@ -271,6 +274,7 @@ async function init() {
     const firstTab = tabBar.addTab(firstTabData)
     firstTab.isBusy = false
     setupTabHandlers(firstTab)
+    firstTab.fitAddon.fit()
   }
 
   // Cleanup orphaned history files

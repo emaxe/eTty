@@ -36,6 +36,7 @@ export class PtyManager {
       path.join(tmpDir, '.zshrc'),
       [
         `[[ -f "${userZshrc}" ]] && builtin source "${userZshrc}"`,
+        `PROMPT_EOL_MARK=""`,
         ...historyLines,
         `autoload -Uz add-zsh-hook`,
         `_etty_cwd() { printf '\\033]7;file://%s\\007' "$PWD"; }`,
