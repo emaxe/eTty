@@ -27,5 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   tabsShowRestoreDialog: (tabCount) => ipcRenderer.invoke('tabs:show-restore-dialog', tabCount),
   historyCleanup: (activeTabIds) => ipcRenderer.invoke('history:cleanup', activeTabIds),
   tabsStateChanged: () => ipcRenderer.send('tabs:state-changed'),
-  onTabsTriggerRestore: (cb) => ipcRenderer.on('tabs:trigger-restore', () => cb())
+  onTabsTriggerRestore: (cb) => ipcRenderer.on('tabs:trigger-restore', () => cb()),
+  settingsLoad: () => ipcRenderer.invoke('settings:load'),
+  settingsSave: (settings) => ipcRenderer.invoke('settings:save', settings)
 })

@@ -6,6 +6,7 @@ import { autoUpdater } from 'electron-updater'
 import { PtyManager } from './pty-manager'
 import { FileManager } from './file-manager'
 import { saveTabState, loadTabState, deleteTabState, hasTabState, validatePath } from './tab-state'
+import { loadSettings, saveSettings } from './settings-store'
 import { HistoryManager } from './history-manager'
 
 const ptyManager = new PtyManager()
@@ -175,6 +176,9 @@ app.whenReady().then(() => {
   ipcMain.handle('fs:unwatch-dir', (_, { dirPath }) => {
     fileManager.unwatchDir(dirPath)
   })
+
+  ipcMain.handle('settings:load', () => loadSettings())
+  ipcMain.handle('settings:save', (_, settings) => saveSettings(settings))
 
   ipcMain.handle('history:cleanup', async (_, activeTabIds) => {
     await historyManager.cleanupOrphanedHistories(activeTabIds || [])

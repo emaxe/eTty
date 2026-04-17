@@ -23,7 +23,10 @@ export class TabBar {
     const element = this._createTabEl(folderName, '')
     this.tabBarEl.insertBefore(element, this._addBtn)
 
-    const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '', tabId }
+    const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '', tabId,
+      treeExpandedDirs: new Set(),
+      treeScrollTop: 0
+    }
     this.tabs.push(tab)
 
     term.onTitleChange((title) => {
@@ -52,9 +55,10 @@ export class TabBar {
   }
 
   switchTo(index) {
-    if (this.activeIndex >= 0 && this.tabs[this.activeIndex]) {
-      this.tabs[this.activeIndex].container.classList.remove('active')
-      this.tabs[this.activeIndex].element.classList.remove('active')
+    const prevTab = this.activeIndex >= 0 ? this.tabs[this.activeIndex] : null
+    if (prevTab) {
+      prevTab.container.classList.remove('active')
+      prevTab.element.classList.remove('active')
     }
 
     this.activeIndex = index
@@ -65,7 +69,7 @@ export class TabBar {
     tab.fitAddon.fit()
     tab.term.focus()
 
-    this.onSwitch(tab)
+    this.onSwitch(tab, prevTab)
   }
 
   getActive() {

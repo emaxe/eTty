@@ -7,28 +7,35 @@ import '@xterm/xterm/css/xterm.css'
 import './styles.css'
 import { FileTree } from './file-tree.js'
 import { TabBar } from './tab-bar.js'
+import { THEMES } from './themes.js'
+import { SettingsPage } from './settings-page.js'
 
-const TERM_THEME = {
-  background: '#1e1e2e',
-  foreground: '#cdd6f4',
-  cursor: '#f5e0dc',
-  selectionBackground: '#585b70',
-  black: '#45475a',
-  red: '#f38ba8',
-  green: '#a6e3a1',
-  yellow: '#f9e2af',
-  blue: '#89b4fa',
-  magenta: '#cba6f7',
-  cyan: '#94e2d5',
-  white: '#bac2de',
-  brightBlack: '#585b70',
-  brightRed: '#f38ba8',
-  brightGreen: '#a6e3a1',
-  brightYellow: '#f9e2af',
-  brightBlue: '#89b4fa',
-  brightMagenta: '#cba6f7',
-  brightCyan: '#94e2d5',
-  brightWhite: '#a6adc8'
+let currentThemeName = 'catppuccin-mocha'
+let tabBar = null
+
+function applyTheme(themeName) {
+  const theme = THEMES[themeName]
+  if (!theme) return
+  currentThemeName = themeName
+
+  const root = document.documentElement.style
+  root.setProperty('--bg', theme.ui.bg)
+  root.setProperty('--surface', theme.ui.surface)
+  root.setProperty('--border', theme.ui.border)
+  root.setProperty('--muted', theme.ui.muted)
+  root.setProperty('--text', theme.ui.text)
+  root.setProperty('--subtext', theme.ui.subtext)
+  root.setProperty('--accent', theme.ui.accent)
+  root.setProperty('--green', theme.ui.green)
+  root.setProperty('--red', theme.ui.red)
+  root.setProperty('--hover', theme.ui.hover)
+
+  // Обновить уже открытые терминалы
+  if (tabBar) {
+    for (const tab of tabBar.tabs) {
+      tab.term.options.theme = theme.terminal
+    }
+  }
 }
 
 async function createTab(cwd, tabId) {
@@ -38,7 +45,7 @@ async function createTab(cwd, tabId) {
     fontFamily: 'Menlo, "SF Mono", Consolas, "Courier New", monospace',
     scrollback: 10000,
     allowProposedApi: true,
-    theme: TERM_THEME
+    theme: THEMES[currentThemeName].terminal
   })
 
   const fitAddon = new FitAddon()
@@ -53,6 +60,10 @@ async function createTab(cwd, tabId) {
 }
 
 async function init() {
+  // Загружаем настройки до инициализации всего остального
+  const settings = await window.electronAPI.settingsLoad()
+  applyTheme(settings.appearance.theme)
+
   const terminalContainerEl = document.getElementById('terminal-container')
   const tabBarEl = document.getElementById('tab-bar')
   const fileTreeContainerEl = document.getElementById('file-tree-container')
@@ -60,6 +71,7 @@ async function init() {
   const btnHome = document.getElementById('btn-home')
   const btnToggleHidden = document.getElementById('btn-toggle-hidden')
   const btnToggleSidebar = document.getElementById('btn-toggle-sidebar')
+  const btnSettings = document.getElementById('btn-settings')
   const sidebar = document.getElementById('sidebar')
   const resizeHandle = document.getElementById('resize-handle')
 
@@ -80,6 +92,7 @@ async function init() {
 
   const fileTree = new FileTree(fileTreeContainerEl, { writeToPty: writeToPtyActive, focusTerminal: focusActiveTerminal })
   await fileTree.init(startCwd)
+  fileTree.setCollapseChildrenOnClose(settings.fileTree.collapseChildrenOnClose)
 
   function updateNavButtons() {
     const tab = tabBar.getActive()
@@ -89,14 +102,24 @@ async function init() {
     fileTree.setIsBusy(busy)
   }
 
-  const tabBar = new TabBar({
+  tabBar = new TabBar({
     tabBarEl,
     terminalContainerEl,
-    onSwitch: (tab) => {
-      if (tab.rootPath !== fileTree.getCwd()) {
-        fileTree.setRoot(tab.rootPath)
-        window.electronAPI.fsSetRoot(tab.rootPath)
+    onSwitch: async (tab, prevTab) => {
+      if (prevTab) {
+        prevTab.treeExpandedDirs = fileTree.getExpandedDirs()
+        prevTab.treeScrollTop = fileTree.getScrollTop()
       }
+      if (tab.rootPath !== fileTree.getCwd()) {
+        await fileTree.setRoot(tab.rootPath)
+        window.electronAPI.fsSetRoot(tab.rootPath)
+      } else {
+        fileTree.collapseAll()
+      }
+      if (tab.treeExpandedDirs && tab.treeExpandedDirs.size > 0) {
+        await fileTree.restoreExpandedDirs(tab.treeExpandedDirs)
+      }
+      fileTree.setScrollTop(tab.treeScrollTop || 0)
       document.title = tab.termTitle || 'eTty'
       updateNavButtons()
     },
@@ -113,6 +136,25 @@ async function init() {
       const tab = tabBar.tabs[index]
       tabBar.removeTab(index)
       window.electronAPI.ptyKill(tab.pid)
+    }
+  })
+
+  // Страница настроек
+  const settingsPage = new SettingsPage({
+    onSettingsChanged: (key, value) => {
+      if (key === 'appearance.theme') applyTheme(value)
+      if (key === 'fileTree.collapseChildrenOnClose') fileTree.setCollapseChildrenOnClose(value)
+    }
+  })
+  await settingsPage.init()
+
+  btnSettings.addEventListener('click', () => {
+    if (settingsPage.isVisible()) {
+      settingsPage.hide()
+      btnSettings.classList.remove('active')
+    } else {
+      settingsPage.show()
+      btnSettings.classList.add('active')
     }
   })
 
@@ -302,9 +344,15 @@ async function init() {
     tabBar.getActive()?.fitAddon.fit()
   })
 
+  const eyeOffSVG = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/><line x1="2" y1="2" x2="14" y2="14"/></svg>`
+  const eyeOpenSVG = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>`
+
+  btnToggleHidden.innerHTML = eyeOffSVG
+
   let showHidden = false
   btnToggleHidden.addEventListener('click', () => {
     showHidden = !showHidden
+    btnToggleHidden.innerHTML = showHidden ? eyeOpenSVG : eyeOffSVG
     btnToggleHidden.classList.toggle('active', showHidden)
     btnToggleHidden.title = showHidden ? 'Скрыть скрытые файлы' : 'Показать скрытые файлы'
     fileTree.setShowHidden(showHidden)

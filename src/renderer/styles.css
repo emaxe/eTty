@@ -1,3 +1,16 @@
+:root {
+  --bg: #1e1e2e;
+  --surface: #181825;
+  --border: #313244;
+  --muted: #6c7086;
+  --text: #cdd6f4;
+  --subtext: #a6adc8;
+  --accent: #89b4fa;
+  --green: #a6e3a1;
+  --red: #f38ba8;
+  --hover: #45475a;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -7,18 +20,18 @@
 html, body {
   height: 100%;
   overflow: hidden;
-  background: #1e1e2e;
+  background: var(--bg);
 }
 
 #titlebar {
   height: 38px;
   display: flex;
   align-items: center;
-  background: #181825;
+  background: var(--surface);
   -webkit-user-select: none;
   user-select: none;
   padding-left: 70px; /* пространство для macOS traffic lights */
-  border-bottom: 1px solid #313244;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -31,20 +44,35 @@ html, body {
   height: 100%;
 }
 
-#btn-toggle-sidebar {
+#btn-toggle-sidebar,
+#btn-settings {
   background: none;
   border: none;
-  color: #6c7086;
-  font-size: 16px;
+  color: var(--muted);
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px;
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-#btn-toggle-sidebar:hover {
-  color: #cdd6f4;
-  background: #313244;
+#btn-toggle-sidebar:hover,
+#btn-settings:hover {
+  color: var(--text);
+  background: var(--border);
+}
+
+#btn-settings.active {
+  color: var(--accent);
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  align-self: center;
+  flex-shrink: 0;
 }
 
 /* Tab bar */
@@ -72,16 +100,16 @@ html, body {
   cursor: pointer;
   font-size: 12px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #6c7086;
-  border-right: 1px solid #313244;
+  color: var(--muted);
+  border-right: 1px solid var(--border);
   flex-shrink: 0;
   user-select: none;
 }
 
 .tab.active {
-  background: #1e1e2e;
-  color: #cdd6f4;
-  border-bottom: 2px solid #89b4fa;
+  background: var(--bg);
+  color: var(--text);
+  border-bottom: 2px solid var(--accent);
   margin-bottom: -1px; /* перекрываем border-bottom тайтлбара */
 }
 
@@ -120,8 +148,8 @@ html, body {
 }
 
 .tab-close:hover {
-  background: #f38ba8;
-  color: #1e1e2e;
+  background: var(--red);
+  color: var(--bg);
 }
 
 #tab-add {
@@ -129,7 +157,7 @@ html, body {
   margin: 0 6px;
   background: none;
   border: none;
-  color: #6c7086;
+  color: var(--muted);
   font-size: 18px;
   cursor: pointer;
   padding: 0 6px;
@@ -137,7 +165,7 @@ html, body {
 }
 
 #tab-add:hover {
-  color: #cdd6f4;
+  color: var(--text);
 }
 
 #workspace {
@@ -150,11 +178,11 @@ html, body {
 #sidebar {
   width: 250px;
   flex-shrink: 0;
-  background: #181825;
-  border-right: 1px solid #313244;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
-  color: #cdd6f4;
+  color: var(--text);
   user-select: none;
   display: flex;
   flex-direction: column;
@@ -165,14 +193,14 @@ html, body {
   display: flex;
   gap: 4px;
   padding: 6px 8px;
-  border-bottom: 1px solid #313244;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 #sidebar-nav button {
-  background: #313244;
+  background: var(--border);
   border: none;
-  color: #cdd6f4;
+  color: var(--text);
   width: 24px;
   height: 24px;
   border-radius: 4px;
@@ -184,7 +212,7 @@ html, body {
 }
 
 #sidebar-nav button:hover {
-  background: #45475a;
+  background: var(--hover);
 }
 
 #sidebar-nav button:disabled {
@@ -194,12 +222,11 @@ html, body {
 
 #btn-toggle-hidden {
   margin-left: auto;
-  font-size: 11px;
+  transition: color 0.15s;
 }
 
 #btn-toggle-hidden.active {
-  background: #45475a;
-  color: #cdd6f4;
+  color: var(--green);
 }
 
 #file-tree-container {
@@ -229,7 +256,7 @@ html, body {
 
 #resize-handle:hover,
 #resize-handle.dragging {
-  background: #45475a;
+  background: var(--hover);
 }
 
 #terminal-container {
@@ -250,15 +277,15 @@ html, body {
   padding-right: 8px;
   white-space: nowrap;
   min-width: max-content;
-  color: #cdd6f4;
+  color: var(--text);
 }
 
 .tree-node-row:hover {
-  background: #313244;
+  background: var(--border);
 }
 
 .tree-node-row.selected {
-  background: #45475a;
+  background: var(--hover);
 }
 
 .tree-arrow {
@@ -267,7 +294,7 @@ html, body {
   flex-shrink: 0;
   text-align: center;
   font-size: 10px;
-  color: #6c7086;
+  color: var(--muted);
   transition: transform 0.1s;
 }
 
@@ -312,14 +339,14 @@ html, body {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #a6adc8;
+  color: var(--subtext);
   white-space: nowrap;
   min-width: max-content;
   user-select: none;
 }
 
 .tree-root-node-row:hover {
-  background: #313244;
+  background: var(--border);
 }
 
 .tree-root-label {
@@ -337,9 +364,9 @@ html, body {
 /* Inline input */
 .tree-inline-input {
   width: calc(100% - 8px);
-  background: #1e1e2e;
-  border: 1px solid #89b4fa;
-  color: #cdd6f4;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  color: var(--text);
   font-family: inherit;
   font-size: 13px;
   padding: 1px 4px;
@@ -351,15 +378,15 @@ html, body {
 .context-menu {
   position: fixed;
   z-index: 1000;
-  background: #1e1e2e;
-  border: 1px solid #313244;
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 4px 0;
   min-width: 180px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
-  color: #cdd6f4;
+  color: var(--text);
 }
 
 .context-menu-item {
@@ -369,7 +396,7 @@ html, body {
 }
 
 .context-menu-item:hover {
-  background: #313244;
+  background: var(--border);
 }
 
 .context-menu-item.disabled {
@@ -383,6 +410,189 @@ html, body {
 
 .context-menu-separator {
   height: 1px;
-  background: #313244;
+  background: var(--border);
   margin: 4px 0;
+}
+
+/* ── Settings overlay ────────────────────────────────────────────── */
+
+#settings-overlay {
+  position: fixed;
+  inset: 38px 0 0 0; /* под titlebar */
+  z-index: 500;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+#settings-overlay.hidden {
+  display: none;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.settings-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-close-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-close-btn:hover {
+  color: var(--text);
+  background: var(--border);
+}
+
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  max-width: 640px;
+  width: 100%;
+}
+
+.settings-category {
+  margin-bottom: 32px;
+}
+
+.settings-category-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--subtext);
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 16px;
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-label {
+  font-size: 13px;
+  color: var(--text);
+  flex: 1;
+}
+
+.settings-control {
+  flex-shrink: 0;
+}
+
+/* Toggle switch */
+.settings-toggle {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+}
+
+.settings-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.settings-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.settings-toggle input:checked + .settings-toggle-track {
+  background: var(--accent);
+}
+
+.settings-toggle-track::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--text);
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.settings-toggle input:checked + .settings-toggle-track::after {
+  transform: translateX(16px);
+}
+
+/* Settings select */
+.settings-select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+  min-width: 160px;
+}
+
+.settings-select:hover {
+  border-color: var(--muted);
+}
+
+.settings-select:focus {
+  border-color: var(--accent);
+}
+
+/* Settings theme preview swatch */
+.settings-theme-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-theme-swatch {
+  width: 40px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.settings-theme-swatch-half {
+  flex: 1;
 }

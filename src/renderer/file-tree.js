@@ -12,6 +12,7 @@ export class FileTree {
     this._isBusy = false
     this._showHidden = false
     this._dirTimers = new Map()
+    this._collapseChildrenOnClose = true
   }
 
   getCwd() {
@@ -25,6 +26,73 @@ export class FileTree {
   setShowHidden(val) {
     this._showHidden = val
     this._refreshList(this._rootContainer, this._cwd, 1)
+  }
+
+  setCollapseChildrenOnClose(val) {
+    this._collapseChildrenOnClose = val
+  }
+
+  getExpandedDirs() {
+    const result = new Set()
+    const openItems = this._container.querySelectorAll('li[data-path] .tree-children.open')
+    for (const childrenEl of openItems) {
+      const li = childrenEl.closest('li[data-path]')
+      if (li) result.add(li.dataset.path)
+    }
+    return result
+  }
+
+  getScrollTop() {
+    return this._container.scrollTop
+  }
+
+  setScrollTop(val) {
+    this._container.scrollTop = val
+  }
+
+  collapseAll() {
+    const openItems = this._container.querySelectorAll('.tree-children.open')
+    for (const childrenEl of openItems) {
+      childrenEl.classList.remove('open')
+      const li = childrenEl.closest('li[data-path]')
+      const arrow = li?.querySelector(':scope > .tree-node-row > .tree-arrow')
+      if (arrow) arrow.classList.remove('expanded')
+      if (li?.dataset.path) window.electronAPI.fsUnwatchDir(li.dataset.path)
+    }
+  }
+
+  async restoreExpandedDirs(expandedDirs) {
+    const sorted = [...expandedDirs].sort((a, b) => a.split('/').length - b.split('/').length)
+    for (const dirPath of sorted) {
+      const li = this._container.querySelector(`li[data-path="${CSS.escape(dirPath)}"]`)
+      if (!li) continue
+      const childrenEl = li.querySelector(':scope > .tree-children')
+      if (!childrenEl || childrenEl.classList.contains('open')) continue
+      const arrow = li.querySelector(':scope > .tree-node-row > .tree-arrow')
+      const depth = parseInt(li.dataset.depth, 10)
+      if (!childrenEl.dataset.loaded) {
+        const entries = await this._loadDir(dirPath)
+        if (entries) {
+          childrenEl.appendChild(this._buildList(entries, dirPath, depth + 1))
+          childrenEl.dataset.loaded = '1'
+        }
+      } else {
+        window.electronAPI.fsWatchDir(dirPath)
+      }
+      childrenEl.classList.add('open')
+      if (arrow) arrow.classList.add('expanded')
+    }
+  }
+
+  _collapseRecursive(childrenEl) {
+    const openItems = childrenEl.querySelectorAll('.tree-children.open')
+    for (const ch of openItems) {
+      ch.classList.remove('open')
+      const li = ch.closest('li[data-path]')
+      const arrow = li?.querySelector(':scope > .tree-node-row > .tree-arrow')
+      if (arrow) arrow.classList.remove('expanded')
+      if (li?.dataset.path) window.electronAPI.fsUnwatchDir(li.dataset.path)
+    }
   }
 
   async setRoot(newPath) {
@@ -151,7 +219,6 @@ export class FileTree {
     li.appendChild(row)
 
     let childrenEl = null
-    let loaded = false
 
     if (entry.isDirectory) {
       childrenEl = document.createElement('div')
@@ -165,13 +232,16 @@ export class FileTree {
           childrenEl.classList.remove('open')
           arrow.classList.remove('expanded')
           window.electronAPI.fsUnwatchDir(entry.path)
+          if (this._collapseChildrenOnClose) {
+            this._collapseRecursive(childrenEl)
+          }
         } else {
-          if (!loaded) {
+          if (!childrenEl.dataset.loaded) {
             const entries = await this._loadDir(entry.path) // also calls fsWatchDir
             if (entries) {
               childrenEl.appendChild(this._buildList(entries, entry.path, depth + 1))
             }
-            loaded = true
+            childrenEl.dataset.loaded = '1'
           } else {
             window.electronAPI.fsWatchDir(entry.path)
           }
