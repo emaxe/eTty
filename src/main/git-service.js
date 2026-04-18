@@ -1,4 +1,16 @@
 import simpleGit from 'simple-git'
+import fs from 'fs/promises'
+import path from 'path'
+
+function countDiffLines(diff) {
+  let additions = 0
+  let deletions = 0
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('+') && !line.startsWith('+++')) additions++
+    else if (line.startsWith('-') && !line.startsWith('---')) deletions++
+  }
+  return { additions, deletions }
+}
 
 export function registerGitHandlers(ipcMain) {
   ipcMain.handle('git:get-status', async (_event, rootPath) => {
@@ -16,24 +28,11 @@ export function registerGitHandlers(ipcMain) {
       let totalAdditions = 0
       let totalDeletions = 0
 
-      const changedFiles = [
-        ...status.modified,
-        ...status.not_added,
-        ...status.created,
-        ...status.deleted,
-        ...status.renamed.map(r => r.to),
-      ]
-      const uniqueFiles = [...new Set(changedFiles)]
-
-      for (const filePath of uniqueFiles) {
+      // Modified tracked files
+      for (const filePath of status.modified) {
         try {
           const diff = await git.diff([filePath])
-          let additions = 0
-          let deletions = 0
-          for (const line of diff.split('\n')) {
-            if (line.startsWith('+') && !line.startsWith('+++')) additions++
-            else if (line.startsWith('-') && !line.startsWith('---')) deletions++
-          }
+          const { additions, deletions } = countDiffLines(diff)
           totalAdditions += additions
           totalDeletions += deletions
           files.push({ path: filePath, additions, deletions })
@@ -42,11 +41,54 @@ export function registerGitHandlers(ipcMain) {
         }
       }
 
-      // Untracked files: count lines as additions
+      // Untracked files: all lines are additions
       for (const filePath of status.not_added) {
-        const existing = files.find(f => f.path === filePath)
-        if (existing && existing.additions === 0) {
-          // already counted via diff, skip
+        try {
+          const content = await fs.readFile(path.join(rootPath, filePath), 'utf-8')
+          const additions = content.split('\n').filter(l => l.length > 0).length
+          totalAdditions += additions
+          files.push({ path: filePath, additions, deletions: 0, untracked: true })
+        } catch {
+          files.push({ path: filePath, additions: 0, deletions: 0, untracked: true })
+        }
+      }
+
+      // Staged new files
+      for (const filePath of status.created) {
+        try {
+          const diff = await git.diff(['--cached', filePath])
+          const { additions, deletions } = countDiffLines(diff)
+          totalAdditions += additions
+          totalDeletions += deletions
+          files.push({ path: filePath, additions, deletions })
+        } catch {
+          files.push({ path: filePath, additions: 0, deletions: 0 })
+        }
+      }
+
+      // Deleted files
+      for (const filePath of status.deleted) {
+        try {
+          const diff = await git.diff([filePath])
+          const { additions, deletions } = countDiffLines(diff)
+          totalAdditions += additions
+          totalDeletions += deletions
+          files.push({ path: filePath, additions, deletions })
+        } catch {
+          files.push({ path: filePath, additions: 0, deletions: 0 })
+        }
+      }
+
+      // Renamed files
+      for (const rename of status.renamed) {
+        try {
+          const diff = await git.diff([rename.to])
+          const { additions, deletions } = countDiffLines(diff)
+          totalAdditions += additions
+          totalDeletions += deletions
+          files.push({ path: rename.to, additions, deletions })
+        } catch {
+          files.push({ path: rename.to, additions: 0, deletions: 0 })
         }
       }
 
@@ -79,9 +121,17 @@ export function registerGitHandlers(ipcMain) {
   ipcMain.handle('git:get-diff', async (_event, rootPath, filePath) => {
     try {
       const git = simpleGit(rootPath)
+      const status = await git.status()
+      const isUntracked = status.not_added.includes(filePath)
+
+      if (isUntracked) {
+        const content = await fs.readFile(path.join(rootPath, filePath), 'utf-8')
+        return content.split('\n').map(line => `+${line}`).join('\n')
+      }
+
       const diff = await git.diff([filePath])
       return diff
-    } catch (err) {
+    } catch {
       return ''
     }
   })
