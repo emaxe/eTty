@@ -29,5 +29,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   tabsStateChanged: () => ipcRenderer.send('tabs:state-changed'),
   onTabsTriggerRestore: (cb) => ipcRenderer.on('tabs:trigger-restore', () => cb()),
   settingsLoad: () => ipcRenderer.invoke('settings:load'),
-  settingsSave: (settings) => ipcRenderer.invoke('settings:save', settings)
+  settingsSave: (settings) => ipcRenderer.invoke('settings:save', settings),
+  gitGetStatus: (rootPath) => ipcRenderer.invoke('git:get-status', rootPath),
+  gitGetDiff: (rootPath, filePath) => ipcRenderer.invoke('git:get-diff', rootPath, filePath),
+  gitGetBranches: (rootPath) => ipcRenderer.invoke('git:get-branches', rootPath),
+  gitCheckout: (rootPath, branch) => ipcRenderer.invoke('git:checkout', rootPath, branch),
+  gitCreateBranch: (rootPath, name) => ipcRenderer.invoke('git:create-branch', rootPath, name),
+  gitDeleteBranch: (rootPath, name) => ipcRenderer.invoke('git:delete-branch', rootPath, name),
+  gitCommit: (rootPath, message) => ipcRenderer.invoke('git:commit', rootPath, message),
+  gitPush: (rootPath) => ipcRenderer.invoke('git:push', rootPath),
+  gitDiscard: (rootPath) => ipcRenderer.invoke('git:discard', rootPath),
 })
