@@ -9,6 +9,8 @@ import { FileTree } from './file-tree.js'
 import { TabBar } from './tab-bar.js'
 import { THEMES } from './themes.js'
 import { SettingsPage } from './settings-page.js'
+import { StatusBar } from './status-bar.js'
+import { GitPanel } from './git-panel.js'
 
 let currentThemeName = 'catppuccin-mocha'
 let tabBar = null
@@ -122,6 +124,7 @@ async function init() {
       fileTree.setScrollTop(tab.treeScrollTop || 0)
       document.title = tab.termTitle || 'eTty'
       updateNavButtons()
+      statusBar.updateNow()
     },
     onAddTab: async () => {
       const active = tabBar.getActive()
@@ -147,6 +150,18 @@ async function init() {
     }
   })
   await settingsPage.init()
+
+  const gitPanel = new GitPanel({
+    overlayEl: document.getElementById('git-overlay'),
+    onClose: () => statusBar.updateNow(),
+  })
+
+  const statusBar = new StatusBar({
+    btnEl: document.getElementById('btn-git-diff'),
+    onOpen: () => gitPanel.show(tabBar.getActive()?.rootPath),
+  })
+
+  statusBar.start(() => tabBar.getActive()?.rootPath)
 
   btnSettings.addEventListener('click', () => {
     if (settingsPage.isVisible()) {
