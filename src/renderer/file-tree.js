@@ -5,6 +5,7 @@ export class FileTree {
     this._container = container
     this._writeToPty = terminalActions?.writeToPty ?? null
     this._focusTerminal = terminalActions?.focusTerminal ?? null
+    this._onFileOpen = terminalActions?.onFileOpen ?? null
     this._cwd = null
     this._rootContainer = null
     this._contextMenu = new ContextMenu()
@@ -13,6 +14,7 @@ export class FileTree {
     this._showHidden = false
     this._dirTimers = new Map()
     this._collapseChildrenOnClose = true
+    this._fileOpenMode = 'double' // 'single' | 'double'
   }
 
   getCwd() {
@@ -30,6 +32,10 @@ export class FileTree {
 
   setCollapseChildrenOnClose(val) {
     this._collapseChildrenOnClose = val
+  }
+
+  setFileOpenMode(mode) {
+    this._fileOpenMode = mode === 'single' ? 'single' : 'double'
   }
 
   getExpandedDirs() {
@@ -263,11 +269,23 @@ export class FileTree {
     })
 
     if (!entry.isDirectory) {
-      row.addEventListener('dblclick', () => {
-        if (this._isBusy) return
-        const escaped = entry.path.replace(/'/g, "'\\''")
-        this._writeToPty?.(`open '${escaped}'\n`)
-      })
+      const openInEditor = () => {
+        if (this._onFileOpen) {
+          this._onFileOpen(entry.path)
+        } else if (!this._isBusy) {
+          const escaped = entry.path.replace(/'/g, "'\\''")
+          this._writeToPty?.(`open '${escaped}'\n`)
+        }
+      }
+      if (this._fileOpenMode === 'single') {
+        row.addEventListener('click', (e) => {
+          // Ignore clicks that are part of a double-click sequence
+          if (e.detail === 2) return
+          openInEditor()
+        })
+      } else {
+        row.addEventListener('dblclick', () => openInEditor())
+      }
     }
 
     return li
@@ -297,6 +315,13 @@ export class FileTree {
       { separator: true },
       { label: 'Переименовать', action: () => this._renameInline(entry, row) },
       { label: 'Удалить', action: () => this._deleteEntry(entry, row) },
+      { separator: true },
+      { label: 'Открыть в терминале', disabled: this._isBusy, action: () => {
+          const escaped = entry.path.replace(/'/g, "'\\''")
+          this._writeToPty?.(`open '${escaped}'\n`)
+          this._focusTerminal?.()
+        }
+      },
       { separator: true },
       { label: 'Копировать', action: () => { this._clipboard = { path: entry.path } } },
       { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(entry.path); this._focusTerminal?.() } },

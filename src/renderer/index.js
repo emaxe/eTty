@@ -11,9 +11,11 @@ import { THEMES } from './themes.js'
 import { SettingsPage } from './settings-page.js'
 import { StatusBar } from './status-bar.js'
 import { GitPanel } from './git-panel.js'
+import { EditorPanel } from './editor-panel.js'
 
 let currentThemeName = 'catppuccin-mocha'
 let tabBar = null
+let editorPanel = null
 
 function applyTheme(themeName) {
   const theme = THEMES[themeName]
@@ -37,6 +39,11 @@ function applyTheme(themeName) {
     for (const tab of tabBar.tabs) {
       tab.term.options.theme = theme.terminal
     }
+  }
+
+  // Обновить тему редактора
+  if (editorPanel && theme.editor) {
+    editorPanel.setTheme(theme.editor)
   }
 }
 
@@ -74,6 +81,7 @@ async function init() {
   const btnToggleHidden = document.getElementById('btn-toggle-hidden')
   const btnToggleSidebar = document.getElementById('btn-toggle-sidebar')
   const btnSettings = document.getElementById('btn-settings')
+  const btnToggleEditor = document.getElementById('btn-toggle-editor')
   const sidebar = document.getElementById('sidebar')
   const resizeHandle = document.getElementById('resize-handle')
 
@@ -92,9 +100,25 @@ async function init() {
     }
   }
 
-  const fileTree = new FileTree(fileTreeContainerEl, { writeToPty: writeToPtyActive, focusTerminal: focusActiveTerminal })
+  editorPanel = new EditorPanel({
+    panelEl: document.getElementById('editor-panel'),
+    resizeHandleEl: document.getElementById('resize-handle-right'),
+    onResize: () => tabBar.getActive()?.fitAddon.fit(),
+    writeToPty: writeToPtyActive,
+    getActiveCwd: () => tabBar.getActive()?.rootPath || startCwd,
+  })
+  // Apply current theme immediately (applyTheme ran before editorPanel was created)
+  const _initialTheme = THEMES[currentThemeName]
+  if (_initialTheme?.editor) editorPanel.setTheme(_initialTheme.editor)
+
+  const fileTree = new FileTree(fileTreeContainerEl, {
+    writeToPty: writeToPtyActive,
+    focusTerminal: focusActiveTerminal,
+    onFileOpen: (filePath) => editorPanel.openFile(filePath),
+  })
   await fileTree.init(startCwd)
   fileTree.setCollapseChildrenOnClose(settings.fileTree.collapseChildrenOnClose)
+  fileTree.setFileOpenMode(settings.fileTree.fileOpenMode || 'double')
 
   function updateNavButtons() {
     const tab = tabBar.getActive()
@@ -147,6 +171,7 @@ async function init() {
     onSettingsChanged: (key, value) => {
       if (key === 'appearance.theme') applyTheme(value)
       if (key === 'fileTree.collapseChildrenOnClose') fileTree.setCollapseChildrenOnClose(value)
+      if (key === 'fileTree.fileOpenMode') fileTree.setFileOpenMode(value)
     }
   })
   await settingsPage.init()
@@ -359,6 +384,22 @@ async function init() {
     tabBar.getActive()?.fitAddon.fit()
   })
 
+  btnToggleEditor.addEventListener('click', () => {
+    editorPanel.toggle()
+    btnToggleEditor.classList.toggle('active', editorPanel.isVisible())
+  })
+
+  // Горячая клавиша Cmd+E / Ctrl+E — toggle панели редактора
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'e' && !e.shiftKey && !e.altKey) {
+      // Не перехватываем, если фокус в CodeMirror (он сам обработает)
+      if (document.activeElement?.closest('#editor-body')) return
+      e.preventDefault()
+      editorPanel.toggle()
+      btnToggleEditor.classList.toggle('active', editorPanel.isVisible())
+    }
+  })
+
   const eyeOffSVG = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/><line x1="2" y1="2" x2="14" y2="14"/></svg>`
   const eyeOpenSVG = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>`
 
@@ -420,6 +461,28 @@ async function init() {
     }
     const onUp = () => {
       resizeHandle.classList.remove('dragging')
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  })
+
+  // Resize handle для правой панели редактора
+  const resizeHandleRight = document.getElementById('resize-handle-right')
+  resizeHandleRight.addEventListener('mousedown', (e) => {
+    e.preventDefault()
+    resizeHandleRight.classList.add('dragging')
+    const startX = e.clientX
+    const startWidth = editorPanel._panelEl.offsetWidth
+    const onMove = (e) => {
+      // Перетаскиваем влево — редактор расширяется
+      const newWidth = Math.max(250, Math.min(window.innerWidth * 0.8, startWidth - (e.clientX - startX)))
+      editorPanel._panelEl.style.width = newWidth + 'px'
+      tabBar.getActive()?.fitAddon.fit()
+    }
+    const onUp = () => {
+      resizeHandleRight.classList.remove('dragging')
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }

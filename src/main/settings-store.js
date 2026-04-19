@@ -10,7 +10,8 @@ export function getDefaults() {
   return {
     version: SETTINGS_VERSION,
     fileTree: {
-      collapseChildrenOnClose: true
+      collapseChildrenOnClose: true,
+      fileOpenMode: 'double'
     },
     appearance: {
       theme: 'catppuccin-mocha'

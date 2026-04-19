@@ -76,6 +76,22 @@ export class FileManager {
     return { newPath: destPath }
   }
 
+  async readFile(filePath, maxSize = 5 * 1024 * 1024) {
+    const resolved = path.resolve(filePath)
+    const stat = await fs.stat(resolved)
+    if (stat.size > maxSize) {
+      return { success: false, error: 'File too large', size: stat.size }
+    }
+    const content = await fs.readFile(resolved, 'utf-8')
+    return { success: true, content, size: stat.size }
+  }
+
+  async writeFile(filePath, content) {
+    const resolved = path.resolve(filePath)
+    await fs.writeFile(resolved, content, 'utf-8')
+    return { success: true }
+  }
+
   getCwd() {
     return { cwd: this.cwd }
   }

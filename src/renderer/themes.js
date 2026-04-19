@@ -34,6 +34,27 @@ export const THEMES = {
       brightMagenta: '#cba6f7',
       brightCyan: '#94e2d5',
       brightWhite: '#a6adc8'
+    },
+    editor: {
+      bg: '#1e1e2e',
+      text: '#cdd6f4',
+      gutterBg: '#181825',
+      lineNumber: '#6c7086',
+      activeLine: '#25253a',
+      selection: '#585b70',
+      cursor: '#f5e0dc',
+      keyword: '#cba6f7',
+      string: '#a6e3a1',
+      number: '#f9e2af',
+      comment: '#6c7086',
+      function: '#89b4fa',
+      type: '#f9e2af',
+      variable: '#cdd6f4',
+      operator: '#94e2d5',
+      property: '#89dceb',
+      tag: '#f38ba8',
+      attribute: '#f9e2af',
+      bracket: '#a6adc8'
     }
   },
 
@@ -72,6 +93,27 @@ export const THEMES = {
       brightMagenta: '#ae81ff',
       brightCyan: '#a1efe4',
       brightWhite: '#f9f8f5'
+    },
+    editor: {
+      bg: '#272822',
+      text: '#f8f8f2',
+      gutterBg: '#1e1f1c',
+      lineNumber: '#75715e',
+      activeLine: '#3a3a2e',
+      selection: '#49483e',
+      cursor: '#f8f8f0',
+      keyword: '#f92672',
+      string: '#f4bf75',
+      number: '#ae81ff',
+      comment: '#75715e',
+      function: '#a6e22e',
+      type: '#66d9e8',
+      variable: '#f8f8f2',
+      operator: '#f92672',
+      property: '#a1efe4',
+      tag: '#f92672',
+      attribute: '#a6e22e',
+      bracket: '#cfcfc2'
     }
   },
 
@@ -110,6 +152,27 @@ export const THEMES = {
       brightMagenta: '#ff92df',
       brightCyan: '#a4ffff',
       brightWhite: '#ffffff'
+    },
+    editor: {
+      bg: '#282a36',
+      text: '#f8f8f2',
+      gutterBg: '#21222c',
+      lineNumber: '#6272a4',
+      activeLine: '#313342',
+      selection: '#44475a',
+      cursor: '#f8f8f2',
+      keyword: '#ff79c6',
+      string: '#f1fa8c',
+      number: '#bd93f9',
+      comment: '#6272a4',
+      function: '#50fa7b',
+      type: '#8be9fd',
+      variable: '#f8f8f2',
+      operator: '#ff79c6',
+      property: '#8be9fd',
+      tag: '#ff5555',
+      attribute: '#f1fa8c',
+      bracket: '#bcc2cd'
     }
   },
 
@@ -148,6 +211,27 @@ export const THEMES = {
       brightMagenta: '#c678dd',
       brightCyan: '#56b6c2',
       brightWhite: '#ffffff'
+    },
+    editor: {
+      bg: '#282c34',
+      text: '#abb2bf',
+      gutterBg: '#21252b',
+      lineNumber: '#5c6370',
+      activeLine: '#2c313c',
+      selection: '#3e4451',
+      cursor: '#528bff',
+      keyword: '#c678dd',
+      string: '#98c379',
+      number: '#d19a66',
+      comment: '#5c6370',
+      function: '#61afef',
+      type: '#56b6c2',
+      variable: '#abb2bf',
+      operator: '#56b6c2',
+      property: '#e06c75',
+      tag: '#e06c75',
+      attribute: '#e5c07b',
+      bracket: '#9da5b4'
     }
   },
 
@@ -186,6 +270,27 @@ export const THEMES = {
       brightMagenta: '#b48ead',
       brightCyan: '#8fbcbb',
       brightWhite: '#eceff4'
+    },
+    editor: {
+      bg: '#2e3440',
+      text: '#d8dee9',
+      gutterBg: '#242933',
+      lineNumber: '#4c566a',
+      activeLine: '#343a47',
+      selection: '#434c5e',
+      cursor: '#d8dee9',
+      keyword: '#81a1c1',
+      string: '#a3be8c',
+      number: '#b48ead',
+      comment: '#4c566a',
+      function: '#88c0d0',
+      type: '#8fbcbb',
+      variable: '#d8dee9',
+      operator: '#81a1c1',
+      property: '#88c0d0',
+      tag: '#bf616a',
+      attribute: '#ebcb8b',
+      bracket: '#e5e9f0'
     }
   },
 
@@ -224,6 +329,27 @@ export const THEMES = {
       brightMagenta: '#6c71c4',
       brightCyan: '#93a1a1',
       brightWhite: '#fdf6e3'
+    },
+    editor: {
+      bg: '#002b36',
+      text: '#839496',
+      gutterBg: '#073642',
+      lineNumber: '#586e75',
+      activeLine: '#073642',
+      selection: '#0d4a5a',
+      cursor: '#839496',
+      keyword: '#859900',
+      string: '#2aa198',
+      number: '#d33682',
+      comment: '#586e75',
+      function: '#268bd2',
+      type: '#b58900',
+      variable: '#93a1a1',
+      operator: '#dc322f',
+      property: '#268bd2',
+      tag: '#dc322f',
+      attribute: '#b58900',
+      bracket: '#657b83'
     }
   },
 
@@ -262,6 +388,27 @@ export const THEMES = {
       brightMagenta: '#d3869b',
       brightCyan: '#8ec07c',
       brightWhite: '#ebdbb2'
+    },
+    editor: {
+      bg: '#282828',
+      text: '#ebdbb2',
+      gutterBg: '#1d2021',
+      lineNumber: '#665c54',
+      activeLine: '#32302f',
+      selection: '#504945',
+      cursor: '#ebdbb2',
+      keyword: '#fb4934',
+      string: '#b8bb26',
+      number: '#d3869b',
+      comment: '#928374',
+      function: '#fabd2f',
+      type: '#8ec07c',
+      variable: '#ebdbb2',
+      operator: '#fb4934',
+      property: '#83a598',
+      tag: '#fb4934',
+      attribute: '#fabd2f',
+      bracket: '#d5c4a1'
     }
   }
 }

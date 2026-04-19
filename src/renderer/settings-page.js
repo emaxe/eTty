@@ -62,6 +62,21 @@ export class SettingsPage {
             this._scheduleSave()
           }
         )
+      },
+      {
+        label: 'Открытие файлов в редакторе',
+        control: this._createSelect(
+          [
+            { key: 'double', name: 'Двойной клик' },
+            { key: 'single', name: 'Одинарный клик' }
+          ],
+          this._settings.fileTree.fileOpenMode || 'double',
+          (val) => {
+            this._settings.fileTree.fileOpenMode = val
+            this._onSettingsChanged('fileTree.fileOpenMode', val)
+            this._scheduleSave()
+          }
+        )
       }
     ]))
 

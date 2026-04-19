@@ -161,6 +161,22 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.handle('fs:read-file', async (_, { filePath }) => {
+    try {
+      return await fileManager.readFile(filePath)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle('fs:write-file', async (_, { filePath, content }) => {
+    try {
+      return await fileManager.writeFile(filePath, content)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
   ipcMain.handle('fs:get-cwd', () => {
     return fileManager.getCwd()
   })
