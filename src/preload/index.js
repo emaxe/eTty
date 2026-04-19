@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTabsTriggerRestore: (cb) => ipcRenderer.on('tabs:trigger-restore', () => cb()),
   settingsLoad: () => ipcRenderer.invoke('settings:load'),
   settingsSave: (settings) => ipcRenderer.invoke('settings:save', settings),
+  gitGetRoot: (rootPath) => ipcRenderer.invoke('git:get-root', rootPath),
   gitGetStatus: (rootPath) => ipcRenderer.invoke('git:get-status', rootPath),
   gitGetDiff: (rootPath, filePath) => ipcRenderer.invoke('git:get-diff', rootPath, filePath),
   gitGetBranches: (rootPath) => ipcRenderer.invoke('git:get-branches', rootPath),

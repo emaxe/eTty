@@ -121,8 +121,19 @@ export class GitPanel {
   show(rootPath) {
     this._rootPath = rootPath;
     this._overlayEl.classList.remove('hidden');
+    console.log('[git-panel] show rootPath:', rootPath)
     this._loadStatus();
     this._loadBranches();
+    this._showRootPath();
+  }
+
+  async _showRootPath() {
+    const el = this._overlayEl.querySelector('#git-root-path')
+    if (!el) return
+    if (!this._rootPath) { el.textContent = ''; return }
+    const root = await window.electronAPI.gitGetRoot(this._rootPath)
+    el.textContent = root || this._rootPath
+    console.log('[git-panel] git root resolved:', root)
   }
 
   hide() {
@@ -138,8 +149,13 @@ export class GitPanel {
   async _loadStatus() {
     if (!this._rootPath) return;
     const result = await window.electronAPI.gitGetStatus(this._rootPath);
+    console.log('[git-panel] status result:', result)
     if (result && result.error) {
       this._showError(result.error);
+      return;
+    }
+    if (result && result.notARepo) {
+      this._renderFileList([]);
       return;
     }
     this._renderFileList(result && result.files ? result.files : []);
@@ -148,6 +164,7 @@ export class GitPanel {
   async _loadBranches() {
     if (!this._rootPath) return;
     const result = await window.electronAPI.gitGetBranches(this._rootPath);
+    console.log('[git-panel] branches result:', result)
     if (result && result.error) {
       this._showError(result.error);
       return;

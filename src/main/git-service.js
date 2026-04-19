@@ -17,12 +17,14 @@ export function registerGitHandlers(ipcMain) {
     try {
       const git = simpleGit(rootPath)
       const isRepo = await git.checkIsRepo()
+      console.log('[git-panel] get-status rootPath:', rootPath, 'isRepo:', isRepo)
       if (!isRepo) return { notARepo: true }
 
       const [status, branch] = await Promise.all([
         git.status(),
         git.branch()
       ])
+      console.log('[git-panel] status modified:', status.modified, 'not_added:', status.not_added, 'deleted:', status.deleted)
 
       const files = []
       let totalAdditions = 0
@@ -31,7 +33,7 @@ export function registerGitHandlers(ipcMain) {
       // Modified tracked files
       for (const filePath of status.modified) {
         try {
-          const diff = await git.diff([filePath])
+          const diff = await git.diff(['HEAD', '--', filePath])
           const { additions, deletions } = countDiffLines(diff)
           totalAdditions += additions
           totalDeletions += deletions
@@ -45,7 +47,7 @@ export function registerGitHandlers(ipcMain) {
       for (const filePath of status.not_added) {
         try {
           const content = await fs.readFile(path.join(rootPath, filePath), 'utf-8')
-          const additions = content.split('\n').filter(l => l.length > 0).length
+          const additions = content ? content.replace(/\n$/, '').split('\n').length : 0
           totalAdditions += additions
           files.push({ path: filePath, additions, deletions: 0, untracked: true })
         } catch {
@@ -69,7 +71,7 @@ export function registerGitHandlers(ipcMain) {
       // Deleted files
       for (const filePath of status.deleted) {
         try {
-          const diff = await git.diff([filePath])
+          const diff = await git.diff(['HEAD', '--', filePath])
           const { additions, deletions } = countDiffLines(diff)
           totalAdditions += additions
           totalDeletions += deletions
@@ -118,6 +120,16 @@ export function registerGitHandlers(ipcMain) {
     }
   })
 
+  ipcMain.handle('git:get-root', async (_event, rootPath) => {
+    try {
+      const git = simpleGit(rootPath)
+      const root = await git.revparse(['--show-toplevel'])
+      return root.trim()
+    } catch {
+      return null
+    }
+  })
+
   ipcMain.handle('git:get-diff', async (_event, rootPath, filePath) => {
     try {
       const git = simpleGit(rootPath)
@@ -129,7 +141,7 @@ export function registerGitHandlers(ipcMain) {
         return content.split('\n').map(line => `+${line}`).join('\n')
       }
 
-      const diff = await git.diff([filePath])
+      const diff = await git.diff(['HEAD', '--', filePath])
       return diff
     } catch {
       return ''
