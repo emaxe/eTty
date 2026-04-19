@@ -1,5 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+/**
+ * Preload-скрипт: мост между renderer и main процессом через contextBridge.
+ * Все IPC-вызовы проксируются через window.electronAPI — renderer не имеет
+ * прямого доступа к Node.js или Electron API (contextIsolation: true).
+ *
+ * invoke() — для request/response (handle в main)
+ * send()   — для fire-and-forget (on в main)
+ * on()     — для событий из main → renderer
+ */
 contextBridge.exposeInMainWorld('electronAPI', {
   ptyCreate: (options) => ipcRenderer.invoke('pty:create', options),
   ptyWrite: (pid, data) => ipcRenderer.send('pty:write', { pid, data }),

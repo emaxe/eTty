@@ -5,11 +5,23 @@ import path from 'path'
 
 const SHELL_PATH = '/bin/zsh'
 
+/**
+ * Управляет PTY-сессиями (псевдотерминалами) для вкладок.
+ * Каждая вкладка получает изолированную zsh-сессию с собственными ZDOTDIR и HISTFILE.
+ */
 export class PtyManager {
   constructor() {
+    /** @type {Map<number, {pty, webContents, tabId: string, historyFile: string, initialHistSize: number}>} */
     this.sessions = new Map()
   }
 
+  /**
+   * Создаёт временный ZDOTDIR с кастомными .zshenv и .zshrc.
+   * .zshenv — sourcing пользовательского ~/.zshenv
+   * .zshrc — sourcing ~/.zshrc + настройка истории + zsh-хуки для OSC 7/133
+   * @param {string|null} historyFile — путь к HISTFILE для этой сессии
+   * @returns {string} путь к временной директории ZDOTDIR
+   */
   _createZdotdir(historyFile) {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'etty-'))
     const home = os.homedir()
@@ -52,6 +64,10 @@ export class PtyManager {
     return tmpDir
   }
 
+  /**
+   * Запускает новую zsh-сессию в изолированном PTY.
+   * @returns {{pid: number}} — PID процесса для идентификации сессии
+   */
   create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize }) {
     const zdotdir = this._createZdotdir(historyFile)
     const ptyProcess = spawn(SHELL_PATH, [], {

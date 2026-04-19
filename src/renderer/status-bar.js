@@ -1,3 +1,7 @@
+/**
+ * Статус-бар с Git-статистикой. Показывает `± +N -N` — суммарные additions/deletions.
+ * Polling каждые 5 секунд. Клик открывает полную Git-панель.
+ */
 export class StatusBar {
   constructor({ btnEl, onOpen }) {
     this._btnEl = btnEl;

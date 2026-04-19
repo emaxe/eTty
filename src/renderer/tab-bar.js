@@ -1,3 +1,8 @@
+/**
+ * Управление вкладками терминала.
+ * Каждая вкладка = {pid, term, fitAddon, container, element, rootPath, tabId, ...}
+ * Сохраняет per-tab состояние дерева файлов (expandedDirs, scrollTop) при переключении.
+ */
 export class TabBar {
   constructor({ tabBarEl, terminalContainerEl, onSwitch, onAddTab, onCloseTab }) {
     this.tabBarEl = tabBarEl

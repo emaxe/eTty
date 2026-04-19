@@ -1,3 +1,9 @@
+/**
+ * Темы оформления. Каждая тема содержит три секции:
+ * - ui: CSS-переменные для интерфейса (--bg, --text, --accent, ...)
+ * - terminal: цвета для xterm.js (background, foreground, 16 ANSI colors)
+ * - editor: цвета для CodeMirror (syntax highlighting, gutter, cursor)
+ */
 export const THEMES = {
   'catppuccin-mocha': {
     name: 'Catppuccin Mocha',

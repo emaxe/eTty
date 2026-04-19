@@ -3,12 +3,23 @@ import { watch } from 'fs'
 import path from 'path'
 import os from 'os'
 
+/**
+ * Файловые операции с защитой от path traversal.
+ * Все мутирующие методы валидируют путь через validatePath() — путь должен
+ * находиться внутри текущего CWD. readDir и readFile/writeFile не ограничены
+ * CWD, т.к. используются для просмотра/редактирования любых доступных файлов.
+ */
 export class FileManager {
   constructor() {
     this.cwd = os.homedir()
+    /** @type {Map<string, import('fs').FSWatcher>} */
     this._watchers = new Map()
   }
 
+  /**
+   * Проверяет, что путь не выходит за пределы CWD (path traversal защита).
+   * @throws {Error} если путь за пределами CWD
+   */
   validatePath(targetPath) {
     const resolved = path.resolve(targetPath)
     if (!resolved.startsWith(this.cwd)) {
@@ -96,6 +107,10 @@ export class FileManager {
     return { cwd: this.cwd }
   }
 
+  /**
+   * Подписывается на изменения в директории через fs.watch.
+   * Уведомления дебаунсятся (300ms) и отправляются в renderer через IPC.
+   */
   watchDir(dirPath, webContents) {
     if (this._watchers.has(dirPath)) return
     let timer

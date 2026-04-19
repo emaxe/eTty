@@ -14,9 +14,12 @@ import { GitPanel } from './git-panel.js'
 import { EditorPanel } from './editor-panel.js'
 
 let currentThemeName = 'catppuccin-mocha'
+/** @type {TabBar|null} */
 let tabBar = null
+/** @type {EditorPanel|null} */
 let editorPanel = null
 
+/** Применяет тему: обновляет CSS-переменные, терминалы и редактор. */
 function applyTheme(themeName) {
   const theme = THEMES[themeName]
   if (!theme) return
@@ -47,6 +50,7 @@ function applyTheme(themeName) {
   }
 }
 
+/** Создаёт новую вкладку: Terminal + FitAddon + PTY-сессия. */
 async function createTab(cwd, tabId) {
   const term = new Terminal({
     cursorBlink: true,
@@ -209,6 +213,14 @@ async function init() {
     if (index >= 0) tabBar.removeTab(index)
   })
 
+  /**
+   * Настраивает обработчики для вкладки:
+   * - Kitty keyboard protocol (modifier+Enter)
+   * - Non-ASCII символы (кириллица) — ручная отправка в PTY
+   * - Terminal → PTY data/resize/title
+   * - OSC 7 (cwd sync) и OSC 133 (busy tracking)
+   * - WebGL addon
+   */
   function setupTabHandlers(tab) {
     // Kitty keyboard protocol: перехватываем modifier+Enter до xterm.js
     tab.term.attachCustomKeyEventHandler((event) => {

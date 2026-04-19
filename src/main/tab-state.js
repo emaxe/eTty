@@ -3,6 +3,11 @@ import { join } from 'path'
 import { readFile, writeFile, unlink, access } from 'fs/promises'
 import log from 'electron-log'
 
+/**
+ * Файл состояния вкладок. Сохраняется при закрытии приложения,
+ * загружается при следующем запуске для восстановления сессии.
+ * Формат: { version, tabs: [{rootPath, isActive, tabId}], savedAt }
+ */
 const STATE_FILE = () => join(app.getPath('userData'), 'tabs-state.json')
 const STATE_VERSION = 2
 

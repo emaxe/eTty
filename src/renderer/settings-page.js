@@ -1,5 +1,9 @@
 import { THEMES } from './themes.js'
 
+/**
+ * Страница настроек (overlay). Категории: оформление (тема), дерево файлов.
+ * Auto-save с debounce 300ms. Тема применяется мгновенно через callback.
+ */
 export class SettingsPage {
   constructor({ onSettingsChanged }) {
     this._onSettingsChanged = onSettingsChanged

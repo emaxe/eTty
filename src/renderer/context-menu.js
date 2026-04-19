@@ -1,3 +1,4 @@
+/** Простое контекстное меню: show(items, x, y) → отображает список действий. */
 export class ContextMenu {
   constructor() {
     this._el = null

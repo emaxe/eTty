@@ -3,6 +3,10 @@ import { join } from 'path'
 import { readFile, writeFile } from 'fs/promises'
 import log from 'electron-log'
 
+/**
+ * Настройки приложения. При загрузке — deep merge с дефолтами,
+ * чтобы новые поля автоматически подхватывались.
+ */
 const SETTINGS_FILE = () => join(app.getPath('userData'), 'settings.json')
 const SETTINGS_VERSION = 1
 

@@ -1,3 +1,7 @@
+/**
+ * Git-панель (overlay): управление ветками, просмотр diff, commit/push/discard.
+ * Открывается кликом по статус-бару. Подгружает данные через electronAPI.git*.
+ */
 export class GitPanel {
   constructor({ overlayEl, onClose }) {
     this._overlayEl = overlayEl;

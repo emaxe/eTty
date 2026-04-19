@@ -2,6 +2,9 @@ import simpleGit from 'simple-git'
 import fs from 'fs/promises'
 import path from 'path'
 
+/**
+ * Считает строки additions (+) и deletions (-) в unified diff, игнорируя заголовки +++ и ---.
+ */
 function countDiffLines(diff) {
   let additions = 0
   let deletions = 0
@@ -12,6 +15,10 @@ function countDiffLines(diff) {
   return { additions, deletions }
 }
 
+/**
+ * Регистрирует все Git IPC-обработчики (git:*).
+ * Каждый обработчик получает rootPath — корень репозитория, определяемый renderer'ом.
+ */
 export function registerGitHandlers(ipcMain) {
   ipcMain.handle('git:get-status', async (_event, rootPath) => {
     try {

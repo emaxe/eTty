@@ -1,5 +1,10 @@
 import { ContextMenu } from './context-menu.js'
 
+/**
+ * Дерево файлов в sidebar. Lazy-load поддиректорий, контекстные меню,
+ * fs.watch для автообновления, copy/paste, показ/скрытие dotfiles.
+ * Состояние (expanded dirs, scroll) сохраняется per-tab при переключении.
+ */
 export class FileTree {
   constructor(container, terminalActions = null) {
     this._container = container
