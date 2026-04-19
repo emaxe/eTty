@@ -28,6 +28,29 @@
     <div id="resize-handle"></div>
     <div id="terminal-container"></div>
   </div>
+  <div id="status-bar">
+    <button id="btn-git-diff" class="status-bar-btn hidden">± +0 -0</button>
+  </div>
+  <div id="git-overlay" class="hidden">
+    <div class="git-header">
+      <span class="git-title">Git</span>
+      <div class="git-branch-controls">
+        <select id="git-branch-select"></select>
+        <button id="git-branch-new">+ New</button>
+        <button id="git-branch-delete">🗑</button>
+      </div>
+      <button class="git-close">✕</button>
+    </div>
+    <div id="git-root-path"></div>
+    <div class="git-error" id="git-error-bar"></div>
+    <div class="git-actions">
+      <input type="text" id="git-commit-msg" placeholder="commit message...">
+      <button id="git-btn-commit">Commit</button>
+      <button id="git-btn-push">Push</button>
+      <button id="git-btn-discard">Discard all</button>
+    </div>
+    <div class="git-file-list" id="git-file-list"></div>
+  </div>
   <script type="module" src="./index.js"></script>
 </body>
 </html>

@@ -8,6 +8,7 @@ import { FileManager } from './file-manager'
 import { saveTabState, loadTabState, deleteTabState, hasTabState, validatePath } from './tab-state'
 import { loadSettings, saveSettings } from './settings-store'
 import { HistoryManager } from './history-manager'
+import { registerGitHandlers } from './git-service.js'
 
 const ptyManager = new PtyManager()
 const fileManager = new FileManager()
@@ -179,6 +180,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle('settings:load', () => loadSettings())
   ipcMain.handle('settings:save', (_, settings) => saveSettings(settings))
+
+  registerGitHandlers(ipcMain)
 
   ipcMain.handle('history:cleanup', async (_, activeTabIds) => {
     await historyManager.cleanupOrphanedHistories(activeTabIds || [])
