@@ -1,19 +1,31 @@
 import { THEMES } from './themes.js'
 
+const SUPPORTED_AGENTS = [
+  { id: 'claude', label: 'Claude Code' },
+  { id: 'codex', label: 'Codex' },
+  { id: 'copilot', label: 'Copilot' },
+  { id: 'agent', label: 'Agent (Cursor)' },
+  { id: 'opencode', label: 'OpenCode' }
+]
+
 /**
- * Страница настроек (overlay). Категории: оформление (тема), дерево файлов.
- * Auto-save с debounce 300ms. Тема применяется мгновенно через callback.
+ * Страница настроек (overlay). Категории: оформление, дерево файлов, терминал, ИИ-агенты.
  */
 export class SettingsPage {
-  constructor({ onSettingsChanged }) {
+  constructor({ onSettingsChanged, onClose }) {
     this._onSettingsChanged = onSettingsChanged
+    this._onClose = onClose
     this._settings = null
     this._overlay = null
     this._saveTimer = null
+    this._agentsCategory = null
+    this._agentStatusById = new Map()
   }
 
   async init() {
     this._settings = await window.electronAPI.settingsLoad()
+    this._ensureAgentSettings()
+    await this._loadAgentStatus()
     this._buildDOM()
   }
 
@@ -23,10 +35,33 @@ export class SettingsPage {
 
   hide() {
     this._overlay.classList.add('hidden')
+    this._onClose?.()
   }
 
   isVisible() {
     return !this._overlay.classList.contains('hidden')
+  }
+
+  async _loadAgentStatus() {
+    try {
+      const result = await window.electronAPI.agentsGetStatus()
+      this._agentStatusById = new Map((result?.agents || []).map(agent => [agent.id, agent]))
+    } catch {
+      this._agentStatusById = new Map()
+    }
+  }
+
+  _ensureAgentSettings() {
+    if (!this._settings.agents) this._settings.agents = {}
+    if (!this._settings.agents.forceDisabled) this._settings.agents.forceDisabled = {}
+    if (typeof this._settings.agents.proxy !== 'string') this._settings.agents.proxy = ''
+    if (typeof this._settings.agents.proxyEnabled !== 'boolean') this._settings.agents.proxyEnabled = false
+
+    for (const agent of SUPPORTED_AGENTS) {
+      if (typeof this._settings.agents.forceDisabled[agent.id] !== 'boolean') {
+        this._settings.agents.forceDisabled[agent.id] = false
+      }
+    }
   }
 
   _buildDOM() {
@@ -34,7 +69,6 @@ export class SettingsPage {
     overlay.id = 'settings-overlay'
     overlay.classList.add('hidden')
 
-    // Header
     const header = document.createElement('div')
     header.className = 'settings-header'
 
@@ -45,13 +79,12 @@ export class SettingsPage {
     const closeBtn = document.createElement('button')
     closeBtn.className = 'settings-close-btn'
     closeBtn.title = 'Закрыть'
-    closeBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>`
+    closeBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>'
     closeBtn.addEventListener('click', () => this.hide())
 
     header.appendChild(title)
     header.appendChild(closeBtn)
 
-    // Body
     const body = document.createElement('div')
     body.className = 'settings-body'
 
@@ -88,13 +121,116 @@ export class SettingsPage {
       {
         label: 'Тема',
         control: this._buildThemeRow()
+      },
+      {
+        label: 'Индикатор фокуса',
+        control: this._createSelect(
+          [
+            { key: 'none', name: 'Нет' },
+            { key: 'glow', name: 'Свечение' },
+            { key: 'border', name: 'Рамка' },
+            { key: 'line', name: 'Линия сверху' }
+          ],
+          this._settings.appearance?.focusIndicator || 'glow',
+          (val) => {
+            if (!this._settings.appearance) this._settings.appearance = {}
+            this._settings.appearance.focusIndicator = val
+            this._onSettingsChanged('appearance.focusIndicator', val)
+            this._scheduleSave()
+          }
+        )
       }
     ]))
+
+    body.appendChild(this._buildCategory('Терминал', [
+      {
+        label: 'Стиль промпта (для новых вкладок)',
+        control: this._createSelect(
+          [
+            { key: 'default', name: 'По умолчанию (из ~/.zshrc)' },
+            { key: 'short', name: 'Короткий — dirname %' },
+            { key: 'minimal', name: 'Минимальный — >' },
+            { key: 'arrow', name: 'Стрелка — dirname ❯' }
+          ],
+          this._settings.terminal?.promptStyle || 'default',
+          (val) => {
+            if (!this._settings.terminal) this._settings.terminal = {}
+            this._settings.terminal.promptStyle = val
+            this._onSettingsChanged('terminal.promptStyle', val)
+            this._scheduleSave()
+          }
+        )
+      }
+    ]))
+
+    this._agentsCategory = this._buildCategory('ИИ-агенты', this._buildAgentRows())
+    body.appendChild(this._agentsCategory)
 
     overlay.appendChild(header)
     overlay.appendChild(body)
     document.body.appendChild(overlay)
     this._overlay = overlay
+  }
+
+  _buildAgentRows() {
+    const proxyRow = {
+      label: 'Прокси URL для ИИ-агентов',
+      control: this._createTextInput(
+        this._settings.agents.proxy || '',
+        'http://135.28.52.90:6200',
+        (val) => {
+          this._settings.agents.proxy = val.trim()
+          this._onSettingsChanged('agents.proxy', this._settings.agents.proxy)
+          this._scheduleSave()
+        }
+      )
+    }
+
+    const agentRows = SUPPORTED_AGENTS.map(({ id, label }) => ({
+      label,
+      control: this._buildAgentControl(id)
+    }))
+
+    return [proxyRow, ...agentRows]
+  }
+
+  _buildAgentControl(agentId) {
+    const wrapper = document.createElement('div')
+    wrapper.className = 'settings-agent-control'
+
+    const status = this._agentStatusById.get(agentId)
+    const detected = !!status?.detected
+
+    const badge = document.createElement('span')
+    badge.className = `settings-agent-badge ${detected ? 'detected' : 'missing'}`
+    badge.textContent = detected ? 'Обнаружен' : 'Не обнаружен'
+
+    const stateLabel = document.createElement('span')
+    stateLabel.className = 'settings-agent-switch-label'
+    stateLabel.textContent = this._settings.agents.forceDisabled[agentId] ? 'Выкл' : 'Вкл'
+
+    const toggle = this._createToggle(
+      !this._settings.agents.forceDisabled[agentId],
+      (isEnabled) => {
+        this._settings.agents.forceDisabled[agentId] = !isEnabled
+        stateLabel.textContent = isEnabled ? 'Вкл' : 'Выкл'
+        this._onSettingsChanged('agents.forceDisabled', { ...this._settings.agents.forceDisabled })
+        this._scheduleSave()
+      }
+    )
+    toggle.title = 'Включить/выключить агента'
+
+    wrapper.appendChild(badge)
+    wrapper.appendChild(stateLabel)
+    wrapper.appendChild(toggle)
+    return wrapper
+  }
+
+  _rerenderAgentsCategory() {
+    if (!this._agentsCategory) return
+    const next = this._buildCategory('ИИ-агенты', this._buildAgentRows())
+    this._agentsCategory.replaceWith(next)
+    this._agentsCategory = next
   }
 
   _buildCategory(title, rows) {
@@ -159,11 +295,20 @@ export class SettingsPage {
     return select
   }
 
+  _createTextInput(value, placeholder, onChange) {
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.className = 'settings-input'
+    input.value = value || ''
+    input.placeholder = placeholder || ''
+    input.addEventListener('input', () => onChange(input.value))
+    return input
+  }
+
   _buildThemeRow() {
     const wrapper = document.createElement('div')
     wrapper.className = 'settings-theme-row'
 
-    // Color swatch preview
     const swatch = document.createElement('div')
     swatch.className = 'settings-theme-swatch'
     const swatchLeft = document.createElement('div')

@@ -30,6 +30,7 @@ import {
 const _fallbackHighlight = syntaxHighlighting(defaultHighlightStyle, { fallback: true })
 import { buildEditorTheme } from './editor-theme.js'
 import { getLanguageExtension } from './editor-languages.js'
+import { fileLinksExtension, normalizePath } from './editor-file-links.js'
 
 export class EditorPanel {
   /**
@@ -37,14 +38,20 @@ export class EditorPanel {
    * @param {HTMLElement} opts.panelEl       — #editor-panel
    * @param {HTMLElement} opts.resizeHandleEl — #resize-handle-right
    * @param {Function}   opts.onResize       — called when panel shows/hides
-   * @param {Function}   opts.writeToPty     — (data: string) => void
+   * @param {Function}   [opts.onShow]       — called when panel becomes visible
+   * @param {Function}   [opts.onHide]       — called when panel becomes hidden (close button, last tab close)
+   * @param {Function}   opts.writeToPty     — (data: string) => void, pure write for text injection
+   * @param {Function}   opts.shellCmdToPty  — (data: string) => void, clears line + writes for shell commands
    * @param {Function}   opts.getActiveCwd   — () => string, active terminal cwd
    */
-  constructor({ panelEl, resizeHandleEl, onResize, writeToPty, getActiveCwd }) {
+  constructor({ panelEl, resizeHandleEl, onResize, onShow, onHide, writeToPty, shellCmdToPty, getActiveCwd }) {
     this._panelEl = panelEl
     this._resizeHandleEl = resizeHandleEl
     this._onResize = onResize
+    this._onShow = onShow
+    this._onHide = onHide
     this._writeToPty = writeToPty
+    this._shellCmdToPty = shellCmdToPty
     this._getActiveCwd = getActiveCwd
 
     this._tabBarEl = panelEl.querySelector('#editor-tab-bar')
@@ -62,7 +69,9 @@ export class EditorPanel {
 
     // Compartments for hot-swap
     this._themeCompartment = new Compartment()
+    this._wrapCompartment = new Compartment()
     this._currentThemeExts = [_fallbackHighlight]
+    this._wordWrap = false
 
     this._setupListeners()
   }
@@ -128,6 +137,7 @@ export class EditorPanel {
     this._panelEl.classList.remove('hidden')
     this._resizeHandleEl.classList.remove('hidden')
     this._onResize?.()
+    this._onShow?.()
   }
 
   hide() {
@@ -135,6 +145,7 @@ export class EditorPanel {
     this._panelEl.classList.add('hidden')
     this._resizeHandleEl.classList.add('hidden')
     this._onResize?.()
+    this._onHide?.()
   }
 
   toggle() {
@@ -153,6 +164,19 @@ export class EditorPanel {
         effects: this._themeCompartment.reconfigure(newExts)
       })
     }
+  }
+
+  toggleWordWrap() {
+    this._wordWrap = !this._wordWrap
+    const ext = this._wordWrap ? EditorView.lineWrapping : []
+    for (const [, tab] of this._tabs) {
+      tab.view.dispatch({ effects: this._wrapCompartment.reconfigure(ext) })
+    }
+    return this._wordWrap
+  }
+
+  isWordWrapOn() {
+    return this._wordWrap
   }
 
   async saveActiveFile() {
@@ -180,6 +204,150 @@ export class EditorPanel {
     return [...this._tabs.keys()]
   }
 
+  /**
+   * Suspend editor state — detach all views from DOM, return serialisable snapshot.
+   * Call this before switching terminal tabs.
+   * @returns {{ files: Array<{ path: string, scrollTop: number, scrollLeft: number }>, activePath: string|null, visible: boolean }}
+   */
+  suspendState() {
+    // Save scroll of the active view
+    if (this._activeFilePath) {
+      const active = this._tabs.get(this._activeFilePath)
+      if (active) {
+        const scroller = active.view.scrollDOM
+        active.savedScrollTop = scroller.scrollTop
+        active.savedScrollLeft = scroller.scrollLeft
+      }
+    }
+
+    const files = []
+    for (const [filePath, tab] of this._tabs) {
+      files.push({
+        path: filePath,
+        scrollTop: tab.savedScrollTop ?? tab.view.scrollDOM.scrollTop,
+        scrollLeft: tab.savedScrollLeft ?? tab.view.scrollDOM.scrollLeft
+      })
+      // Detach DOM
+      if (this._bodyEl.contains(tab.view.dom)) tab.view.dom.remove()
+      tab.element.remove()
+    }
+
+    const state = {
+      files,
+      activePath: this._activeFilePath,
+      visible: this.isVisible()
+    }
+
+    // Clear internal state without destroying views — keep them in a detached map
+    const detached = new Map(this._tabs)
+    this._tabs = new Map()
+    this._activeFilePath = null
+    this._tabBarEl.innerHTML = ''
+    this._showPlaceholder('Файл не открыт')
+    this.hide()
+
+    return { ...state, _detachedTabs: detached }
+  }
+
+  /**
+   * Restore previously suspended editor state.
+   * @param {object|null} state — return value of suspendState(), or null for fresh state
+   */
+  restoreState(state) {
+    // Clean up any current editor tabs
+    for (const [, tab] of this._tabs) {
+      if (this._bodyEl.contains(tab.view.dom)) tab.view.dom.remove()
+      tab.element.remove()
+    }
+    this._tabs = new Map()
+    this._activeFilePath = null
+    this._tabBarEl.innerHTML = ''
+
+    if (!state) {
+      this._showPlaceholder('Файл не открыт')
+      this.hide()
+      return
+    }
+
+    // If state has serialised data but no detached views — restore from disk
+    if (!state._detachedTabs || state._detachedTabs.size === 0) {
+      if (state.files && state.files.length > 0) {
+        this.restoreEditorFromSaved(state)
+      } else {
+        this._showPlaceholder('Файл не открыт')
+        this.hide()
+      }
+      return
+    }
+
+    // Re-attach tabs
+    for (const [filePath, tab] of state._detachedTabs) {
+      this._tabs.set(filePath, tab)
+      this._tabBarEl.appendChild(tab.element)
+    }
+
+    // Switch to previously active tab
+    const activePath = state.activePath && this._tabs.has(state.activePath)
+      ? state.activePath
+      : this._tabs.keys().next().value
+
+    if (activePath) {
+      this._switchToTab(activePath)
+    }
+
+    if (state.visible) {
+      this.show()
+    } else {
+      this.hide()
+    }
+  }
+
+  /**
+   * Export editor state for persistence (serialisable, no view references).
+   * @returns {{ files: Array<{ path: string, scrollTop: number, scrollLeft: number }>, activePath: string|null, visible: boolean }|null}
+   */
+  exportEditorState() {
+    if (this._tabs.size === 0) return null
+    const files = []
+    for (const [filePath, tab] of this._tabs) {
+      const scroller = tab.view.scrollDOM
+      files.push({
+        path: filePath,
+        scrollTop: tab.savedScrollTop ?? scroller.scrollTop,
+        scrollLeft: tab.savedScrollLeft ?? scroller.scrollLeft
+      })
+    }
+    return {
+      files,
+      activePath: this._activeFilePath,
+      visible: this.isVisible()
+    }
+  }
+
+  /**
+   * Restore editor state from persistence (re-opens files from disk).
+   * @param {{ files: Array<{ path: string, scrollTop: number, scrollLeft: number }>, activePath: string|null, visible: boolean }} state
+   */
+  async restoreEditorFromSaved(state) {
+    if (!state || !state.files || state.files.length === 0) return
+    for (const f of state.files) {
+      await this.openFile(f.path)
+      const tab = this._tabs.get(f.path)
+      if (tab) {
+        tab.savedScrollTop = f.scrollTop
+        tab.savedScrollLeft = f.scrollLeft
+      }
+    }
+    if (state.activePath && this._tabs.has(state.activePath)) {
+      this._switchToTab(state.activePath)
+    }
+    if (state.visible) {
+      this.show()
+    } else {
+      this.hide()
+    }
+  }
+
   // ── Private ──────────────────────────────────────────────────────────────
 
   _createEditorView(filePath, content, langExts) {
@@ -190,6 +358,9 @@ export class EditorPanel {
       extensions: [
         // Theme (hot-swappable)
         this._themeCompartment.of(this._currentThemeExts),
+
+        // Word wrap (hot-swappable)
+        this._wrapCompartment.of(this._wordWrap ? EditorView.lineWrapping : []),
 
         // Language (static per file)
         ...langExts,
@@ -219,6 +390,11 @@ export class EditorPanel {
           ...foldKeymap,
           indentWithTab
         ]),
+
+        // File-link decorations (Ctrl/Cmd+Click to open)
+        fileLinksExtension({
+          onFileClick: (pathText) => self._handleFileLinkClick(pathText)
+        }),
 
         // Update listener for dirty tracking and status bar
         EditorView.updateListener.of(update => {
@@ -269,10 +445,13 @@ export class EditorPanel {
 
     this._hideFloatBtn()
 
-    // Deactivate current
+    // Deactivate current — save scroll position before removing DOM
     if (this._activeFilePath && this._activeFilePath !== filePath) {
       const prev = this._tabs.get(this._activeFilePath)
       if (prev) {
+        const scroller = prev.view.scrollDOM
+        prev.savedScrollTop = scroller.scrollTop
+        prev.savedScrollLeft = scroller.scrollLeft
         prev.element.classList.remove('active')
         prev.view.dom.remove()
       }
@@ -289,6 +468,17 @@ export class EditorPanel {
 
     if (!this._bodyEl.contains(tab.view.dom)) {
       this._bodyEl.appendChild(tab.view.dom)
+    }
+
+    // Restore scroll position after layout
+    if (tab.savedScrollTop != null) {
+      const top = tab.savedScrollTop
+      const left = tab.savedScrollLeft || 0
+      requestAnimationFrame(() => {
+        const scroller = tab.view.scrollDOM
+        scroller.scrollTop = top
+        scroller.scrollLeft = left
+      })
     }
 
     tab.view.focus()
@@ -503,8 +693,9 @@ export class EditorPanel {
     tab.view.dispatch({ selection: { anchor: sel.to } })
     this._hideFloatBtn()
 
-    // Inject into terminal: clear current input line first (Ctrl+U), then insert ref
-    this._writeToPty?.('\x15' + lineRef)
+    // Use bracketed paste mode so TUI apps (Copilot, Claude Code, etc.)
+    // correctly receive the text as pasted input
+    this._writeToPty?.('\x1b[200~' + lineRef + '\x1b[201~')
   }
 
   _openExternal() {
@@ -512,7 +703,63 @@ export class EditorPanel {
     if (!filePath) return
     // Use shell 'open' command — works on macOS, Linux uses 'xdg-open'
     const escaped = filePath.replace(/'/g, "'\\''")
-    this._writeToPty?.(`open '${escaped}'\r`)
+    this._shellCmdToPty?.(`open '${escaped}'\r`)
+  }
+
+  async _handleFileLinkClick(pathText) {
+    let resolved
+    if (pathText.startsWith('/')) {
+      resolved = normalizePath(pathText)
+    } else if (pathText.startsWith('./') || pathText.startsWith('../')) {
+      const base = this._activeFilePath
+        ? this._activeFilePath.substring(0, this._activeFilePath.lastIndexOf('/'))
+        : this._getActiveCwd?.() || '/'
+      resolved = normalizePath(base + '/' + pathText)
+    } else {
+      const cwd = this._getActiveCwd?.() || '/'
+      resolved = normalizePath(cwd + '/' + pathText)
+    }
+
+    // Pre-check: try reading the file before switching tabs
+    const result = await window.electronAPI.fsReadFile(resolved)
+    if (!result.success) {
+      this._showLinkError(resolved, result.error)
+      return
+    }
+    this.openFile(resolved)
+  }
+
+  _showLinkError(filePath, error) {
+    const overlay = document.createElement('div')
+    overlay.className = 'link-error-overlay'
+
+    const dialog = document.createElement('div')
+    dialog.className = 'link-error-dialog'
+
+    const title = document.createElement('div')
+    title.className = 'link-error-title'
+    title.textContent = 'Не удалось открыть файл'
+
+    const msg = document.createElement('div')
+    msg.className = 'link-error-msg'
+    msg.textContent = filePath
+
+    const detail = document.createElement('div')
+    detail.className = 'link-error-detail'
+    detail.textContent = error
+
+    const btn = document.createElement('button')
+    btn.className = 'link-error-btn'
+    btn.textContent = 'OK'
+
+    const close = () => overlay.remove()
+    btn.addEventListener('click', close)
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
+
+    dialog.append(title, msg, detail, btn)
+    overlay.appendChild(dialog)
+    document.body.appendChild(overlay)
+    btn.focus()
   }
 
   _showPlaceholder(msg) {
@@ -533,6 +780,11 @@ export class EditorPanel {
   }
 
   _setupListeners() {
+    this._btnWordWrap = this._panelEl.querySelector('#btn-word-wrap')
+    this._btnWordWrap.addEventListener('click', () => {
+      const on = this.toggleWordWrap()
+      this._btnWordWrap.classList.toggle('active', on)
+    })
     this._btnOpenExternal.addEventListener('click', () => this._openExternal())
     this._btnClose.addEventListener('click', () => this.hide())
     this._btnSendFloat.addEventListener('click', () => this._sendLinesToTerminal())

@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onFsDirChanged: (cb) => ipcRenderer.on('fs:dir-changed', (_, data) => cb(data)),
   windowGetPosition: () => ipcRenderer.invoke('window:get-position'),
   windowMove: (x, y) => ipcRenderer.send('window:move', { x, y }),
+  onFullscreenChange: (cb) => ipcRenderer.on('window:fullscreen-change', (_, isFullscreen) => cb(isFullscreen)),
   tabsHasSavedState: () => ipcRenderer.invoke('tabs:has-saved-state'),
   tabsLoadSavedState: () => ipcRenderer.invoke('tabs:load-saved-state'),
   tabsDeleteSavedState: () => ipcRenderer.invoke('tabs:delete-saved-state'),
@@ -41,6 +42,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTabsTriggerRestore: (cb) => ipcRenderer.on('tabs:trigger-restore', () => cb()),
   settingsLoad: () => ipcRenderer.invoke('settings:load'),
   settingsSave: (settings) => ipcRenderer.invoke('settings:save', settings),
+  agentsGetStatus: () => ipcRenderer.invoke('agents:get-status'),
+  agentsRefresh: () => ipcRenderer.invoke('agents:refresh'),
+  onAgentsSettingsUpdated: (cb) => ipcRenderer.on('agents:settings-updated', (_, data) => cb(data)),
   gitGetRoot: (rootPath) => ipcRenderer.invoke('git:get-root', rootPath),
   gitGetStatus: (rootPath) => ipcRenderer.invoke('git:get-status', rootPath),
   gitGetDiff: (rootPath, filePath) => ipcRenderer.invoke('git:get-diff', rootPath, filePath),
@@ -51,4 +55,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitCommit: (rootPath, message) => ipcRenderer.invoke('git:commit', rootPath, message),
   gitPush: (rootPath) => ipcRenderer.invoke('git:push', rootPath),
   gitDiscard: (rootPath) => ipcRenderer.invoke('git:discard', rootPath),
+  nodeVersion: process.versions.node,
 })

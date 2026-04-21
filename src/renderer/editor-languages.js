@@ -20,6 +20,8 @@ const LANG_MAP = {
   json: () => import('@codemirror/lang-json').then(m => [m.json()]),
   yaml: () => import('@codemirror/lang-yaml').then(m => [m.yaml()]),
   yml:  () => import('@codemirror/lang-yaml').then(m => [m.yaml()]),
+  vue:  () => import('@codemirror/lang-vue').then(m => [m.vue()]),
+  cs:   () => import('@replit/codemirror-lang-csharp').then(m => [m.csharp()]),
   md:   () => import('@codemirror/lang-markdown').then(m => [m.markdown()]),
   markdown: () => import('@codemirror/lang-markdown').then(m => [m.markdown()])
 }

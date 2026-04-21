@@ -37,6 +37,10 @@ html, body {
   flex-shrink: 0;
 }
 
+.fullscreen #titlebar {
+  padding-left: 0;
+}
+
 /* Toolbar */
 #toolbar {
   display: flex;
@@ -68,7 +72,8 @@ html, body {
 }
 
 #btn-settings.active,
-#btn-toggle-editor.active {
+#btn-toggle-editor.active,
+#btn-toggle-sidebar.active {
   color: var(--accent);
 }
 
@@ -267,6 +272,53 @@ html, body {
 #terminal-container {
   flex: 1;
   overflow: hidden;
+  position: relative;
+  padding: 5px;
+}
+
+/* Анимация переливов для glow — медленный дрейф оттенка + яркости */
+@keyframes focus-glow-shimmer {
+  0%   { filter: hue-rotate(0deg)   brightness(0.85); }
+  25%  { filter: hue-rotate(22deg)  brightness(1.05); }
+  50%  { filter: hue-rotate(8deg)   brightness(1.12); }
+  75%  { filter: hue-rotate(-16deg) brightness(0.95); }
+  100% { filter: hue-rotate(0deg)   brightness(0.85); }
+}
+
+/* Индикатор фокуса — ::before overlay поверх canvas/редактора */
+[data-focus-style="glow"] #terminal-container.panel-focused::before,
+[data-focus-style="glow"] #editor-panel.panel-focused::before,
+[data-focus-style="border"] #terminal-container.panel-focused::before,
+[data-focus-style="border"] #editor-panel.panel-focused::before,
+[data-focus-style="line"] #terminal-container.panel-focused::before,
+[data-focus-style="line"] #editor-panel.panel-focused::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+}
+
+/* Glow — тонкая рамка + внутреннее свечение с плавными переливами цвета */
+[data-focus-style="glow"] #terminal-container.panel-focused::before,
+[data-focus-style="glow"] #editor-panel.panel-focused::before {
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow:
+    inset 0 0 18px color-mix(in srgb, var(--accent) 14%, transparent),
+    inset 0 0 55px color-mix(in srgb, var(--accent) 5%, transparent);
+  animation: focus-glow-shimmer 7s ease-in-out infinite;
+}
+
+/* Border — чёткая рамка */
+[data-focus-style="border"] #terminal-container.panel-focused::before,
+[data-focus-style="border"] #editor-panel.panel-focused::before {
+  border: 2px solid var(--accent);
+}
+
+/* Line — линия сверху */
+[data-focus-style="line"] #terminal-container.panel-focused::before,
+[data-focus-style="line"] #editor-panel.panel-focused::before {
+  border-top: 2px solid var(--accent);
 }
 
 /* FileTree */
@@ -581,6 +633,26 @@ html, body {
   border-color: var(--accent);
 }
 
+.settings-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  outline: none;
+  min-width: 260px;
+}
+
+.settings-input:hover {
+  border-color: var(--muted);
+}
+
+.settings-input:focus {
+  border-color: var(--accent);
+}
+
 /* Settings theme preview swatch */
 .settings-theme-row {
   display: flex;
@@ -602,6 +674,37 @@ html, body {
   flex: 1;
 }
 
+.settings-agent-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-agent-badge {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.settings-agent-badge.detected {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 55%, transparent);
+}
+
+.settings-agent-badge.missing {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 55%, transparent);
+}
+
+.settings-agent-switch-label {
+  font-size: 11px;
+  color: var(--subtext);
+  min-width: 30px;
+  text-align: right;
+}
+
 /* ─── Status Bar ─────────────────────────────────────────────────────────── */
 #status-bar {
   height: 22px;
@@ -609,19 +712,107 @@ html, body {
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 6px;
+  gap: 4px;
   flex-shrink: 0;
+  overflow: hidden;
+}
+.status-spacer {
+  flex: 1;
+}
+.status-agents {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-left: 6px;
+  min-width: 0;
+}
+
+.status-agents::-webkit-scrollbar {
+  height: 4px;
+}
+
+.status-agents::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+.status-item {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: var(--hover);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+  flex-shrink: 1;
+}
+#status-node {
+  color: var(--green);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
 }
 .status-bar-btn {
   font-size: 11px;
-  padding: 1px 6px;
-  border: 1px solid var(--border);
+  padding: 1px 7px;
+  border: none;
   border-radius: 3px;
-  background: transparent;
+  background: var(--hover);
   color: var(--text);
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .status-bar-btn:hover { background: var(--border); }
+
+.status-proxy-btn {
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 5px;
+  margin-left: 10px;
+  padding-left: 10px;
+  position: relative;
+}
+
+.status-proxy-btn::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 2px;
+  height: 14px;
+  transform: translateY(-50%);
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.status-proxy-btn.active {
+  color: var(--green);
+  border: 1px solid color-mix(in srgb, var(--green) 70%, transparent);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+}
+
+.status-proxy-btn.hidden {
+  display: none;
+}
+
+.status-agent-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.status-agent-btn.status-agent-active {
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 90%, transparent);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 0 10px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+.stat-add { color: var(--green); }
+.stat-del { color: var(--red); }
 
 /* ─── Git Overlay ────────────────────────────────────────────────────────── */
 #git-overlay {
@@ -811,6 +1002,7 @@ html, body {
   background: var(--bg);
   border-left: 1px solid var(--border);
   overflow: hidden;
+  position: relative;
 }
 #editor-panel.hidden {
   display: none;
@@ -927,6 +1119,9 @@ html, body {
 #btn-send-lines:not(:disabled):hover {
   color: var(--accent);
 }
+#btn-word-wrap.active {
+  color: var(--accent);
+}
 
 /* Editor body — CodeMirror host */
 #editor-body {
@@ -946,6 +1141,74 @@ html, body {
 }
 #editor-body .cm-editor.cm-focused {
   outline: none;
+}
+
+/* File-link decorations (Ctrl/Cmd+Click to open) */
+.cm-file-link {
+  border-radius: 2px;
+  transition: text-decoration-color 0.15s, background-color 0.15s;
+}
+.cm-file-links-active .cm-file-link {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.cm-file-links-active .cm-file-link:hover {
+  background-color: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* Link error dialog */
+.link-error-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.link-error-dialog {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  max-width: 480px;
+  min-width: 280px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.link-error-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.link-error-msg {
+  font-size: 12px;
+  color: var(--accent);
+  word-break: break-all;
+  margin-bottom: 4px;
+  font-family: Menlo, 'SF Mono', Consolas, monospace;
+}
+.link-error-detail {
+  font-size: 11px;
+  color: var(--subtext);
+  margin-bottom: 14px;
+}
+.link-error-btn {
+  display: block;
+  margin-left: auto;
+  padding: 4px 16px;
+  font-size: 12px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.link-error-btn:hover {
+  opacity: 0.85;
 }
 
 /* Empty / error state in editor body */

@@ -5,6 +5,12 @@ import path from 'path'
 
 const SHELL_PATH = '/bin/zsh'
 
+const PROMPT_MAP = {
+  short: '%1~ %% ',
+  minimal: '> ',
+  arrow: '%1~ ❯ '
+}
+
 /**
  * Управляет PTY-сессиями (псевдотерминалами) для вкладок.
  * Каждая вкладка получает изолированную zsh-сессию с собственными ZDOTDIR и HISTFILE.
@@ -22,7 +28,7 @@ export class PtyManager {
    * @param {string|null} historyFile — путь к HISTFILE для этой сессии
    * @returns {string} путь к временной директории ZDOTDIR
    */
-  _createZdotdir(historyFile) {
+  _createZdotdir(historyFile, promptStyle) {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'etty-'))
     const home = os.homedir()
     const userZshenv = path.join(home, '.zshenv')
@@ -57,7 +63,8 @@ export class PtyManager {
         `add-zsh-hook precmd _etty_cwd`,
         `add-zsh-hook preexec _etty_preexec`,
         `add-zsh-hook precmd _etty_precmd_state`,
-        `_etty_cwd`
+        `_etty_cwd`,
+        ...(PROMPT_MAP[promptStyle] ? [`PROMPT='${PROMPT_MAP[promptStyle]}'`] : [])
       ].join('\n') + '\n'
     )
 
@@ -68,8 +75,8 @@ export class PtyManager {
    * Запускает новую zsh-сессию в изолированном PTY.
    * @returns {{pid: number}} — PID процесса для идентификации сессии
    */
-  create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize }) {
-    const zdotdir = this._createZdotdir(historyFile)
+  create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize, promptStyle }) {
+    const zdotdir = this._createZdotdir(historyFile, promptStyle)
     const ptyProcess = spawn(SHELL_PATH, [], {
       name: 'xterm-256color',
       cols: cols || 80,

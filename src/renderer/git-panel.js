@@ -146,6 +146,12 @@ export class GitPanel {
     this._onClose();
   }
 
+  /** Скрыть панель без вызова onClose (для переключения вкладок). */
+  hideQuiet() {
+    this._overlayEl.classList.add('hidden');
+    this._rootPath = null;
+  }
+
   isVisible() {
     return !this._overlayEl.classList.contains('hidden');
   }

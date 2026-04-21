@@ -33,6 +33,7 @@
       <div id="editor-header">
         <div id="editor-tab-bar"></div>
         <div id="editor-toolbar">
+          <button id="btn-word-wrap" title="Перенос строк"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h10M3 8h7a2 2 0 0 1 0 4H8"/><polyline points="9,11 8,12 9,13"/><line x1="3" y1="12" x2="5" y2="12"/></svg></button>
           <button id="btn-open-external" title="Открыть во внешнем редакторе"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V9"/><polyline points="10,2 14,2 14,6"/><line x1="14" y1="2" x2="8" y2="8"/></svg></button>
           <button id="btn-close-editor" title="Закрыть панель редактора"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/></svg></button>
         </div>
@@ -48,6 +49,23 @@
     </div>
   </div>
   <div id="status-bar">
+    <span id="status-cwd" class="status-item hidden"></span>
+    <span id="status-node" class="status-item"></span>
+    <button id="btn-proxy-toggle" class="status-bar-btn status-proxy-btn hidden" title="Прокси для ИИ-агентов">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="8" cy="8" r="2.1"/>
+        <circle cx="8" cy="8" r="5" opacity="0.85"/>
+        <circle cx="8" cy="8" r="7" opacity="0.65"/>
+      </svg>
+    </button>
+    <div id="status-agents" class="status-agents">
+      <button class="status-bar-btn status-agent-btn" data-agent-id="claude" title="Запустить Claude">Claude</button>
+      <button class="status-bar-btn status-agent-btn" data-agent-id="codex" title="Запустить Codex">Codex</button>
+      <button class="status-bar-btn status-agent-btn" data-agent-id="copilot" title="Запустить Copilot">Copilot</button>
+      <button class="status-bar-btn status-agent-btn" data-agent-id="agent" title="Запустить Agent">Agent</button>
+      <button class="status-bar-btn status-agent-btn" data-agent-id="opencode" title="Запустить OpenCode">OpenCode</button>
+    </div>
+    <div class="status-spacer"></div>
     <button id="btn-git-diff" class="status-bar-btn hidden">± +0 -0</button>
   </div>
   <div id="git-overlay" class="hidden">

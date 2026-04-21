@@ -18,7 +18,23 @@ export function getDefaults() {
       fileOpenMode: 'double'
     },
     appearance: {
-      theme: 'catppuccin-mocha'
+      theme: 'catppuccin-mocha',
+      focusIndicator: 'glow'
+    },
+    terminal: {
+      promptStyle: 'default'
+    },
+    agents: {
+      forceDisabled: {
+        claude: false,
+        codex: false,
+        copilot: false,
+        agent: false,
+        opencode: false
+      },
+      lastDetected: {},
+      proxy: '',
+      proxyEnabled: false
     }
   }
 }
@@ -34,7 +50,21 @@ export async function loadSettings() {
       ...defaults,
       ...data,
       fileTree: { ...defaults.fileTree, ...data.fileTree },
-      appearance: { ...defaults.appearance, ...data.appearance }
+      appearance: { ...defaults.appearance, ...data.appearance },
+      terminal: { ...defaults.terminal, ...data.terminal },
+      agents: {
+        ...defaults.agents,
+        ...data.agents,
+        forceDisabled: {
+          ...defaults.agents.forceDisabled,
+          ...(data.agents?.forceDisabled || {})
+        },
+        lastDetected: { ...(data.agents?.lastDetected || {}) },
+        proxy: typeof data.agents?.proxy === 'string' ? data.agents.proxy : defaults.agents.proxy,
+        proxyEnabled: typeof data.agents?.proxyEnabled === 'boolean'
+          ? data.agents.proxyEnabled
+          : defaults.agents.proxyEnabled
+      }
     }
   } catch {
     return getDefaults()

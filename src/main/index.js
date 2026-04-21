@@ -14,10 +14,12 @@ import { saveTabState, loadTabState, deleteTabState, hasTabState, validatePath }
 import { loadSettings, saveSettings } from './settings-store'
 import { HistoryManager } from './history-manager'
 import { registerGitHandlers } from './git-service.js'
+import { AgentService } from './agent-service.js'
 
 const ptyManager = new PtyManager()
 const fileManager = new FileManager()
 const historyManager = new HistoryManager()
+const agentService = new AgentService()
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -43,7 +45,43 @@ function createWindow() {
   return mainWindow
 }
 
+let _mainWindow = null
+
 app.whenReady().then(() => {
+  agentService.refresh().then(async (result) => {
+    try {
+      const settings = await loadSettings()
+      if (!settings.agents.lastDetected) settings.agents.lastDetected = {}
+
+      let changed = false
+      for (const agent of result.agents) {
+        // Авто-включение: агент появился, ранее не был обнаружен, переключатель был выключен
+        if (
+          agent.detected &&
+          settings.agents.lastDetected[agent.id] === false &&
+          settings.agents.forceDisabled[agent.id] === true
+        ) {
+          settings.agents.forceDisabled[agent.id] = false
+          changed = true
+        }
+        // Обновить историю обнаружения
+        if (settings.agents.lastDetected[agent.id] !== agent.detected) {
+          settings.agents.lastDetected[agent.id] = agent.detected
+          changed = true
+        }
+      }
+
+      if (changed) {
+        await saveSettings(settings)
+        if (_mainWindow && !_mainWindow.isDestroyed()) {
+          _mainWindow.webContents.send('agents:settings-updated', {
+            forceDisabled: settings.agents.forceDisabled
+          })
+        }
+      }
+    } catch {}
+  }).catch(() => {})
+
   autoUpdater.logger = log
   try {
     autoUpdater.checkForUpdatesAndNotify()
@@ -201,6 +239,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle('settings:load', () => loadSettings())
   ipcMain.handle('settings:save', (_, settings) => saveSettings(settings))
+  ipcMain.handle('agents:get-status', async () => agentService.getStatus())
+  ipcMain.handle('agents:refresh', async () => agentService.refresh())
 
   registerGitHandlers(ipcMain)
 
@@ -228,7 +268,8 @@ app.whenReady().then(() => {
       validated.push({
         rootPath: valid ? tab.rootPath : homedir,
         isActive: tab.isActive,
-        tabId: tab.tabId
+        tabId: tab.tabId,
+        editorState: tab.editorState || null
       })
     }
     return validated
@@ -250,7 +291,15 @@ app.whenReady().then(() => {
     return response === 0 // true = restore
   })
 
-  const mainWindow = createWindow()
+  _mainWindow = createWindow()
+  const mainWindow = _mainWindow
+
+  mainWindow.on('enter-full-screen', () => {
+    mainWindow.webContents.send('window:fullscreen-change', true)
+  })
+  mainWindow.on('leave-full-screen', () => {
+    mainWindow.webContents.send('window:fullscreen-change', false)
+  })
 
   // Save tab state when window is closing (before webContents is destroyed)
   mainWindow.on('close', async (e) => {

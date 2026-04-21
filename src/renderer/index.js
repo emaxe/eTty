@@ -19,6 +19,11 @@ let tabBar = null
 /** @type {EditorPanel|null} */
 let editorPanel = null
 
+/** Применяет стиль индикатора фокуса через data-атрибут на корневом элементе. */
+function applyFocusIndicator(style) {
+  document.documentElement.dataset.focusStyle = style || 'none'
+}
+
 /** Применяет тему: обновляет CSS-переменные, терминалы и редактор. */
 function applyTheme(themeName) {
   const theme = THEMES[themeName]
@@ -67,7 +72,9 @@ async function createTab(cwd, tabId) {
   term.loadAddon(new SearchAddon())
 
   tabId = tabId || crypto.randomUUID()
-  const { pid } = await window.electronAPI.ptyCreate({ cols: 80, rows: 24, cwd, tabId })
+  const settings = await window.electronAPI.settingsLoad()
+  const promptStyle = settings.terminal?.promptStyle || 'default'
+  const { pid } = await window.electronAPI.ptyCreate({ cols: 80, rows: 24, cwd, tabId, promptStyle })
 
   return { term, fitAddon, pid, rootPath: cwd, tabId }
 }
@@ -75,7 +82,11 @@ async function createTab(cwd, tabId) {
 async function init() {
   // Загружаем настройки до инициализации всего остального
   const settings = await window.electronAPI.settingsLoad()
+  if (!settings.agents) settings.agents = {}
+  if (typeof settings.agents.proxy !== 'string') settings.agents.proxy = ''
+  if (typeof settings.agents.proxyEnabled !== 'boolean') settings.agents.proxyEnabled = false
   applyTheme(settings.appearance.theme)
+  applyFocusIndicator(settings.appearance.focusIndicator)
 
   const terminalContainerEl = document.getElementById('terminal-container')
   const tabBarEl = document.getElementById('tab-bar')
@@ -90,6 +101,40 @@ async function init() {
   const resizeHandle = document.getElementById('resize-handle')
 
   const { cwd: startCwd } = await window.electronAPI.getCwd()
+  const agentCommands = {
+    claude: 'claude\n',
+    codex: 'codex\n',
+    copilot: 'gh copilot\n',
+    agent: 'agent\n',
+    opencode: 'opencode\n'
+  }
+
+  const applyAgentCommands = (statusPayload) => {
+    const agents = statusPayload?.agents || []
+    for (const agent of agents) {
+      if (agent?.id && agent?.launchCommand) {
+        agentCommands[agent.id] = `${agent.launchCommand}\n`
+      }
+    }
+  }
+
+  const getNormalizedProxyUrl = () => {
+    const raw = (settings.agents?.proxy || '').trim()
+    if (!raw) return ''
+    return raw.endsWith('/') ? raw : `${raw}/`
+  }
+
+  const buildAgentCommand = (baseCommand) => {
+    const cmd = (baseCommand || '').trim()
+    if (!cmd) return ''
+
+    if (!settings.agents?.proxyEnabled) return `${cmd}\n`
+
+    const proxyUrl = getNormalizedProxyUrl()
+    if (!proxyUrl) return `${cmd}\n`
+
+    return `http_proxy=${proxyUrl} https_proxy=${proxyUrl} all_proxy=${proxyUrl} ${cmd}\n`
+  }
 
   const focusActiveTerminal = () => {
     const tab = tabBar.getActive()
@@ -97,6 +142,14 @@ async function init() {
   }
 
   const writeToPtyActive = (data) => {
+    const tab = tabBar.getActive()
+    if (tab) {
+      window.electronAPI.ptyWrite(tab.pid, data)
+      tab.term.focus()
+    }
+  }
+
+  const shellCmdToPtyActive = (data) => {
     const tab = tabBar.getActive()
     if (tab) {
       window.electronAPI.ptyWrite(tab.pid, '\x15' + data)
@@ -108,7 +161,13 @@ async function init() {
     panelEl: document.getElementById('editor-panel'),
     resizeHandleEl: document.getElementById('resize-handle-right'),
     onResize: () => tabBar.getActive()?.fitAddon.fit(),
+    onShow: () => btnToggleEditor.classList.add('active'),
+    onHide: () => {
+      btnToggleEditor.classList.remove('active')
+      tabBar.getActive()?.term.focus()
+    },
     writeToPty: writeToPtyActive,
+    shellCmdToPty: shellCmdToPtyActive,
     getActiveCwd: () => tabBar.getActive()?.rootPath || startCwd,
   })
   // Apply current theme immediately (applyTheme ran before editorPanel was created)
@@ -116,7 +175,7 @@ async function init() {
   if (_initialTheme?.editor) editorPanel.setTheme(_initialTheme.editor)
 
   const fileTree = new FileTree(fileTreeContainerEl, {
-    writeToPty: writeToPtyActive,
+    writeToPty: shellCmdToPtyActive,
     focusTerminal: focusActiveTerminal,
     onFileOpen: (filePath) => editorPanel.openFile(filePath),
   })
@@ -132,14 +191,27 @@ async function init() {
     fileTree.setIsBusy(busy)
   }
 
+  const syncStatusBarTerminalState = () => {
+    const tab = tabBar.getActive()
+    statusBar.setTerminalState({
+      isBusy: !!tab?.isBusy,
+      activeAgentId: tab?.activeAgentId || null
+    })
+  }
+
   tabBar = new TabBar({
     tabBarEl,
     terminalContainerEl,
     onSwitch: async (tab, prevTab) => {
+      if (settingsPage.isVisible()) return
       if (prevTab) {
         prevTab.treeExpandedDirs = fileTree.getExpandedDirs()
         prevTab.treeScrollTop = fileTree.getScrollTop()
+        prevTab.editorState = editorPanel.suspendState()
+        prevTab.gitPanelVisible = gitPanel.isVisible()
       }
+      // Скрыть git-панель без side-effects перед переключением
+      if (gitPanel.isVisible()) gitPanel.hideQuiet()
       if (tab.rootPath !== fileTree.getCwd()) {
         await fileTree.setRoot(tab.rootPath)
         window.electronAPI.fsSetRoot(tab.rootPath)
@@ -150,21 +222,36 @@ async function init() {
         await fileTree.restoreExpandedDirs(tab.treeExpandedDirs)
       }
       fileTree.setScrollTop(tab.treeScrollTop || 0)
+      editorPanel.restoreState(tab.editorState || null)
+      // Восстановить git-панель если она была открыта на этой вкладке
+      if (tab.gitPanelVisible) {
+        gitPanel.show(tab.rootPath)
+      }
       document.title = tab.termTitle || 'eTty'
       updateNavButtons()
+      syncStatusBarTerminalState()
       statusBar.updateNow()
     },
     onAddTab: async () => {
+      if (settingsPage.isVisible()) return
       const active = tabBar.getActive()
       const cwd = active ? active.rootPath : startCwd
       const tabData = await createTab(cwd)
       const tab = tabBar.addTab(tabData)
       tab.isBusy = false
+      tab.activeAgentId = null
       setupTabHandlers(tab)
       tab.fitAddon.fit()
     },
     onCloseTab: (index) => {
+      if (settingsPage.isVisible()) return
       const tab = tabBar.tabs[index]
+      // Destroy suspended editor views to prevent memory leaks
+      if (tab.editorState?._detachedTabs) {
+        for (const [, etab] of tab.editorState._detachedTabs) {
+          etab.view.destroy()
+        }
+      }
       tabBar.removeTab(index)
       window.electronAPI.ptyKill(tab.pid)
     }
@@ -174,8 +261,18 @@ async function init() {
   const settingsPage = new SettingsPage({
     onSettingsChanged: (key, value) => {
       if (key === 'appearance.theme') applyTheme(value)
+      if (key === 'appearance.focusIndicator') applyFocusIndicator(value)
       if (key === 'fileTree.collapseChildrenOnClose') fileTree.setCollapseChildrenOnClose(value)
       if (key === 'fileTree.fileOpenMode') fileTree.setFileOpenMode(value)
+      if (key === 'agents.forceDisabled') statusBar.setForceDisabled(value)
+      if (key === 'agents.proxy') {
+        settings.agents.proxy = value
+        statusBar.setProxyConfig({ proxy: settings.agents.proxy, enabled: settings.agents.proxyEnabled })
+      }
+    },
+    onClose: () => {
+      btnSettings.classList.remove('active')
+      focusActiveTerminal()
     }
   })
   await settingsPage.init()
@@ -185,10 +282,38 @@ async function init() {
     onClose: () => statusBar.updateNow(),
   })
 
+  const launchAgentInActiveTab = (agentId) => {
+    const tab = tabBar.getActive()
+    if (!tab || tab.isBusy) return
+
+    const command = buildAgentCommand(agentCommands[agentId])
+    if (!command) return
+
+    tab.activeAgentId = agentId
+    window.electronAPI.ptyWrite(tab.pid, command)
+    syncStatusBarTerminalState()
+    tab.term.focus()
+  }
+
   const statusBar = new StatusBar({
     btnEl: document.getElementById('btn-git-diff'),
+    cwdEl: document.getElementById('status-cwd'),
+    nodeEl: document.getElementById('status-node'),
     onOpen: () => gitPanel.show(tabBar.getActive()?.rootPath),
+    agentButtons: [...document.querySelectorAll('.status-agent-btn')],
+    onLaunchAgent: launchAgentInActiveTab,
+    proxyToggleEl: document.getElementById('btn-proxy-toggle'),
+    onToggleProxy: (enabled) => {
+      settings.agents.proxyEnabled = enabled
+      window.electronAPI.settingsSave(settings)
+    }
   })
+
+  const agentsStatus = await window.electronAPI.agentsGetStatus().catch(() => ({ agents: [] }))
+  applyAgentCommands(agentsStatus)
+  statusBar.setAgentsStatus(agentsStatus)
+  statusBar.setForceDisabled(settings.agents?.forceDisabled || {})
+  statusBar.setProxyConfig({ proxy: settings.agents.proxy || '', enabled: settings.agents.proxyEnabled })
 
   statusBar.start(() => tabBar.getActive()?.rootPath)
 
@@ -200,6 +325,11 @@ async function init() {
       settingsPage.show()
       btnSettings.classList.add('active')
     }
+  })
+
+  window.electronAPI.onAgentsSettingsUpdated(({ forceDisabled }) => {
+    settings.agents.forceDisabled = forceDisabled
+    statusBar.setForceDisabled(forceDisabled)
   })
 
   // Глобальные IPC обработчики — маршрутизируют по pid
@@ -290,9 +420,13 @@ async function init() {
     tab.term.parser.registerOscHandler(133, (data) => {
       const wasBusy = tab.isBusy
       if (data.startsWith('C')) tab.isBusy = true
-      else if (data.startsWith('A')) tab.isBusy = false
+      else if (data.startsWith('A')) {
+        tab.isBusy = false
+        tab.activeAgentId = null
+      }
       if (wasBusy !== tab.isBusy && tabBar.getActive()?.pid === tab.pid) {
         updateNavButtons()
+        syncStatusBarTerminalState()
       }
       return false
     })
@@ -306,7 +440,29 @@ async function init() {
   }
 
   // Expose tab state export for main process (before-quit)
-  window.__exportTabState = () => tabBar.exportState()
+  window.__exportTabState = () => {
+    const tabs = tabBar.exportState()
+    const activeTab = tabBar.getActive()
+    // Attach editor state to each exported tab
+    for (const exported of tabs) {
+      const tab = tabBar.tabs.find(t => t.tabId === exported.tabId)
+      if (tab) {
+        if (tab === activeTab) {
+          // Active tab — read live state from editor
+          exported.editorState = editorPanel.exportEditorState()
+          exported.gitPanelVisible = gitPanel.isVisible()
+        } else {
+          // Inactive tabs — use suspended state (strip _detachedTabs)
+          const s = tab.editorState
+          if (s) {
+            exported.editorState = { files: s.files, activePath: s.activePath, visible: s.visible }
+          }
+          exported.gitPanelVisible = tab.gitPanelVisible || false
+        }
+      }
+    }
+    return tabs
+  }
 
   // Restore tabs from saved state (used by menu trigger)
   async function restoreTabs(savedTabs) {
@@ -317,6 +473,9 @@ async function init() {
       const tabData = await createTab(savedTabs[i].rootPath, savedTabs[i].tabId)
       const tab = tabBar.addTab(tabData)
       tab.isBusy = false
+      tab.activeAgentId = null
+      tab._savedEditorState = savedTabs[i].editorState || null
+      tab.gitPanelVisible = savedTabs[i].gitPanelVisible || false
       setupTabHandlers(tab)
       tab.fitAddon.fit()
       if (savedTabs[i].isActive) activeIndex = oldCount + i
@@ -334,6 +493,22 @@ async function init() {
       if (tabBar.activeIndex > i) tabBar.activeIndex--
     }
     tabBar.switchTo(tabBar.activeIndex)
+    // Restore editor files for the active tab
+    const activeRestored = tabBar.getActive()
+    if (activeRestored?._savedEditorState) {
+      await editorPanel.restoreEditorFromSaved(activeRestored._savedEditorState)
+      delete activeRestored._savedEditorState
+    }
+    for (const tab of tabBar.tabs) {
+      if (tab !== activeRestored && tab._savedEditorState) {
+        tab.editorState = { ...tab._savedEditorState, _detachedTabs: null }
+        delete tab._savedEditorState
+      }
+    }
+    // Restore git panel for the active tab
+    if (activeRestored?.gitPanelVisible) {
+      gitPanel.show(activeRestored.rootPath)
+    }
     await window.electronAPI.tabsDeleteSavedState()
     window.electronAPI.tabsStateChanged()
   }
@@ -351,11 +526,31 @@ async function init() {
           const tabData = await createTab(savedTabs[i].rootPath, savedTabs[i].tabId)
           const tab = tabBar.addTab(tabData)
           tab.isBusy = false
+          tab.activeAgentId = null
+          tab._savedEditorState = savedTabs[i].editorState || null
+          tab.gitPanelVisible = savedTabs[i].gitPanelVisible || false
           setupTabHandlers(tab)
           tab.fitAddon.fit()
           if (savedTabs[i].isActive) activeIndex = i
         }
         if (savedTabs.length > 0) tabBar.switchTo(activeIndex)
+        // Restore editor files for the active tab
+        const activeTab = tabBar.getActive()
+        if (activeTab?._savedEditorState) {
+          await editorPanel.restoreEditorFromSaved(activeTab._savedEditorState)
+          delete activeTab._savedEditorState
+        }
+        // Stash saved editor state on inactive tabs for lazy restore on switch
+        for (const tab of tabBar.tabs) {
+          if (tab !== activeTab && tab._savedEditorState) {
+            tab.editorState = { ...tab._savedEditorState, _detachedTabs: null }
+            delete tab._savedEditorState
+          }
+        }
+        // Restore git panel for the active tab
+        if (activeTab?.gitPanelVisible) {
+          gitPanel.show(activeTab.rootPath)
+        }
         restored = true
       }
       await window.electronAPI.tabsDeleteSavedState()
@@ -367,9 +562,12 @@ async function init() {
     const firstTabData = await createTab(startCwd)
     const firstTab = tabBar.addTab(firstTabData)
     firstTab.isBusy = false
+    firstTab.activeAgentId = null
     setupTabHandlers(firstTab)
     firstTab.fitAddon.fit()
   }
+
+  syncStatusBarTerminalState()
 
   // Cleanup orphaned history files
   const activeTabIds = tabBar.tabs.map(t => t.tabId).filter(Boolean)
@@ -383,20 +581,38 @@ async function init() {
     }
   })
 
+  // Fullscreen: убираем padding titlebar
+  window.electronAPI.onFullscreenChange((isFullscreen) => {
+    document.body.classList.toggle('fullscreen', isFullscreen)
+  })
+
+  // Индикатор фокуса: подсвечиваем активную панель
+  const editorPanelEl = document.getElementById('editor-panel')
+  document.addEventListener('focusin', (e) => {
+    const inTerminal = !!e.target.closest('#terminal-container')
+    const inEditor = !!e.target.closest('#editor-panel')
+    terminalContainerEl.classList.toggle('panel-focused', inTerminal)
+    editorPanelEl.classList.toggle('panel-focused', inEditor)
+  })
+
   // Кнопки навигации сайдбара
   btnUp.disabled = startCwd === '/'
-  btnUp.addEventListener('click', () => writeToPtyActive('cd ..\n'))
-  btnHome.addEventListener('click', () => writeToPtyActive('cd ~\n'))
+  btnUp.addEventListener('click', () => shellCmdToPtyActive('cd ..\n'))
+  btnHome.addEventListener('click', () => shellCmdToPtyActive('cd ~\n'))
 
   let sidebarVisible = true
+  btnToggleSidebar.classList.add('active')
   btnToggleSidebar.addEventListener('click', () => {
+    if (settingsPage.isVisible() || gitPanel.isVisible()) return
     sidebarVisible = !sidebarVisible
     sidebar.style.display = sidebarVisible ? '' : 'none'
     resizeHandle.style.display = sidebarVisible ? '' : 'none'
+    btnToggleSidebar.classList.toggle('active', sidebarVisible)
     tabBar.getActive()?.fitAddon.fit()
   })
 
   btnToggleEditor.addEventListener('click', () => {
+    if (settingsPage.isVisible() || gitPanel.isVisible()) return
     editorPanel.toggle()
     btnToggleEditor.classList.toggle('active', editorPanel.isVisible())
   })
@@ -406,6 +622,7 @@ async function init() {
     if ((e.metaKey || e.ctrlKey) && e.key === 'e' && !e.shiftKey && !e.altKey) {
       // Не перехватываем, если фокус в CodeMirror (он сам обработает)
       if (document.activeElement?.closest('#editor-body')) return
+      if (settingsPage.isVisible() || gitPanel.isVisible()) return
       e.preventDefault()
       editorPanel.toggle()
       btnToggleEditor.classList.toggle('active', editorPanel.isVisible())
@@ -452,10 +669,12 @@ async function init() {
 
   document.addEventListener('mouseup', () => { dragState = null })
 
-  // Отменяем click по вкладке если был drag
+  // Отменяем click по тайтлбару если был drag, но не блокируем клики по вкладкам и кнопкам tab-bar
   titlebarEl.addEventListener('click', (e) => {
     if (titlebarDidDrag) {
-      e.stopImmediatePropagation()
+      if (!e.target.closest('#tab-bar')) {
+        e.stopImmediatePropagation()
+      }
       titlebarDidDrag = false
     }
   }, true)
