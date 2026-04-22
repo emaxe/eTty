@@ -586,13 +586,19 @@ async function init() {
     document.body.classList.toggle('fullscreen', isFullscreen)
   })
 
-  // Индикатор фокуса: подсвечиваем активную панель
+  // Индикатор фокуса: подсвечиваем активную панель, снимаем при потере фокуса
   const editorPanelEl = document.getElementById('editor-panel')
-  document.addEventListener('focusin', (e) => {
-    const inTerminal = !!e.target.closest('#terminal-container')
-    const inEditor = !!e.target.closest('#editor-panel')
+  const updateFocusIndicator = (target) => {
+    const inTerminal = !!target.closest('#terminal-container')
+    const inEditor = !!target.closest('#editor-panel')
     terminalContainerEl.classList.toggle('panel-focused', inTerminal)
     editorPanelEl.classList.toggle('panel-focused', inEditor)
+  }
+  document.addEventListener('focusin', (e) => updateFocusIndicator(e.target))
+  document.addEventListener('mousedown', (e) => updateFocusIndicator(e.target))
+  window.addEventListener('blur', () => {
+    terminalContainerEl.classList.remove('panel-focused')
+    editorPanelEl.classList.remove('panel-focused')
   })
 
   // Кнопки навигации сайдбара

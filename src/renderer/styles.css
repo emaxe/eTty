@@ -93,6 +93,7 @@ html, body {
   overflow-x: auto;
   overflow-y: hidden;
   height: 100%;
+  position: relative;
 }
 
 #tab-bar::-webkit-scrollbar {
@@ -160,6 +161,48 @@ html, body {
 .tab-close:hover {
   background: var(--red);
   color: var(--bg);
+}
+
+/* Drag handle — grip icon, visible on hover in windowed mode */
+.tab-drag-handle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: var(--muted);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+  padding: 0 1px;
+}
+body:not(.fullscreen) .tab:hover .tab-drag-handle,
+body:not(.fullscreen) .tab.active .tab-drag-handle {
+  display: flex;
+  opacity: 0.5;
+}
+body:not(.fullscreen) .tab-drag-handle:hover {
+  opacity: 1;
+  color: var(--text);
+}
+.fullscreen .tab {
+  cursor: grab;
+}
+
+/* Tab drag state */
+.tab.dragging {
+  opacity: 0.35;
+}
+
+/* Drop indicator — vertical accent line between tabs */
+.tab-drop-indicator {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 10;
 }
 
 #tab-add {
@@ -1024,6 +1067,7 @@ html, body {
   display: flex;
   align-items: stretch;
   overflow-x: auto;
+  position: relative;
   overflow-y: hidden;
   min-width: 0;
 }
@@ -1037,7 +1081,7 @@ html, body {
   gap: 4px;
   height: 100%;
   padding: 0 10px 0 12px;
-  cursor: pointer;
+  cursor: grab;
   font-size: 11px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: var(--muted);
@@ -1085,6 +1129,21 @@ html, body {
   background: var(--red) !important;
   color: var(--bg) !important;
   opacity: 1 !important;
+}
+
+/* Editor tab drag */
+.editor-tab.dragging {
+  opacity: 0.35;
+}
+.editor-tab-drop-indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 10;
 }
 
 /* Editor toolbar (send/close buttons) */
