@@ -3,7 +3,7 @@
  * Создаёт frameless BrowserWindow, регистрирует все IPC-обработчики,
  * управляет жизненным циклом: tab state save/restore, history merge при закрытии.
  */
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
 import { join } from 'path'
 import os from 'os'
 import log from 'electron-log'
@@ -135,6 +135,12 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('app:homedir', () => os.homedir())
+
+  ipcMain.handle('app:open-external', async (_, filePath) => {
+    const { error } = await shell.openPath(filePath)
+    if (error) log.error('app:open-external failed:', error)
+    return { success: !error, error }
+  })
 
   ipcMain.handle('window:get-position', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)

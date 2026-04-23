@@ -147,9 +147,8 @@ export class TabBar {
     el.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return
       if (e.target.closest('.tab-close')) return
-      const isFullscreen = document.body.classList.contains('fullscreen')
       const isOnHandle = !!e.target.closest('.tab-drag-handle')
-      if (!isFullscreen && !isOnHandle) return
+      if (!isOnHandle) return
       const i = this.tabs.findIndex(t => t.element === el)
       if (i >= 0) this._initDrag(i, e)
     })

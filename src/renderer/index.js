@@ -178,6 +178,15 @@ async function init() {
     writeToPty: shellCmdToPtyActive,
     focusTerminal: focusActiveTerminal,
     onFileOpen: (filePath) => editorPanel.openFile(filePath),
+    runInNewTab: async (filePath) => {
+      const tabData = await createTab(tabBar.getActive()?.rootPath || startCwd)
+      const tab = tabBar.addTab(tabData)
+      tab.isBusy = false
+      tab.activeAgentId = null
+      setupTabHandlers(tab)
+      tab.fitAddon.fit()
+      window.electronAPI.ptyWrite(tab.pid, filePath + '\n')
+    },
   })
   await fileTree.init(startCwd)
   fileTree.setCollapseChildrenOnClose(settings.fileTree.collapseChildrenOnClose)
