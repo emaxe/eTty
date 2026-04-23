@@ -3,13 +3,15 @@
  * Polling каждые 5 секунд. Клик по Git-кнопке открывает полную Git-панель.
  */
 export class StatusBar {
-  constructor({ btnEl, cwdEl, nodeEl, onOpen, agentButtons = [], onLaunchAgent, proxyToggleEl = null, onToggleProxy = null }) {
+  constructor({ btnEl, cwdEl, nodeEl, onOpen, agentButtons = [], onLaunchAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null }) {
     this._btnEl = btnEl
     this._cwdEl = cwdEl
     this._nodeEl = nodeEl
     this._onOpen = onOpen
     this._agentButtons = agentButtons
     this._onLaunchAgent = onLaunchAgent
+    this._agentCommandsPanelEl = agentCommandsPanelEl
+    this._onAgentCommand = onAgentCommand
     this._proxyToggleEl = proxyToggleEl
     this._onToggleProxy = onToggleProxy
     this._getRootPath = null
@@ -30,6 +32,17 @@ export class StatusBar {
         const agentId = button.dataset.agentId
         if (agentId) this._onLaunchAgent?.(agentId)
       })
+    }
+
+    if (this._agentCommandsPanelEl) {
+      for (const button of this._agentCommandsPanelEl.querySelectorAll('.agent-cmd-btn')) {
+        button.addEventListener('click', (e) => {
+          const cmd = button.dataset.cmd
+          if (!cmd || !this._onAgentCommand) return
+          const sendEnter = e.metaKey || e.ctrlKey
+          this._onAgentCommand(cmd, sendEnter)
+        })
+      }
     }
 
     if (this._proxyToggleEl) {
@@ -85,6 +98,7 @@ export class StatusBar {
     this._activeTabBusy = !!isBusy
     this._activeAgentId = activeAgentId || null
     this._updateAgentButtons()
+    this._updateAgentCommandsPanel()
   }
 
   setProxyConfig({ proxy, enabled }) {
@@ -98,18 +112,47 @@ export class StatusBar {
       const agentId = button.dataset.agentId
       const agentStatus = this._agentsById.get(agentId)
       const disabledBySettings = !!this._forceDisabled?.[agentId]
-      const enabled = !disabledBySettings && !this._activeTabBusy
 
-      button.style.display = disabledBySettings ? 'none' : ''
-      button.disabled = !enabled
-      button.classList.toggle('status-agent-active', this._activeTabBusy && this._activeAgentId === agentId)
+      const isActive = this._activeTabBusy && this._activeAgentId === agentId
+      const isOtherBusy = this._activeTabBusy && this._activeAgentId && this._activeAgentId !== agentId
+
+      // Скрываем кнопки агентов: неактивные — когда терминал занят, все — когда агент не запущен
+      button.style.display = disabledBySettings ? 'none' : (isOtherBusy ? 'none' : '')
+
+      // Неактивные кнопки при занятой вкладке — disabled; активная — disabled + подсветка
+      button.disabled = isActive || !(!disabledBySettings && !this._activeTabBusy)
+      button.classList.toggle('status-agent-active', isActive)
 
       if (this._activeTabBusy) {
-        button.title = 'Терминал занят'
+        button.title = isActive ? 'Терминал занят' : 'Терминал занят'
       } else {
         button.title = `Запустить ${agentStatus?.label || button.textContent}`
       }
     }
+  }
+
+  _updateAgentCommandsPanel() {
+    if (!this._agentCommandsPanelEl) return
+    const busy = this._activeTabBusy && this._activeAgentId
+    this._agentCommandsPanelEl.classList.toggle('hidden', !busy)
+    if (!busy) return
+
+    const AGENT_COMMANDS = {
+      claude: ['/clear', '/model', 'Ok', 'Продолжай', '/exit'],
+      codex: ['/clear', '/model', 'Ok', 'Продолжай', '/exit'],
+      copilot: ['/clear', '/model', 'Ok', 'Продолжай', '/exit'],
+      agent: ['/clear', '/model', 'Ok', 'Продолжай', '/exit'],
+      opencode: ['/new', '/model', 'Ok', 'Продолжай', '/exit']
+    }
+    const commands = AGENT_COMMANDS[this._activeAgentId] || []
+    const buttons = this._agentCommandsPanelEl.querySelectorAll('.agent-cmd-btn')
+    buttons.forEach((btn, i) => {
+      const cmd = commands[i] || ''
+      btn.dataset.cmd = cmd
+      btn.textContent = cmd
+      btn.title = cmd ? `Отправить ${cmd}` : ''
+      btn.style.display = cmd ? '' : 'none'
+    })
   }
 
   _updateProxyButton() {

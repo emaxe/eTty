@@ -14,6 +14,7 @@ export class FileTree {
     this._runInNewTab = terminalActions?.runInNewTab ?? null
     this._cwd = null
     this._modKeys = { shift: false, meta: false, ctrl: false }
+    this._contextMenu = new ContextMenu()
     this._setupModKeyListeners()
   }
 
@@ -292,14 +293,15 @@ export class FileTree {
       hoverBtns.style.display = 'none'
     })
 
-    copyBtn.addEventListener('click', (e) => {
+    copyBtn.addEventListener('click', async (e) => {
       e.stopPropagation()
       e.preventDefault()
       const pathToUse = e.shiftKey ? entry.path : rel
-      navigator.clipboard.writeText(pathToUse)
+      await navigator.clipboard.writeText(pathToUse)
       if (e.metaKey || e.ctrlKey) {
-        this._writeToPty?.(pathToUse)
         this._focusTerminal?.()
+        const clipboardText = await navigator.clipboard.readText()
+        this._writeToPty?.(clipboardText)
       }
     })
 

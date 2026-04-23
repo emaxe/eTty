@@ -903,6 +903,27 @@ html, body {
   background: color-mix(in srgb, var(--accent) 28%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 0 10px color-mix(in srgb, var(--accent) 32%, transparent);
 }
+
+#agent-commands-panel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+}
+#agent-commands-panel.hidden { display: none; }
+
+.agent-cmd-btn {
+  font-size: 11px;
+  padding: 1px 7px;
+  border: none;
+  border-radius: 3px;
+  background: var(--hover);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.agent-cmd-btn:hover { background: var(--border); }
+
 .stat-add { color: var(--green); }
 .stat-del { color: var(--red); }
 

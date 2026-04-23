@@ -47,7 +47,8 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 
 ### Git Integration
 
-- **Status bar** showing `+N -N` diff stats, updated every 5 seconds
+- **Status bar** showing `± +N -N` diff stats, updated every 5 seconds
+  - **Click on stats** to toggle Git panel
 - **Branch management** — switch, create, delete branches
 - **Inline diff viewer** with colored additions/deletions
 - **Commit, push, discard** — all from the GUI

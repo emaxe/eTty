@@ -311,6 +311,20 @@ async function init() {
     onOpen: () => gitPanel.show(tabBar.getActive()?.rootPath),
     agentButtons: [...document.querySelectorAll('.status-agent-btn')],
     onLaunchAgent: launchAgentInActiveTab,
+    agentCommandsPanelEl: document.getElementById('agent-commands-panel'),
+    onAgentCommand: (cmd, sendEnter) => {
+      const isCopilot = tabBar.getActive()?.activeAgentId === 'copilot'
+      const isClaude = tabBar.getActive()?.activeAgentId === 'claude'
+      navigator.clipboard.writeText(cmd).then(() => {
+        const bracketedPaste = `\x1b[200~${cmd + ''}\x1b[201~`
+        shellCmdToPtyActive(bracketedPaste)
+        if (sendEnter && !isClaude) {
+          const enterSeq = isCopilot ? '\x0d' : '\r'
+          const delay = isCopilot ? 500 : 200
+          setTimeout(() => shellCmdToPtyActive(enterSeq), delay)
+        }
+      })
+    },
     proxyToggleEl: document.getElementById('btn-proxy-toggle'),
     onToggleProxy: (enabled) => {
       settings.agents.proxyEnabled = enabled
