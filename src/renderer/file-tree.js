@@ -11,15 +11,31 @@ export class FileTree {
     this._writeToPty = terminalActions?.writeToPty ?? null
     this._focusTerminal = terminalActions?.focusTerminal ?? null
     this._onFileOpen = terminalActions?.onFileOpen ?? null
+    this._runInNewTab = terminalActions?.runInNewTab ?? null
     this._cwd = null
-    this._rootContainer = null
-    this._contextMenu = new ContextMenu()
-    this._clipboard = null // { path }
-    this._isBusy = false
-    this._showHidden = false
-    this._dirTimers = new Map()
-    this._collapseChildrenOnClose = true
-    this._fileOpenMode = 'double' // 'single' | 'double'
+    this._modKeys = { shift: false, meta: false, ctrl: false }
+    this._setupModKeyListeners()
+  }
+
+  _setupModKeyListeners() {
+    document.addEventListener('keydown', (e) => {
+      this._modKeys.shift = e.shiftKey
+      this._modKeys.meta = e.metaKey
+      this._modKeys.ctrl = e.ctrlKey
+      this._updateHoverButtonsState()
+    })
+    document.addEventListener('keyup', (e) => {
+      this._modKeys.shift = e.shiftKey
+      this._modKeys.meta = e.metaKey
+      this._modKeys.ctrl = e.ctrlKey
+      this._updateHoverButtonsState()
+    })
+    window.addEventListener('blur', () => {
+      this._modKeys.shift = false
+      this._modKeys.meta = false
+      this._modKeys.ctrl = false
+      this._updateHoverButtonsState()
+    })
   }
 
   getCwd() {
@@ -28,6 +44,14 @@ export class FileTree {
 
   setIsBusy(busy) {
     this._isBusy = busy
+    this._updateCdButtonsState()
+  }
+
+  _updateCdButtonsState() {
+    const btns = this._container.querySelectorAll('.tree-hover-cd')
+    for (const btn of btns) {
+      btn.disabled = this._isBusy
+    }
   }
 
   setShowHidden(val) {
@@ -224,8 +248,60 @@ export class FileTree {
 
     const name = document.createElement('span')
     name.className = 'tree-name'
+    name.style.marginRight = '10px'
     name.textContent = entry.name
     row.appendChild(name)
+
+    const rel = entry.path.startsWith(this._cwd + '/')
+      ? entry.path.slice(this._cwd.length + 1)
+      : entry.path
+
+    const hoverBtns = document.createElement('div')
+    hoverBtns.className = 'tree-hover-buttons'
+    const copyBtn = document.createElement('button')
+    copyBtn.className = 'tree-hover-copy'
+    copyBtn.title = 'Копировать путь'
+    copyBtn.textContent = '📋'
+    hoverBtns.appendChild(copyBtn)
+
+    let cdBtn = null
+    if (entry.isDirectory) {
+      cdBtn = document.createElement('button')
+      cdBtn.className = 'tree-hover-cd'
+      cdBtn.title = 'cd в директорию'
+      cdBtn.textContent = '→'
+      cdBtn.disabled = this._isBusy
+      hoverBtns.appendChild(cdBtn)
+
+      cdBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        e.preventDefault()
+        const escaped = entry.path.replace(/'/g, "'\\''")
+        this._writeToPty?.(`cd '${escaped}'\r`)
+        this._focusTerminal?.()
+      })
+    }
+
+    hoverBtns.style.display = 'none'
+    row.appendChild(hoverBtns)
+
+    row.addEventListener('mouseenter', () => {
+      hoverBtns.style.display = 'flex'
+    })
+    row.addEventListener('mouseleave', () => {
+      hoverBtns.style.display = 'none'
+    })
+
+    copyBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      e.preventDefault()
+      const pathToUse = e.shiftKey ? entry.path : rel
+      navigator.clipboard.writeText(pathToUse)
+      if (e.metaKey || e.ctrlKey) {
+        this._writeToPty?.(pathToUse)
+        this._focusTerminal?.()
+      }
+    })
 
     li.appendChild(row)
 
@@ -284,12 +360,33 @@ export class FileTree {
       }
       if (this._fileOpenMode === 'single') {
         row.addEventListener('click', (e) => {
-          // Ignore clicks that are part of a double-click sequence
           if (e.detail === 2) return
+          if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault()
+            window.electronAPI.appOpenExternal(entry.path)
+            return
+          }
+          if (e.metaKey || e.ctrlKey) {
+            e.preventDefault()
+            this._runInNewTab?.(entry.path)
+            return
+          }
           openInEditor()
         })
       } else {
         row.addEventListener('dblclick', () => openInEditor())
+        row.addEventListener('click', (e) => {
+          if (e.detail === 2) return
+          if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault()
+            window.electronAPI.appOpenExternal(entry.path)
+            return
+          }
+          if (e.metaKey || e.ctrlKey) {
+            e.preventDefault()
+            this._runInNewTab?.(entry.path)
+          }
+        })
       }
     }
 

@@ -163,24 +163,19 @@ html, body {
   color: var(--bg);
 }
 
-/* Drag handle — grip icon, visible on hover in windowed mode */
+/* Drag handle — grip icon, always visible */
 .tab-drag-handle {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   cursor: grab;
   color: var(--muted);
   flex-shrink: 0;
-  opacity: 0;
+  opacity: 0.5;
   transition: opacity 0.15s;
   padding: 0 1px;
 }
-body:not(.fullscreen) .tab:hover .tab-drag-handle,
-body:not(.fullscreen) .tab.active .tab-drag-handle {
-  display: flex;
-  opacity: 0.5;
-}
-body:not(.fullscreen) .tab-drag-handle:hover {
+.tab-drag-handle:hover {
   opacity: 1;
   color: var(--text);
 }
@@ -374,10 +369,10 @@ body:not(.fullscreen) .tab-drag-handle:hover {
   display: flex;
   align-items: center;
   height: 22px;
-  padding-right: 8px;
+  padding-right: 60px;
   white-space: nowrap;
-  min-width: max-content;
   color: var(--text);
+  position: relative;
 }
 
 .tree-node-row:hover {
@@ -416,6 +411,61 @@ body:not(.fullscreen) .tab-drag-handle:hover {
   white-space: nowrap;
 }
 
+.tree-hover-buttons {
+  display: none;
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  gap: 7px;
+  padding: 1px;
+  z-index: 10;
+  border-left: 1px solid var(--muted);
+  background: var(--border);
+}
+
+.tree-hover-buttons.overflow {
+  left: auto;
+  right: 0;
+  top: 0;
+  transform: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.tree-hover-buttons button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 2px;
+  color: var(--text);
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-hover-buttons.overflow button {
+  width: 20px;
+  height: 20px;
+}
+
+.tree-hover-buttons button:hover {
+  background: var(--hover);
+}
+
+.tree-hover-buttons button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .tree-root {
   min-width: max-content;
 }
@@ -441,7 +491,6 @@ body:not(.fullscreen) .tab-drag-handle:hover {
   letter-spacing: 0.06em;
   color: var(--subtext);
   white-space: nowrap;
-  min-width: max-content;
   user-select: none;
 }
 
