@@ -15,6 +15,7 @@ export class FileTree {
     this._cwd = null
     this._modKeys = { shift: false, meta: false, ctrl: false }
     this._contextMenu = new ContextMenu()
+    this._dirTimers = new Map()
     this._setupModKeyListeners()
   }
 
@@ -53,6 +54,11 @@ export class FileTree {
     for (const btn of btns) {
       btn.disabled = this._isBusy
     }
+  }
+
+  _updateHoverButtonsState() {
+    // Обновляет состояние кнопок при наведении на основе модификаторов клавиш
+    // Вызывается при keydown/keyup для обновления UI
   }
 
   setShowHidden(val) {
@@ -239,8 +245,7 @@ export class FileTree {
 
     let entries = this._showHidden ? result : result.filter(e => !e.name.startsWith('.'))
 
-    // Создаем watcher для всех открытых директорий (не только с подпапками)
-    // чтобы отслеживать добавление/удаление файлов
+    // Создаем watcher для всех открытых директорий
     window.electronAPI.fsWatchDir(dirPath)
 
     return entries.sort((a, b) => {

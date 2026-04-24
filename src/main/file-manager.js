@@ -120,11 +120,15 @@ export class FileManager {
    */
   watchDir(dirPath, webContents, isRoot = false) {
     if (this._watchers.has(dirPath)) return dirPath
+    
+    if (this._watchers.has(dirPath)) {
+      console.log('[FileManager] Watcher already exists for:', dirPath)
+      return dirPath
+    }
 
     // Проверка лимита watchers
     if (this._watchers.size >= MAX_WATCHERS) {
       console.warn(`[FileManager] Watcher limit reached (${MAX_WATCHERS}). Not watching: ${dirPath}`)
-      // Если это корневая директория, сохраняем путь даже без watcher
       if (isRoot) {
         this._rootWatcherPath = dirPath
       }
@@ -159,14 +163,11 @@ export class FileManager {
 
       return dirPath
     } catch (err) {
-      // Специфическая обработка EMFILE (too many open files)
       if (err.code === 'EMFILE') {
         console.error(`[FileManager] EMFILE: too many open files for ${dirPath}. Pruning non-root watchers...`)
-        // При EMFILE отключаем все watchers кроме корневого
         this._pruneNonRootWatchers()
         return null
       }
-      // ENOENT — директория была удалена до создания watcher
       if (err.code === 'ENOENT') {
         console.warn(`[FileManager] Directory not found (ENOENT): ${dirPath}`)
         return null
