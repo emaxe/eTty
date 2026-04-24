@@ -213,6 +213,8 @@ async function init() {
     terminalContainerEl,
     onSwitch: async (tab, prevTab) => {
       if (settingsPage.isVisible()) return
+      // Очищаем все watchers перед сменой вкладки
+      fileTree.unwatchAll()
       if (prevTab) {
         prevTab.treeExpandedDirs = fileTree.getExpandedDirs()
         prevTab.treeScrollTop = fileTree.getScrollTop()
@@ -312,17 +314,12 @@ async function init() {
     agentButtons: [...document.querySelectorAll('.status-agent-btn')],
     onLaunchAgent: launchAgentInActiveTab,
     agentCommandsPanelEl: document.getElementById('agent-commands-panel'),
-    onAgentCommand: (cmd, sendEnter) => {
+    onAgentCommand: (cmd) => {
       const isCopilot = tabBar.getActive()?.activeAgentId === 'copilot'
       const isClaude = tabBar.getActive()?.activeAgentId === 'claude'
       navigator.clipboard.writeText(cmd).then(() => {
         const bracketedPaste = `\x1b[200~${cmd + ''}\x1b[201~`
         shellCmdToPtyActive(bracketedPaste)
-        if (sendEnter && !isClaude) {
-          const enterSeq = isCopilot ? '\x0d' : '\r'
-          const delay = isCopilot ? 500 : 200
-          setTimeout(() => shellCmdToPtyActive(enterSeq), delay)
-        }
       })
     },
     proxyToggleEl: document.getElementById('btn-proxy-toggle'),

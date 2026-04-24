@@ -133,6 +133,10 @@ export class FileTree {
 
   async setRoot(newPath) {
     if (this._cwd === newPath) return
+
+    // Очищаем все watchers для старой директории
+    this.unwatchAll()
+
     this._cwd = newPath
 
     const labelEl = this._rootNodeRow?.querySelector('.tree-root-label')
@@ -142,6 +146,28 @@ export class FileTree {
     }
 
     await this._refreshList(this._rootContainer, newPath, 1)
+
+    // Создаем watcher для новой корневой директории
+    window.electronAPI.fsWatchDir(newPath)
+  }
+
+  /**
+   * Удаляет все watchers рекурсивно (корневая и все раскрытые папки)
+   */
+  unwatchAll() {
+    // Отключаем watcher корневой директории
+    if (this._cwd) {
+      window.electronAPI.fsUnwatchDir(this._cwd)
+    }
+
+    // Отключаем watchers для всех раскрытых папок
+    const openItems = this._container.querySelectorAll('li[data-path] .tree-children.open')
+    for (const childrenEl of openItems) {
+      const li = childrenEl.closest('li[data-path]')
+      if (li?.dataset.path) {
+        window.electronAPI.fsUnwatchDir(li.dataset.path)
+      }
+    }
   }
 
   async init(startPath = null) {
@@ -156,6 +182,9 @@ export class FileTree {
     this._rootContainer = children
     this._container.appendChild(children)
     await this._refreshList(this._rootContainer, cwd, 1)
+
+    // Создаем watcher для корневой директории
+    window.electronAPI.fsWatchDir(cwd)
 
     window.electronAPI.onFsDirChanged((data) => this._handleDirChanged(data))
 
@@ -204,11 +233,19 @@ export class FileTree {
     return { row, children }
   }
 
-  async _loadDir(dirPath) {
+  async _loadDir(dirPath, isRoot = false) {
     const result = await window.electronAPI.fsReadDir(dirPath)
     if (!result || result.error) return null
-    window.electronAPI.fsWatchDir(dirPath)
+
     let entries = this._showHidden ? result : result.filter(e => !e.name.startsWith('.'))
+
+    // Оптимизация: создаем watcher только если директория содержит подпапки или это корень
+    // Для "листовых" директорий (только файлы) watcher не нужен — экономим ресурсы
+    const hasSubdirectories = entries.some(e => e.isDirectory)
+    if (isRoot || hasSubdirectories) {
+      window.electronAPI.fsWatchDir(dirPath)
+    }
+
     return entries.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
       return a.name.localeCompare(b.name)
@@ -609,7 +646,9 @@ export class FileTree {
 
   // container is always a div; replaces its ul child
   async _refreshList(container, dirPath, depth) {
-    const entries = await this._loadDir(dirPath)
+    // depth === 1 означает корневую директорию
+    const isRoot = depth === 1
+    const entries = await this._loadDir(dirPath, isRoot)
     if (!entries) return
     const newUl = this._buildList(entries, dirPath, depth)
     const existingUl = container.querySelector(':scope > ul')

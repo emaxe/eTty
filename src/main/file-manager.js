@@ -9,11 +9,15 @@ import os from 'os'
  * находиться внутри текущего CWD. readDir и readFile/writeFile не ограничены
  * CWD, т.к. используются для просмотра/редактирования любых доступных файлов.
  */
+const MAX_WATCHERS = 100
+
 export class FileManager {
   constructor() {
     this.cwd = os.homedir()
     /** @type {Map<string, import('fs').FSWatcher>} */
     this._watchers = new Map()
+    this._watcherIdCounter = 0
+    this._rootWatcherPath = null
   }
 
   /**
@@ -29,6 +33,8 @@ export class FileManager {
   }
 
   setRoot(newPath) {
+    // Очищаем все watchers при смене корневой директории
+    this.unwatchAll()
     this.cwd = newPath
   }
 
@@ -110,30 +116,109 @@ export class FileManager {
   /**
    * Подписывается на изменения в директории через fs.watch.
    * Уведомления дебаунсятся (300ms) и отправляются в renderer через IPC.
+   * @returns {string|null} watcher ID или null если достигнут лимит или ошибка
    */
-  watchDir(dirPath, webContents) {
-    if (this._watchers.has(dirPath)) return
+  watchDir(dirPath, webContents, isRoot = false) {
+    if (this._watchers.has(dirPath)) return dirPath
+
+    // Проверка лимита watchers
+    if (this._watchers.size >= MAX_WATCHERS) {
+      console.warn(`[FileManager] Watcher limit reached (${MAX_WATCHERS}). Not watching: ${dirPath}`)
+      // Если это корневая директория, сохраняем путь даже без watcher
+      if (isRoot) {
+        this._rootWatcherPath = dirPath
+      }
+      return null
+    }
+
     let timer
     try {
-      const watcher = watch(dirPath, { persistent: false }, () => {
+      const watcher = watch(dirPath, { persistent: false }, (eventType, filename) => {
         clearTimeout(timer)
         timer = setTimeout(() => {
-          if (!webContents.isDestroyed()) webContents.send('fs:dir-changed', { dirPath })
+          if (!webContents.isDestroyed()) {
+            webContents.send('fs:dir-changed', { dirPath, eventType, filename })
+          }
         }, 300)
       })
-      watcher.on('error', () => this.unwatchDir(dirPath))
+
+      watcher.on('error', (err) => {
+        console.warn(`[FileManager] Watcher error for ${dirPath}:`, err.message)
+        this.unwatchDir(dirPath)
+      })
+
+      watcher.on('close', () => {
+        this._watchers.delete(dirPath)
+      })
+
       this._watchers.set(dirPath, watcher)
-    } catch {
-      // directory inaccessible or deleted
+
+      if (isRoot) {
+        this._rootWatcherPath = dirPath
+      }
+
+      return dirPath
+    } catch (err) {
+      // Специфическая обработка EMFILE (too many open files)
+      if (err.code === 'EMFILE') {
+        console.error(`[FileManager] EMFILE: too many open files for ${dirPath}. Pruning non-root watchers...`)
+        // При EMFILE отключаем все watchers кроме корневого
+        this._pruneNonRootWatchers()
+        return null
+      }
+      // ENOENT — директория была удалена до создания watcher
+      if (err.code === 'ENOENT') {
+        console.warn(`[FileManager] Directory not found (ENOENT): ${dirPath}`)
+        return null
+      }
+      console.warn(`[FileManager] Failed to watch ${dirPath}:`, err.message)
+      return null
     }
+  }
+
+  /**
+   * Отключает все watchers кроме корневого при нехватке ресурсов (EMFILE)
+   */
+  _pruneNonRootWatchers() {
+    const rootPath = this._rootWatcherPath
+    const toUnwatch = []
+    for (const [dirPath] of this._watchers) {
+      if (dirPath !== rootPath) {
+        toUnwatch.push(dirPath)
+      }
+    }
+    for (const dirPath of toUnwatch) {
+      console.log(`[FileManager] Pruning watcher: ${dirPath}`)
+      this.unwatchDir(dirPath)
+    }
+    console.warn(`[FileManager] Pruned ${toUnwatch.length} watchers. Only root watcher remains.`)
   }
 
   unwatchDir(dirPath) {
     const w = this._watchers.get(dirPath)
-    if (w) { w.close(); this._watchers.delete(dirPath) }
+    if (w) {
+      w.close()
+      this._watchers.delete(dirPath)
+      if (this._rootWatcherPath === dirPath) {
+        this._rootWatcherPath = null
+      }
+    }
   }
 
   unwatchAll() {
-    for (const [dirPath] of this._watchers) this.unwatchDir(dirPath)
+    for (const [dirPath] of this._watchers) {
+      const w = this._watchers.get(dirPath)
+      if (w) w.close()
+    }
+    this._watchers.clear()
+    this._rootWatcherPath = null
+  }
+
+  getWatcherCount() {
+    return this._watchers.size
+  }
+
+  getRootWatcherPath() {
+    return this._rootWatcherPath
   }
 }

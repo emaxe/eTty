@@ -39,8 +39,7 @@ export class StatusBar {
         button.addEventListener('click', (e) => {
           const cmd = button.dataset.cmd
           if (!cmd || !this._onAgentCommand) return
-          const sendEnter = e.metaKey || e.ctrlKey
-          this._onAgentCommand(cmd, sendEnter)
+          this._onAgentCommand(cmd, false)
         })
       }
     }
