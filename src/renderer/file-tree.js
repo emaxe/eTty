@@ -239,12 +239,9 @@ export class FileTree {
 
     let entries = this._showHidden ? result : result.filter(e => !e.name.startsWith('.'))
 
-    // Оптимизация: создаем watcher только если директория содержит подпапки или это корень
-    // Для "листовых" директорий (только файлы) watcher не нужен — экономим ресурсы
-    const hasSubdirectories = entries.some(e => e.isDirectory)
-    if (isRoot || hasSubdirectories) {
-      window.electronAPI.fsWatchDir(dirPath)
-    }
+    // Создаем watcher для всех открытых директорий (не только с подпапками)
+    // чтобы отслеживать добавление/удаление файлов
+    window.electronAPI.fsWatchDir(dirPath)
 
     return entries.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
