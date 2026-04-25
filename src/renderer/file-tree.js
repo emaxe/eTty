@@ -537,7 +537,7 @@ export class FileTree {
     row.addEventListener('dragend', () => {
       this._isDragging = false
       this._updateDragState(false)
-      this._cancelAutoExpand()
+      this._clearDragOver()
     })
 
     // Drop target (directories only)
@@ -744,8 +744,7 @@ export class FileTree {
     row.addEventListener('drop', async (e) => {
       e.preventDefault()
       e.stopPropagation()
-      row.classList.remove('drag-over', 'drag-over-invalid')
-      this._cancelAutoExpand()
+      this._clearDragOver()
 
       let paths
       try {
@@ -773,6 +772,14 @@ export class FileTree {
 
   _setMoving(isMoving) {
     this._container.classList.toggle('is-moving', isMoving)
+  }
+
+  _clearDragOver() {
+    this._container.querySelectorAll('.drag-over, .drag-over-invalid').forEach(el => {
+      el.classList.remove('drag-over', 'drag-over-invalid')
+    })
+    this._cancelAutoExpand()
+    this._autoExpandTarget = null
   }
 
   _cancelAutoExpand() {
