@@ -33,8 +33,6 @@ export class FileManager {
   }
 
   setRoot(newPath) {
-    // Очищаем все watchers при смене корневой директории
-    this.unwatchAll()
     this.cwd = newPath
   }
 
@@ -93,6 +91,68 @@ export class FileManager {
     return { newPath: destPath }
   }
 
+  async move(srcPaths, destDir) {
+    const resolvedDestDir = this.validatePath(destDir)
+    const results = []
+
+    for (const srcPath of srcPaths) {
+      const resolvedSrc = this.validatePath(srcPath)
+      const baseName = path.basename(resolvedSrc)
+      let destPath = path.join(resolvedDestDir, baseName)
+
+      // Prevent moving a directory into itself or its children
+      if (resolvedSrc === resolvedDestDir || resolvedDestDir.startsWith(resolvedSrc + path.sep)) {
+        results.push({ path: srcPath, success: false, error: 'Cannot move into itself' })
+        continue
+      }
+
+      // Resolve collision: filename (1).ext, filename (2).ext...
+      try {
+        await fs.access(destPath)
+        destPath = this._resolveCollision(destPath)
+      } catch {
+        // dest doesn't exist, use original name
+      }
+
+      this.validatePath(destPath)
+      try {
+        await fs.rename(resolvedSrc, destPath)
+      } catch (err) {
+        if (err.code === 'EXDEV') {
+          // Cross-device move fallback: copy + delete
+          await fs.cp(resolvedSrc, destPath, { recursive: true, force: true })
+          await fs.rm(resolvedSrc, { recursive: true, force: true })
+        } else {
+          throw err
+        }
+      }
+      results.push({ path: srcPath, success: true, newPath: destPath })
+    }
+
+    return { results }
+  }
+
+  _resolveCollision(destPath) {
+    const dir = path.dirname(destPath)
+    const ext = path.extname(destPath)
+    const baseName = path.basename(destPath, ext)
+    let counter = 1
+    let newPath = destPath
+
+    while (true) {
+      const suffix = ` (${counter})`
+      newPath = path.join(dir, `${baseName}${suffix}${ext}`)
+      try {
+        fs.accessSync(newPath)
+        counter++
+      } catch {
+        break
+      }
+    }
+
+    return newPath
+  }
+
   async readFile(filePath, maxSize = 5 * 1024 * 1024) {
     const resolved = path.resolve(filePath)
     const stat = await fs.stat(resolved)
@@ -119,8 +179,6 @@ export class FileManager {
    * @returns {string|null} watcher ID или null если достигнут лимит или ошибка
    */
   watchDir(dirPath, webContents, isRoot = false) {
-    if (this._watchers.has(dirPath)) return dirPath
-    
     if (this._watchers.has(dirPath)) {
       console.log('[FileManager] Watcher already exists for:', dirPath)
       return dirPath
@@ -136,12 +194,18 @@ export class FileManager {
     }
 
     let timer
+    console.log('[FileManager] Creating watcher for:', dirPath, 'webContents id:', webContents.id)
     try {
       const watcher = watch(dirPath, { persistent: false }, (eventType, filename) => {
+        console.log('[FileManager] Raw watch event:', eventType, filename, 'for:', dirPath)
         clearTimeout(timer)
         timer = setTimeout(() => {
+          console.log('[FileManager] Sending event, webContents destroyed:', webContents.isDestroyed(), 'id:', webContents.id)
           if (!webContents.isDestroyed()) {
             webContents.send('fs:dir-changed', { dirPath, eventType, filename })
+            console.log('[FileManager] Event sent to webContents', webContents.id)
+          } else {
+            console.log('[FileManager] webContents destroyed, cannot send event')
           }
         }, 300)
       })

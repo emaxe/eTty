@@ -23,11 +23,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fsRename: (oldPath, newPath) => ipcRenderer.invoke('fs:rename', { oldPath, newPath }),
   fsDelete: (targetPath) => ipcRenderer.invoke('fs:delete', { targetPath }),
   fsCopy: (srcPath, destDir) => ipcRenderer.invoke('fs:copy', { srcPath, destDir }),
+  fsMove: (srcPaths, destDir) => ipcRenderer.invoke('fs:move', { srcPaths, destDir }),
   fsReadFile: (filePath) => ipcRenderer.invoke('fs:read-file', { filePath }),
   fsWriteFile: (filePath, content) => ipcRenderer.invoke('fs:write-file', { filePath, content }),
   getCwd: () => ipcRenderer.invoke('fs:get-cwd'),
   fsSetRoot: (dirPath) => ipcRenderer.invoke('fs:set-root', { dirPath }),
-  fsWatchDir: (dirPath) => ipcRenderer.invoke('fs:watch-dir', { dirPath }),
+  fsWatchDir: async (dirPath) => {
+    console.log('[Preload] fsWatchDir called:', dirPath)
+    const result = await ipcRenderer.invoke('fs:watch-dir', { dirPath })
+    console.log('[Preload] fsWatchDir result:', dirPath, result)
+    return result
+  },
   fsUnwatchDir: (dirPath) => ipcRenderer.invoke('fs:unwatch-dir', { dirPath }),
   onFsDirChanged: (cb) => ipcRenderer.on('fs:dir-changed', (_, data) => cb(data)),
   windowGetPosition: () => ipcRenderer.invoke('window:get-position'),

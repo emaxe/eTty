@@ -210,6 +210,14 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.handle('fs:move', async (_, { srcPaths, destDir }) => {
+    try {
+      return await fileManager.move(srcPaths, destDir)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
   ipcMain.handle('fs:read-file', async (_, { filePath }) => {
     try {
       return await fileManager.readFile(filePath)
@@ -236,7 +244,10 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('fs:watch-dir', (event, { dirPath }) => {
-    fileManager.watchDir(dirPath, event.sender)
+    console.log('[Main] fs:watch-dir called:', dirPath)
+    const result = fileManager.watchDir(dirPath, event.sender)
+    console.log('[Main] fs:watch-dir result:', dirPath, result)
+    return result
   })
 
   ipcMain.handle('fs:unwatch-dir', (_, { dirPath }) => {

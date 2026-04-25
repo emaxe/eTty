@@ -234,6 +234,7 @@ html, body {
   user-select: none;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 /* Sidebar nav buttons */
@@ -360,7 +361,15 @@ html, body {
 }
 
 /* FileTree */
+.tree-children > ul,
+.tree-root-children > ul {
+  display: inline-block;
+  min-width: 100%;
+  vertical-align: top;
+}
+
 .tree-node {
+  display: block;
   position: relative;
   cursor: pointer;
 }
@@ -369,18 +378,47 @@ html, body {
   display: flex;
   align-items: center;
   height: 22px;
-  padding-right: 60px;
   white-space: nowrap;
   color: var(--text);
   position: relative;
+  min-width: 100%;
 }
 
-.tree-node-row:hover {
+.tree-node-row:hover,
+.tree-node-row.hovered {
   background: var(--border);
 }
 
-.tree-node-row.selected {
+.tree-node-row.selected,
+.tree-root-node-row.selected {
   background: var(--hover);
+}
+
+/* Drag & Drop states */
+.tree-node-row.dragging {
+  opacity: 0.4;
+}
+
+.tree-node-row.drag-over,
+.tree-root-node-row.drag-over {
+  background: var(--accent);
+  color: var(--bg);
+  border-radius: 3px;
+}
+
+.tree-node-row.drag-over-invalid,
+.tree-root-node-row.drag-over-invalid {
+  background: var(--error);
+  opacity: 0.4;
+}
+
+/* Moving state */
+#file-tree-container.is-moving {
+  cursor: wait;
+}
+#file-tree-container.is-moving .tree-node-row,
+#file-tree-container.is-moving .tree-root-node-row {
+  pointer-events: none;
 }
 
 .tree-arrow {
@@ -411,29 +449,24 @@ html, body {
   white-space: nowrap;
 }
 
-.tree-hover-buttons {
-  display: none;
+.tree-hover-overlay {
   position: absolute;
   right: 2px;
-  top: 50%;
-  transform: translateY(-50%);
+  display: none;
+  z-index: 100;
+  pointer-events: auto;
+  height: 22px;
+}
+
+.tree-hover-buttons {
+  display: flex;
+  align-items: center;
   gap: 7px;
-  padding: 1px;
+  padding: 1px 3px;
   z-index: 10;
   border-left: 1px solid var(--muted);
   background: var(--border);
-}
-
-.tree-hover-buttons.overflow {
-  left: auto;
-  right: 0;
-  top: 0;
-  transform: none;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 3px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  height: 100%;
 }
 
 .tree-hover-buttons button {
@@ -450,11 +483,6 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.tree-hover-buttons.overflow button {
-  width: 20px;
-  height: 20px;
 }
 
 .tree-hover-buttons button:hover {
@@ -492,9 +520,11 @@ html, body {
   color: var(--subtext);
   white-space: nowrap;
   user-select: none;
+  min-width: 100%;
 }
 
-.tree-root-node-row:hover {
+.tree-root-node-row:hover,
+.tree-root-node-row.hovered {
   background: var(--border);
 }
 

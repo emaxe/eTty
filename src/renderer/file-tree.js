@@ -4,11 +4,17 @@ import { ContextMenu } from './context-menu.js'
  * Дерево файлов в sidebar. Lazy-load поддиректорий, контекстные меню,
  * fs.watch для автообновления, copy/paste, показ/скрытие dotfiles.
  * Состояние (expanded dirs, scroll) сохраняется per-tab при переключении.
+ *
+ * Фичи:
+ * - Multi-select: Ctrl/Cmd+Click = toggle, Shift+Click = range, Ctrl+A = all
+ * - Drag & Drop: HTML5 DnD для перетаскивания файлов/папок
+ * - Undo: Ctrl+Z для отката move-операций
  */
 export class FileTree {
   constructor(container, terminalActions = null) {
     this._container = container
     this._writeToPty = terminalActions?.writeToPty ?? null
+    this._injectToPty = terminalActions?.injectToPty ?? null
     this._focusTerminal = terminalActions?.focusTerminal ?? null
     this._onFileOpen = terminalActions?.onFileOpen ?? null
     this._runInNewTab = terminalActions?.runInNewTab ?? null
@@ -16,7 +22,122 @@ export class FileTree {
     this._modKeys = { shift: false, meta: false, ctrl: false }
     this._contextMenu = new ContextMenu()
     this._dirTimers = new Map()
+    this._hoverOverlay = this._createHoverOverlay()
+    const sidebar = document.getElementById('sidebar')
+    if (sidebar) sidebar.appendChild(this._hoverOverlay)
+
+    // Multi-select state
+    this._selectedPaths = new Set()
+    this._lastSelectedAnchor = null
+
+    // Undo stack for move operations
+    this._moveHistory = []
+
+    // Auto-expand timer during drag
+    this._autoExpandTimer = null
+    this._isDragging = false
+
+    this._container.addEventListener('scroll', () => {
+      if (this._hoverOverlay.style.display !== 'none' && this._hoverOverlay._currentRow) {
+        this._positionHoverOverlay(this._hoverOverlay._currentRow)
+      }
+    })
+
     this._setupModKeyListeners()
+    this._setupKeyboardShortcuts()
+  }
+
+  _createHoverOverlay() {
+    const overlay = document.createElement('div')
+    overlay.className = 'tree-hover-overlay'
+    overlay.style.display = 'none'
+
+    const btns = document.createElement('div')
+    btns.className = 'tree-hover-buttons'
+
+    const copyBtn = document.createElement('button')
+    copyBtn.className = 'tree-hover-copy'
+    copyBtn.title = 'Копировать путь'
+    copyBtn.textContent = '📋'
+    btns.appendChild(copyBtn)
+
+    const cdBtn = document.createElement('button')
+    cdBtn.className = 'tree-hover-cd'
+    cdBtn.title = 'cd в директорию'
+    cdBtn.textContent = '→'
+    btns.appendChild(cdBtn)
+
+    overlay.appendChild(btns)
+
+    copyBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      e.preventDefault()
+      const path = overlay.dataset.currentPath
+      const rel = overlay.dataset.currentRel
+      const pathToUse = e.shiftKey ? path : rel
+      if (e.metaKey || e.ctrlKey) {
+        this._focusTerminal?.()
+        this._injectToPty?.('\x1b[200~' + pathToUse + '\x1b[201~')
+      } else {
+        await navigator.clipboard.writeText(pathToUse)
+      }
+    })
+
+    cdBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      e.preventDefault()
+      const path = overlay.dataset.currentPath
+      const escaped = path.replace(/'/g, "'\\''")
+      this._writeToPty?.(`cd '${escaped}'\r`)
+      this._focusTerminal?.()
+    })
+
+    overlay.addEventListener('mouseenter', () => {
+      // Keep overlay visible when mouse enters it
+    })
+    overlay.addEventListener('mouseleave', () => {
+      this._hideHoverOverlay()
+    })
+
+    return overlay
+  }
+
+  _positionHoverOverlay(row) {
+    const sidebar = document.getElementById('sidebar')
+    if (!sidebar) return
+    const sidebarRect = sidebar.getBoundingClientRect()
+    const rowRect = row.getBoundingClientRect()
+    const containerRect = this._container.getBoundingClientRect()
+
+    // Hide if row scrolled out of container vertically
+    if (rowRect.top < containerRect.top || rowRect.bottom > containerRect.bottom) {
+      this._hideHoverOverlay()
+      return
+    }
+
+    this._hoverOverlay.style.top = (rowRect.top - sidebarRect.top) + 'px'
+  }
+
+  _showHoverOverlay(row, entry, rel) {
+    this._hoverOverlay._currentRow = row
+    this._hoverOverlay.dataset.currentPath = entry.path
+    this._hoverOverlay.dataset.currentRel = rel
+    this._hoverOverlay.dataset.isDir = entry.isDirectory ? '1' : '0'
+
+    const cdBtn = this._hoverOverlay.querySelector('.tree-hover-cd')
+    cdBtn.style.display = entry.isDirectory ? 'flex' : 'none'
+    cdBtn.disabled = this._isBusy
+
+    this._positionHoverOverlay(row)
+    this._hoverOverlay.style.display = 'flex'
+    row.classList.add('hovered')
+  }
+
+  _hideHoverOverlay() {
+    const row = this._hoverOverlay._currentRow
+    this._hoverOverlay.style.display = 'none'
+    this._hoverOverlay._currentRow = null
+    row?.classList.remove('hovered')
   }
 
   _setupModKeyListeners() {
@@ -40,6 +161,24 @@ export class FileTree {
     })
   }
 
+  _setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+      const sidebar = document.getElementById('sidebar')
+      if (!sidebar || !sidebar.contains(e.target)) return
+
+      if (e.key === 'a' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        e.stopPropagation()
+        this._selectAllVisible()
+      }
+      if (e.key === 'z' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        this._undoLastMove()
+      }
+    })
+  }
+
   getCwd() {
     return this._cwd
   }
@@ -50,10 +189,8 @@ export class FileTree {
   }
 
   _updateCdButtonsState() {
-    const btns = this._container.querySelectorAll('.tree-hover-cd')
-    for (const btn of btns) {
-      btn.disabled = this._isBusy
-    }
+    const cdBtn = this._hoverOverlay?.querySelector('.tree-hover-cd')
+    if (cdBtn) cdBtn.disabled = this._isBusy
   }
 
   _updateHoverButtonsState() {
@@ -138,10 +275,15 @@ export class FileTree {
   }
 
   async setRoot(newPath) {
+    console.log('[FileTree] setRoot called:', newPath, 'current:', this._cwd)
     if (this._cwd === newPath) return
 
     // Очищаем все watchers для старой директории
     this.unwatchAll()
+
+    // Clear selection and undo on root change
+    this._clearSelection()
+    this._moveHistory = []
 
     this._cwd = newPath
 
@@ -152,9 +294,6 @@ export class FileTree {
     }
 
     await this._refreshList(this._rootContainer, newPath, 1)
-
-    // Создаем watcher для новой корневой директории
-    window.electronAPI.fsWatchDir(newPath)
   }
 
   /**
@@ -178,6 +317,7 @@ export class FileTree {
 
   async init(startPath = null) {
     const cwd = startPath ?? (await window.electronAPI.getCwd()).cwd
+    console.log('[FileTree] init called with cwd:', cwd)
     this._cwd = cwd
     this._container.innerHTML = ''
 
@@ -190,6 +330,7 @@ export class FileTree {
     await this._refreshList(this._rootContainer, cwd, 1)
 
     // Создаем watcher для корневой директории
+    console.log('[FileTree] Creating root watcher in init for:', cwd)
     window.electronAPI.fsWatchDir(cwd)
 
     window.electronAPI.onFsDirChanged((data) => this._handleDirChanged(data))
@@ -209,6 +350,7 @@ export class FileTree {
 
     const row = document.createElement('div')
     row.className = 'tree-root-node-row'
+    row.dataset.path = dirPath
 
     const arrow = document.createElement('span')
     arrow.className = 'tree-arrow expanded'
@@ -226,6 +368,12 @@ export class FileTree {
 
     row.addEventListener('click', (e) => {
       e.stopPropagation()
+      // Ctrl/Cmd+Click on root = toggle select (treat as single for now)
+      if (e.metaKey || e.ctrlKey) {
+        e.preventDefault()
+        this._toggleSelect(dirPath, row)
+        return
+      }
       const isOpen = children.classList.toggle('open')
       arrow.classList.toggle('expanded', isOpen)
     })
@@ -235,6 +383,9 @@ export class FileTree {
       e.stopPropagation()
       this._showMenuRoot(e.clientX, e.clientY)
     })
+
+    // Drop target for root
+    this._setupDropTarget(row, dirPath)
 
     return { row, children }
   }
@@ -275,6 +426,8 @@ export class FileTree {
     const row = document.createElement('div')
     row.className = 'tree-node-row'
     row.style.paddingLeft = `${depth * 16 + 8}px`
+    row.dataset.path = entry.path
+    row.draggable = true
 
     const arrow = document.createElement('span')
     arrow.className = 'tree-arrow'
@@ -296,52 +449,14 @@ export class FileTree {
       ? entry.path.slice(this._cwd.length + 1)
       : entry.path
 
-    const hoverBtns = document.createElement('div')
-    hoverBtns.className = 'tree-hover-buttons'
-    const copyBtn = document.createElement('button')
-    copyBtn.className = 'tree-hover-copy'
-    copyBtn.title = 'Копировать путь'
-    copyBtn.textContent = '📋'
-    hoverBtns.appendChild(copyBtn)
-
-    let cdBtn = null
-    if (entry.isDirectory) {
-      cdBtn = document.createElement('button')
-      cdBtn.className = 'tree-hover-cd'
-      cdBtn.title = 'cd в директорию'
-      cdBtn.textContent = '→'
-      cdBtn.disabled = this._isBusy
-      hoverBtns.appendChild(cdBtn)
-
-      cdBtn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        e.preventDefault()
-        const escaped = entry.path.replace(/'/g, "'\\''")
-        this._writeToPty?.(`cd '${escaped}'\r`)
-        this._focusTerminal?.()
-      })
-    }
-
-    hoverBtns.style.display = 'none'
-    row.appendChild(hoverBtns)
-
     row.addEventListener('mouseenter', () => {
-      hoverBtns.style.display = 'flex'
-    })
-    row.addEventListener('mouseleave', () => {
-      hoverBtns.style.display = 'none'
-    })
-
-    copyBtn.addEventListener('click', async (e) => {
-      e.stopPropagation()
-      e.preventDefault()
-      const pathToUse = e.shiftKey ? entry.path : rel
-      await navigator.clipboard.writeText(pathToUse)
-      if (e.metaKey || e.ctrlKey) {
-        this._focusTerminal?.()
-        const clipboardText = await navigator.clipboard.readText()
-        this._writeToPty?.(clipboardText)
+      if (!this._isDragging) {
+        this._showHoverOverlay(row, entry, rel)
       }
+    })
+    row.addEventListener('mouseleave', (e) => {
+      if (this._hoverOverlay.contains(e.relatedTarget)) return
+      this._hideHoverOverlay()
     })
 
     li.appendChild(row)
@@ -355,6 +470,22 @@ export class FileTree {
 
       row.addEventListener('click', async (e) => {
         e.stopPropagation()
+        // Modifier clicks handle selection, not expansion
+        if (e.metaKey || e.ctrlKey) {
+          e.preventDefault()
+          this._toggleSelect(entry.path, row)
+          return
+        }
+        if (e.shiftKey) {
+          e.preventDefault()
+          if (this._lastSelectedAnchor) {
+            this._selectRange(this._lastSelectedAnchor, entry.path)
+          } else {
+            this._selectSingle(entry.path, row)
+          }
+          return
+        }
+
         const isOpen = childrenEl.classList.contains('open')
         if (isOpen) {
           childrenEl.classList.remove('open')
@@ -379,10 +510,45 @@ export class FileTree {
       })
     }
 
+    // Drag source (all rows)
+    row.addEventListener('dragstart', (e) => {
+      e.stopPropagation()
+      // Auto-select if current row not in selection
+      if (!this._selectedPaths.has(entry.path)) {
+        this._clearSelection()
+        this._selectedPaths.add(entry.path)
+        this._lastSelectedAnchor = entry.path
+        this._updateSelectionUI()
+      }
+
+      const paths = [...this._selectedPaths]
+      e.dataTransfer.setData('application/x-etty-paths', JSON.stringify(paths))
+      e.dataTransfer.effectAllowed = 'move'
+
+      // Custom drag image for multi-select
+      if (paths.length > 1) {
+        this._setDragImage(e, row, paths.length)
+      }
+
+      this._isDragging = true
+      this._updateDragState(true)
+    })
+
+    row.addEventListener('dragend', () => {
+      this._isDragging = false
+      this._updateDragState(false)
+      this._cancelAutoExpand()
+    })
+
+    // Drop target (directories only)
+    if (entry.isDirectory) {
+      this._setupDropTarget(row, entry.path, childrenEl, arrow)
+    }
+
     row.addEventListener('contextmenu', (e) => {
       e.preventDefault()
       e.stopPropagation()
-      this._selectRow(row)
+      this._selectSingle(entry.path, row)
       if (entry.isDirectory) {
         this._showMenuDir(e.clientX, e.clientY, entry, childrenEl, arrow, depth + 1, row)
       } else {
@@ -402,12 +568,22 @@ export class FileTree {
       if (this._fileOpenMode === 'single') {
         row.addEventListener('click', (e) => {
           if (e.detail === 2) return
-          if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
+          // Modifier clicks
+          if (e.metaKey || e.ctrlKey) {
             e.preventDefault()
-            window.electronAPI.appOpenExternal(entry.path)
+            this._toggleSelect(entry.path, row)
             return
           }
-          if (e.metaKey || e.ctrlKey) {
+          if (e.shiftKey) {
+            e.preventDefault()
+            if (this._lastSelectedAnchor) {
+              this._selectRange(this._lastSelectedAnchor, entry.path)
+            } else {
+              this._selectSingle(entry.path, row)
+            }
+            return
+          }
+          if (e.altKey) {
             e.preventDefault()
             this._runInNewTab?.(entry.path)
             return
@@ -418,12 +594,21 @@ export class FileTree {
         row.addEventListener('dblclick', () => openInEditor())
         row.addEventListener('click', (e) => {
           if (e.detail === 2) return
-          if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
+          if (e.metaKey || e.ctrlKey) {
             e.preventDefault()
-            window.electronAPI.appOpenExternal(entry.path)
+            this._toggleSelect(entry.path, row)
             return
           }
-          if (e.metaKey || e.ctrlKey) {
+          if (e.shiftKey) {
+            e.preventDefault()
+            if (this._lastSelectedAnchor) {
+              this._selectRange(this._lastSelectedAnchor, entry.path)
+            } else {
+              this._selectSingle(entry.path, row)
+            }
+            return
+          }
+          if (e.altKey) {
             e.preventDefault()
             this._runInNewTab?.(entry.path)
           }
@@ -434,10 +619,238 @@ export class FileTree {
     return li
   }
 
-  _selectRow(row) {
-    const prev = this._container.querySelector('.tree-node-row.selected')
-    if (prev) prev.classList.remove('selected')
+  // ── Multi-select helpers ─────────────────────────────────────────
+
+  _clearSelection() {
+    const prev = this._container.querySelectorAll('.tree-node-row.selected, .tree-root-node-row.selected')
+    for (const el of prev) el.classList.remove('selected')
+    this._selectedPaths.clear()
+    this._lastSelectedAnchor = null
+  }
+
+  _selectSingle(path, row) {
+    this._clearSelection()
+    this._selectedPaths.add(path)
+    this._lastSelectedAnchor = path
     row.classList.add('selected')
+  }
+
+  _toggleSelect(path, row) {
+    if (this._selectedPaths.has(path)) {
+      this._selectedPaths.delete(path)
+      row.classList.remove('selected')
+      if (this._lastSelectedAnchor === path) {
+        // Pick another anchor if available
+        this._lastSelectedAnchor = this._selectedPaths.size > 0 ? [...this._selectedPaths][this._selectedPaths.size - 1] : null
+      }
+    } else {
+      this._selectedPaths.add(path)
+      this._lastSelectedAnchor = path
+      row.classList.add('selected')
+    }
+  }
+
+  _selectRange(fromPath, toPath) {
+    const allRows = [...this._container.querySelectorAll('.tree-node-row[data-path], .tree-root-node-row[data-path]')]
+    const fromIndex = allRows.findIndex(r => r.dataset.path === fromPath)
+    const toIndex = allRows.findIndex(r => r.dataset.path === toPath)
+    if (fromIndex === -1 || toIndex === -1) return
+
+    const start = Math.min(fromIndex, toIndex)
+    const end = Math.max(fromIndex, toIndex)
+
+    this._selectedPaths.clear()
+    for (let i = start; i <= end; i++) {
+      const path = allRows[i].dataset.path
+      if (path) {
+        this._selectedPaths.add(path)
+        allRows[i].classList.add('selected')
+      }
+    }
+  }
+
+  _selectAllVisible() {
+    const allRows = this._container.querySelectorAll('.tree-node-row[data-path]')
+    this._selectedPaths.clear()
+    for (const row of allRows) {
+      const path = row.dataset.path
+      if (path) {
+        this._selectedPaths.add(path)
+        row.classList.add('selected')
+      }
+    }
+    this._lastSelectedAnchor = null
+  }
+
+  _updateSelectionUI() {
+    const allRows = this._container.querySelectorAll('.tree-node-row[data-path], .tree-root-node-row[data-path]')
+    for (const row of allRows) {
+      const path = row.dataset.path
+      if (this._selectedPaths.has(path)) {
+        row.classList.add('selected')
+      } else {
+        row.classList.remove('selected')
+      }
+    }
+  }
+
+  // ── Drag & Drop helpers ────────────────────────────────────────────
+
+  _setupDropTarget(row, dirPath, childrenEl = null, arrow = null) {
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      e.dataTransfer.dropEffect = 'move'
+      row.classList.add('drag-over')
+
+      // Auto-expand collapsed folders on hover
+      if (childrenEl && !childrenEl.classList.contains('open')) {
+        this._startAutoExpand(childrenEl, arrow, dirPath)
+      }
+    })
+
+    row.addEventListener('dragleave', (e) => {
+      if (!row.contains(e.relatedTarget)) {
+        row.classList.remove('drag-over', 'drag-over-invalid')
+        this._cancelAutoExpand()
+      }
+    })
+
+    row.addEventListener('drop', async (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      row.classList.remove('drag-over', 'drag-over-invalid')
+      this._cancelAutoExpand()
+
+      let paths
+      try {
+        paths = JSON.parse(e.dataTransfer.getData('application/x-etty-paths') || '[]')
+      } catch {
+        paths = []
+      }
+      if (paths.length === 0) return
+
+      // Validate: prevent dropping onto self or into own children
+      const isInvalid = paths.some(p => p === dirPath || dirPath.startsWith(p + '/'))
+      if (isInvalid) return
+
+      this._setMoving(true)
+      try {
+        const result = await window.electronAPI.fsMove(paths, dirPath)
+        if (result && result.results) {
+          this._pushMoveHistory(result.results)
+        }
+      } finally {
+        this._setMoving(false)
+      }
+    })
+  }
+
+  _setMoving(isMoving) {
+    this._container.classList.toggle('is-moving', isMoving)
+  }
+
+  _startAutoExpand(childrenEl, arrow, dirPath) {
+    this._cancelAutoExpand()
+    this._autoExpandTimer = setTimeout(async () => {
+      if (!childrenEl || childrenEl.classList.contains('open')) return
+      childrenEl.classList.add('open')
+      if (arrow) arrow.classList.add('expanded')
+      if (!childrenEl.dataset.loaded) {
+        const entries = await this._loadDir(dirPath)
+        if (entries) {
+          const depth = parseInt(childrenEl.closest('li')?.dataset.depth || '0', 10)
+          childrenEl.appendChild(this._buildList(entries, dirPath, depth + 1))
+          childrenEl.dataset.loaded = '1'
+        }
+      } else {
+        window.electronAPI.fsWatchDir(dirPath)
+      }
+    }, 700)
+  }
+
+  _cancelAutoExpand() {
+    if (this._autoExpandTimer) {
+      clearTimeout(this._autoExpandTimer)
+      this._autoExpandTimer = null
+    }
+  }
+
+  _setDragImage(e, sourceRow, count) {
+    const ghost = document.createElement('div')
+    ghost.style.position = 'absolute'
+    ghost.style.top = '-9999px'
+    ghost.style.left = '-9999px'
+    ghost.style.padding = '4px 10px'
+    ghost.style.background = 'var(--bg)'
+    ghost.style.border = '1px solid var(--border)'
+    ghost.style.borderRadius = '4px'
+    ghost.style.display = 'flex'
+    ghost.style.alignItems = 'center'
+    ghost.style.gap = '6px'
+    ghost.style.fontSize = '13px'
+    ghost.style.color = 'var(--text)'
+    ghost.style.opacity = '0.92'
+    ghost.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)'
+    ghost.style.pointerEvents = 'none'
+    ghost.style.whiteSpace = 'nowrap'
+
+    const icon = sourceRow.querySelector('.tree-icon')?.cloneNode(true)
+    const name = sourceRow.querySelector('.tree-name')?.cloneNode(true)
+    if (icon) ghost.appendChild(icon)
+    if (name) ghost.appendChild(name)
+
+    const badge = document.createElement('span')
+    badge.textContent = `+${count - 1}`
+    badge.style.background = 'var(--accent)'
+    badge.style.color = 'var(--bg)'
+    badge.style.borderRadius = '10px'
+    badge.style.padding = '1px 7px'
+    badge.style.fontSize = '11px'
+    badge.style.fontWeight = 'bold'
+    badge.style.lineHeight = '1'
+    ghost.appendChild(badge)
+
+    document.body.appendChild(ghost)
+    e.dataTransfer.setDragImage(ghost, 0, 16)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => ghost.remove())
+    })
+  }
+
+  _updateDragState(isDragging) {
+    const rows = this._container.querySelectorAll('.tree-node-row.selected')
+    for (const row of rows) {
+      row.classList.toggle('dragging', isDragging)
+    }
+    if (isDragging) {
+      this._hideHoverOverlay()
+    }
+  }
+
+  // ── Undo helpers ─────────────────────────────────────────────────
+
+  _pushMoveHistory(results) {
+    const successfulMoves = results.filter(r => r.success && r.newPath)
+    if (successfulMoves.length === 0) return
+    this._moveHistory.push(successfulMoves)
+    // Cap history at 20 entries
+    if (this._moveHistory.length > 20) {
+      this._moveHistory.shift()
+    }
+  }
+
+  async _undoLastMove() {
+    if (this._moveHistory.length === 0) return
+    const moves = this._moveHistory.pop()
+    for (const move of moves) {
+      try {
+        await window.electronAPI.fsRename(move.newPath, move.path)
+      } catch (e) {
+        console.error('[FileTree] Undo failed for', move.newPath, '->', move.path, e)
+      }
+    }
   }
 
   // ── Context menus ────────────────────────────────────────────────
@@ -659,13 +1072,26 @@ export class FileTree {
     } else {
       container.appendChild(newUl)
     }
+    this._restoreSelection()
+  }
+
+  _restoreSelection() {
+    const allRows = this._container.querySelectorAll('.tree-node-row[data-path], .tree-root-node-row[data-path]')
+    for (const row of allRows) {
+      const path = row.dataset.path
+      if (this._selectedPaths.has(path)) {
+        row.classList.add('selected')
+      }
+    }
   }
 
   _handleDirChanged({ dirPath }) {
+    console.log('[FileTree] _handleDirChanged:', dirPath, 'cwd:', this._cwd, 'isRoot:', dirPath === this._cwd)
     clearTimeout(this._dirTimers.get(dirPath))
     this._dirTimers.set(dirPath, setTimeout(() => {
       this._dirTimers.delete(dirPath)
       if (dirPath === this._cwd) {
+        console.log('[FileTree] Refreshing root container')
         this._refreshList(this._rootContainer, dirPath, 1)
         return
       }
