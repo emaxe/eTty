@@ -1,4 +1,5 @@
 import { ContextMenu } from './context-menu.js'
+import { Icons } from './icons.js'
 
 /**
  * Дерево файлов в sidebar. Lazy-load поддиректорий, контекстные меню,
@@ -55,20 +56,21 @@ export class FileTree {
     const btns = document.createElement('div')
     btns.className = 'tree-hover-buttons'
 
-    const copyBtn = document.createElement('button')
-    copyBtn.className = 'tree-hover-copy'
-    copyBtn.title = 'Копировать путь'
-    copyBtn.textContent = '📋'
-    btns.appendChild(copyBtn)
-
     const cdBtn = document.createElement('button')
     cdBtn.className = 'tree-hover-cd'
     cdBtn.title = 'cd в директорию'
-    cdBtn.textContent = '→'
+    cdBtn.innerHTML = Icons.arrowRight
     btns.appendChild(cdBtn)
+
+    const copyBtn = document.createElement('button')
+    copyBtn.className = 'tree-hover-copy'
+    copyBtn.title = 'Копировать путь'
+    copyBtn.innerHTML = Icons.copy
+    btns.appendChild(copyBtn)
 
     overlay.appendChild(btns)
 
+    let _copyRevertTimer = null
     copyBtn.addEventListener('click', async (e) => {
       e.stopPropagation()
       e.preventDefault()
@@ -80,6 +82,14 @@ export class FileTree {
         this._injectToPty?.('\x1b[200~' + pathToUse + '\x1b[201~')
       } else {
         await navigator.clipboard.writeText(pathToUse)
+        // Flash OK icon to indicate success
+        copyBtn.innerHTML = Icons.ok
+        copyBtn.classList.add('success')
+        clearTimeout(_copyRevertTimer)
+        _copyRevertTimer = setTimeout(() => {
+          copyBtn.innerHTML = Icons.copy
+          copyBtn.classList.remove('success')
+        }, 1500)
       }
     })
 
@@ -354,7 +364,7 @@ export class FileTree {
 
     const arrow = document.createElement('span')
     arrow.className = 'tree-arrow expanded'
-    arrow.textContent = '▶'
+    arrow.innerHTML = Icons.chevronRight
 
     const label = document.createElement('span')
     label.className = 'tree-root-label'
@@ -431,12 +441,12 @@ export class FileTree {
 
     const arrow = document.createElement('span')
     arrow.className = 'tree-arrow'
-    arrow.textContent = entry.isDirectory ? '▶' : ''
+    arrow.innerHTML = entry.isDirectory ? Icons.chevronRight : ''
     row.appendChild(arrow)
 
     const icon = document.createElement('span')
     icon.className = 'tree-icon'
-    icon.textContent = entry.isDirectory ? '📁' : '📄'
+    icon.innerHTML = entry.isDirectory ? Icons.folder : Icons.file
     row.appendChild(icon)
 
     const name = document.createElement('span')

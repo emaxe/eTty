@@ -1,3 +1,5 @@
+import { Icons } from './icons.js'
+
 /**
  * Статус-бар. Показывает текущую директорию, версию Node.js и Git-статистику.
  * Polling каждые 5 секунд. Клик по Git-кнопке открывает полную Git-панель.
@@ -56,7 +58,7 @@ export class StatusBar {
     // Версия Node — статическое значение из preload
     if (this._nodeEl) {
       const v = window.electronAPI.nodeVersion
-      if (v) this._nodeEl.textContent = `⬡ v${v}`
+      if (v) this._nodeEl.innerHTML = `${Icons.hexagon} v${v}`
     }
 
     // Получаем домашнюю директорию для сокращения путей
@@ -177,7 +179,7 @@ export class StatusBar {
           const abbrev = home && parentPath.startsWith(home)
             ? '~' + parentPath.slice(home.length)
             : parentPath
-          this._cwdEl.textContent = `⊡ ${abbrev || '/'}`
+          this._cwdEl.innerHTML = `${Icons.folderOpen} ${abbrev || '/'}`
           this._cwdEl.classList.remove('hidden')
         } else {
           this._cwdEl.classList.add('hidden')
@@ -199,7 +201,7 @@ export class StatusBar {
       const branch = (result.branch || 'HEAD').replace(/[<>&"]/g, c =>
         ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]))
       this._btnEl.innerHTML =
-        `⎇ ${branch}&nbsp;&nbsp;<span class="stat-add">+${result.totalAdditions}</span> <span class="stat-del">-${result.totalDeletions}</span>`
+        `${Icons.gitBranch} ${branch}&nbsp;&nbsp;<span class="stat-add">+${result.totalAdditions}</span> <span class="stat-del">-${result.totalDeletions}</span>`
       this._btnEl.classList.remove('hidden')
     } catch (e) {
       this._btnEl.classList.add('hidden')

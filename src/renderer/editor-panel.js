@@ -1,3 +1,4 @@
+import { Icons } from './icons.js'
 import { EditorState, Compartment } from '@codemirror/state'
 import {
   EditorView,
@@ -435,7 +436,7 @@ export class EditorPanel {
     const closeBtn = document.createElement('button')
     closeBtn.className = 'editor-tab-close'
     closeBtn.title = 'Закрыть вкладку'
-    closeBtn.innerHTML = '✕'
+    closeBtn.innerHTML = Icons.close
     closeBtn.addEventListener('click', (e) => {
       e.stopPropagation()
       this.closeFile(filePath)
@@ -554,20 +555,19 @@ export class EditorPanel {
     saveBtn.className = 'editor-tab-close'
     saveBtn.style.opacity = '1'
     saveBtn.title = `Сохранить и закрыть`
-    saveBtn.textContent = '💾'
-    saveBtn.style.fontSize = '9px'
+    saveBtn.innerHTML = Icons.save
 
     const discardBtn = document.createElement('button')
     discardBtn.className = 'editor-tab-close'
     discardBtn.style.opacity = '1'
     discardBtn.title = 'Закрыть без сохранения'
-    discardBtn.textContent = '✕'
+    discardBtn.innerHTML = Icons.close
 
     const cancelBtn = document.createElement('button')
     cancelBtn.className = 'editor-tab-close'
     cancelBtn.style.opacity = '1'
     cancelBtn.title = 'Отмена'
-    cancelBtn.textContent = '←'
+    cancelBtn.innerHTML = Icons.arrowLeft
 
     const restore = () => {
       tab.pendingClose = false

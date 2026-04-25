@@ -120,7 +120,7 @@ export class TabBar {
 
     const closeBtn = document.createElement('button')
     closeBtn.className = 'tab-close'
-    closeBtn.textContent = '✕'
+    closeBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>'
 
     el.appendChild(handle)
     el.appendChild(folder)

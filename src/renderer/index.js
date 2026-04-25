@@ -12,6 +12,7 @@ import { SettingsPage } from './settings-page.js'
 import { StatusBar } from './status-bar.js'
 import { GitPanel } from './git-panel.js'
 import { EditorPanel } from './editor-panel.js'
+import { Icons } from './icons.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
@@ -662,15 +663,12 @@ async function init() {
     }
   })
 
-  const eyeOffSVG = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/><line x1="2" y1="2" x2="14" y2="14"/></svg>`
-  const eyeOpenSVG = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>`
-
-  btnToggleHidden.innerHTML = eyeOffSVG
+  btnToggleHidden.innerHTML = Icons.eyeOff
 
   let showHidden = false
   btnToggleHidden.addEventListener('click', () => {
     showHidden = !showHidden
-    btnToggleHidden.innerHTML = showHidden ? eyeOpenSVG : eyeOffSVG
+    btnToggleHidden.innerHTML = showHidden ? Icons.eye : Icons.eyeOff
     btnToggleHidden.classList.toggle('active', showHidden)
     btnToggleHidden.title = showHidden ? 'Скрыть скрытые файлы' : 'Показать скрытые файлы'
     fileTree.setShowHidden(showHidden)

@@ -2,6 +2,8 @@
  * Git-панель (overlay): управление ветками, просмотр diff, commit/push/discard.
  * Открывается кликом по статус-бару. Подгружает данные через electronAPI.git*.
  */
+import { Icons } from './icons.js'
+
 export class GitPanel {
   constructor({ overlayEl, onClose }) {
     this._overlayEl = overlayEl;
@@ -212,7 +214,7 @@ export class GitPanel {
 
       const arrow = document.createElement('span');
       arrow.className = 'git-file-arrow';
-      arrow.textContent = '▶';
+      arrow.innerHTML = Icons.chevronRight;
 
       const path = document.createElement('span');
       path.className = 'git-file-path';
@@ -242,14 +244,14 @@ export class GitPanel {
         allRows.forEach((r) => {
           r.classList.remove('expanded');
           const arrow = r.querySelector('.git-file-arrow');
-          if (arrow) arrow.textContent = '▶';
+          if (arrow) arrow.innerHTML = Icons.chevronRight;
         });
         const allDiffs = fileList.querySelectorAll('.git-diff-block');
         allDiffs.forEach((d) => d.classList.remove('visible'));
 
         if (!isExpanded) {
           row.classList.add('expanded');
-          arrow.textContent = '▼';
+          arrow.innerHTML = Icons.chevronDown;
           await this._renderDiff(file.path, diffBlock);
           diffBlock.classList.add('visible');
           this._expandedFile = file.path;
