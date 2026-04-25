@@ -703,16 +703,41 @@ export class FileTree {
       e.dataTransfer.dropEffect = 'move'
       row.classList.add('drag-over')
 
-      // Auto-expand collapsed folders on hover
+      // Auto-expand collapsed folders on hover (only if target changed)
       if (childrenEl && !childrenEl.classList.contains('open')) {
-        this._startAutoExpand(childrenEl, arrow, dirPath)
+        if (this._autoExpandTarget !== dirPath) {
+          this._cancelAutoExpand()
+          this._autoExpandTarget = dirPath
+          this._autoExpandTimer = setTimeout(async () => {
+            this._autoExpandTarget = null
+            if (!childrenEl || childrenEl.classList.contains('open')) return
+            childrenEl.classList.add('open')
+            if (arrow) arrow.classList.add('expanded')
+            if (!childrenEl.dataset.loaded) {
+              const entries = await this._loadDir(dirPath)
+              if (entries) {
+                const depth = parseInt(childrenEl.closest('li')?.dataset.depth || '0', 10)
+                childrenEl.appendChild(this._buildList(entries, dirPath, depth + 1))
+                childrenEl.dataset.loaded = '1'
+              }
+            } else {
+              window.electronAPI.fsWatchDir(dirPath)
+            }
+          }, 700)
+        }
       }
     })
 
     row.addEventListener('dragleave', (e) => {
-      if (!row.contains(e.relatedTarget)) {
+      // Check if we're still within the same folder item (row or its children)
+      const folderItem = row.closest('li[data-path]') || row.closest('.tree-root-node-row')
+      const isStillInside = folderItem
+        ? folderItem.contains(e.relatedTarget)
+        : row.contains(e.relatedTarget)
+      if (!isStillInside) {
         row.classList.remove('drag-over', 'drag-over-invalid')
         this._cancelAutoExpand()
+        this._autoExpandTarget = null
       }
     })
 
@@ -748,25 +773,6 @@ export class FileTree {
 
   _setMoving(isMoving) {
     this._container.classList.toggle('is-moving', isMoving)
-  }
-
-  _startAutoExpand(childrenEl, arrow, dirPath) {
-    this._cancelAutoExpand()
-    this._autoExpandTimer = setTimeout(async () => {
-      if (!childrenEl || childrenEl.classList.contains('open')) return
-      childrenEl.classList.add('open')
-      if (arrow) arrow.classList.add('expanded')
-      if (!childrenEl.dataset.loaded) {
-        const entries = await this._loadDir(dirPath)
-        if (entries) {
-          const depth = parseInt(childrenEl.closest('li')?.dataset.depth || '0', 10)
-          childrenEl.appendChild(this._buildList(entries, dirPath, depth + 1))
-          childrenEl.dataset.loaded = '1'
-        }
-      } else {
-        window.electronAPI.fsWatchDir(dirPath)
-      }
-    }, 700)
   }
 
   _cancelAutoExpand() {
