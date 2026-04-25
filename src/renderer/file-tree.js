@@ -1071,14 +1071,31 @@ export class FileTree {
     const isRoot = depth === 1
     const entries = await this._loadDir(dirPath, isRoot)
     if (!entries) return
-    const newUl = this._buildList(entries, dirPath, depth)
+
+    // Save expanded dirs and selection before replacing
     const existingUl = container.querySelector(':scope > ul')
+    const expandedDirs = new Set()
+    if (existingUl) {
+      const openItems = existingUl.querySelectorAll('li[data-path] .tree-children.open')
+      for (const childrenEl of openItems) {
+        const li = childrenEl.closest('li[data-path]')
+        if (li) expandedDirs.add(li.dataset.path)
+      }
+    }
+
+    const newUl = this._buildList(entries, dirPath, depth)
     if (existingUl) {
       existingUl.replaceWith(newUl)
     } else {
       container.appendChild(newUl)
     }
+
     this._restoreSelection()
+
+    // Restore expanded directories
+    if (expandedDirs.size > 0) {
+      await this.restoreExpandedDirs(expandedDirs)
+    }
   }
 
   _restoreSelection() {
