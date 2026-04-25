@@ -2,6 +2,7 @@
  * Управление вкладками терминала.
  * Каждая вкладка = {pid, term, fitAddon, container, element, rootPath, tabId, ...}
  * Сохраняет per-tab состояние дерева файлов (expandedDirs, scrollTop) при переключении.
+ * Поддерживает drag-and-drop переупорядочивание и disabled-режим (блокировка переключения).
  */
 import { ContextMenu } from './context-menu.js'
 
@@ -15,6 +16,7 @@ export class TabBar {
 
     this.tabs = []
     this.activeIndex = -1
+    this.disabled = false
 
     this._addBtn = tabBarEl.querySelector('#tab-add')
     this._addBtn.addEventListener('click', () => this.onAddTab())
@@ -70,6 +72,7 @@ export class TabBar {
   }
 
   switchTo(index) {
+    if (this.disabled) return
     const prevTab = this.activeIndex >= 0 ? this.tabs[this.activeIndex] : null
     if (prevTab) {
       prevTab.container.classList.remove('active')
@@ -125,12 +128,14 @@ export class TabBar {
     el.appendChild(closeBtn)
 
     el.addEventListener('click', (e) => {
+      if (this.disabled) return
       if (!e.target.classList.contains('tab-close')) {
         const i = this.tabs.findIndex(t => t.element === el)
         if (i >= 0) this.switchTo(i)
       }
     })
     closeBtn.addEventListener('click', (e) => {
+      if (this.disabled) return
       e.stopPropagation()
       const i = this.tabs.findIndex(t => t.element === el)
       if (i >= 0) this.onCloseTab(i)
@@ -138,6 +143,7 @@ export class TabBar {
 
     // Context menu
     el.addEventListener('contextmenu', (e) => {
+      if (this.disabled) return
       e.preventDefault()
       const i = this.tabs.findIndex(t => t.element === el)
       if (i >= 0) this._showTabContextMenu(i, e.clientX, e.clientY)
@@ -145,6 +151,7 @@ export class TabBar {
 
     // Drag-and-drop
     el.addEventListener('mousedown', (e) => {
+      if (this.disabled) return
       if (e.button !== 0) return
       if (e.target.closest('.tab-close')) return
       const isOnHandle = !!e.target.closest('.tab-drag-handle')

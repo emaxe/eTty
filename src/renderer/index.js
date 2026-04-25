@@ -288,6 +288,7 @@ async function init() {
     },
     onClose: () => {
       btnSettings.classList.remove('active')
+      tabBar.disabled = false
       focusActiveTerminal()
     }
   })
@@ -349,6 +350,7 @@ async function init() {
     } else {
       settingsPage.show()
       btnSettings.classList.add('active')
+      tabBar.disabled = true
     }
   })
 

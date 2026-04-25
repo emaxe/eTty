@@ -1,7 +1,8 @@
 /**
  * Main process — точка входа приложения.
  * Создаёт frameless BrowserWindow, регистрирует все IPC-обработчики,
- * управляет жизненным циклом: tab state save/restore, history merge при закрытии.
+ * управляет жизненным циклом: tab state save/restore, history merge при закрытии,
+ * авто-детект ИИ-агентов, меню приложения.
  */
 import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
 import { join } from 'path'

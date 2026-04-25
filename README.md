@@ -16,6 +16,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Full Unicode support** — Cyrillic, accented characters, emoji
 - **Shell directory tracking** via OSC 7 — file tree syncs automatically
 - **Command busy indicator** via OSC 133 — navigation buttons reflect shell state
+- **Tab drag-and-drop** — reorder tabs by dragging the grip handle
 - **10,000 lines** scrollback buffer
 
 ### Command History
@@ -32,14 +33,17 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Hidden files** toggle
 - **Quick navigation** — `cd ..` and `cd ~` buttons
 - **Live sync** — filesystem watcher with 300ms debounce
-- **Context menus** — new file/folder, rename, delete, copy, paste, open external
+- **Context menus** — new file/folder, rename, delete, copy, paste, open external, copy relative path
+- **Multi-select** — Ctrl/Cmd+Click, Shift+Click range, Ctrl+A select all
+- **Drag-and-drop** — move files/folders within the tree
+- **Undo** — Ctrl+Z to undo last move operation
 - **Resizable** sidebar (150–600px)
 - **Path traversal protection** — all paths validated against CWD
 
 ### Code Editor
 
 - **CodeMirror 6** with syntax highlighting for 20+ languages:
-  JavaScript/TypeScript, Python, Go, Rust, HTML, CSS/SCSS, JSON, YAML, Markdown
+  JavaScript/TypeScript, Python, Go, Rust, HTML, CSS/SCSS, JSON, YAML, Markdown, Vue, C#
 - **Send to terminal** — select code and send it to the active shell (Cmd+Enter)
 - **Unsaved changes** indicator
 - **Auto-features** — bracket closing, fold gutter, active line highlight, search
@@ -54,10 +58,21 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Commit, push, discard** — all from the GUI
 - **Per-file stats** — additions and deletions count for each changed file
 
+### AI Agents
+
+- **Status-bar launcher** — one-click launch of detected CLI agents
+- **Auto-detection** — Claude, Codex, Copilot, Cursor Agent, OpenCode
+- **Busy lock** — agent buttons disabled while terminal is busy
+- **Active agent highlight** — launched agent button glows while running
+- **Force-disable** — toggle agents on/off in Settings
+- **Proxy support** — configure HTTP proxy for all agent commands
+
 ### Settings
 
 - **7 built-in themes:** Catppuccin Mocha (default), Monokai, Dracula, One Dark, Nord, Solarized Dark, Gruvbox Dark
+- **Focus indicator** — glow, border, top-line, or none
 - **File tree behavior** — collapse children on close, single/double-click to open
+- **Prompt style** — default (from `~/.zshrc`), short, minimal, arrow (for new tabs)
 - **Auto-persisted** to disk with debounced saves
 
 ### Session Persistence
@@ -85,7 +100,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 | Build tooling | electron-vite (Vite-based) |
 | Terminal UI | xterm.js 5.5 + WebGL, Fit, WebLinks, Search addons |
 | PTY backend | node-pty 1.0 (native module) |
-| Code editor | CodeMirror 6 with 12 language packages |
+| Code editor | CodeMirror 6 with 13 language packages (JS/TS, Python, Go, Rust, HTML, CSS, JSON, YAML, Markdown, Vue, C#) |
 | Git operations | simple-git |
 | Packaging | electron-builder |
 | Logging | electron-log |
@@ -143,34 +158,35 @@ spctl -a -vvv -t install dist/mac-arm64/eTty.app
 ## Architecture
 
 ```
-┌────────────────────────────────────────────────┐
-│                  Main Process                   │
-│  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │PtyManager│ │FileManager│ │HistoryManager  │  │
-│  │ node-pty │ │ fs ops   │ │ global + tabs  │  │
-│  └──────────┘ └──────────┘ └────────────────┘  │
-│  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │GitService│ │ TabState │ │ SettingsStore  │  │
-│  │simple-git│ │ persist  │ │ JSON config    │  │
-│  └──────────┘ └──────────┘ └────────────────┘  │
-└──────────────────┬─────────────────────────────┘
-                   │ IPC (~30 channels)
-┌──────────────────┴─────────────────────────────┐
-│               Preload (contextBridge)           │
-│            ~45 methods on electronAPI            │
-└──────────────────┬─────────────────────────────┘
-                   │
-┌──────────────────┴─────────────────────────────┐
-│                Renderer Process                  │
-│  ┌────────┐ ┌────────┐ ┌──────────┐ ┌───────┐  │
-│  │Terminal│ │FileTree│ │EditorPanel│ │GitPanel│  │
-│  │xterm.js│ │ lazy   │ │CodeMirror│ │ diff  │  │
-│  └────────┘ └────────┘ └──────────┘ └───────┘  │
-│  ┌────────┐ ┌────────┐ ┌──────────┐            │
-│  │ TabBar │ │StatusBar││Settings  │            │
-│  │ tabs   │ │ git ±  │ │ themes   │            │
-│  └────────┘ └────────┘ └──────────┘            │
-└────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                       Main Process                       │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────────────────┐  │
+│  │PtyManager│ │FileManager│ │   HistoryManager        │  │
+│  │ node-pty │ │ fs ops   │ │   global + per-tab      │  │
+│  └──────────┘ └──────────┘ └──────────────────────────┘  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐  │
+│  │GitService│ │ TabState │ │SettingsStore│ │AgentService│  │
+│  │simple-git│ │ persist  │ │ JSON config  │ │ detect CLI │  │
+│  └──────────┘ └──────────┘ └──────────────┘ └────────────┘  │
+└──────────────────────┬─────────────────────────────────────┘
+                       │ IPC (~50 channels)
+┌──────────────────────┴─────────────────────────────────────┐
+│                  Preload (contextBridge)                   │
+│              ~50 methods on window.electronAPI               │
+└──────────────────────┴─────────────────────────────────────┘
+                       │
+┌──────────────────────┴─────────────────────────────────────┐
+│                     Renderer Process                         │
+│  ┌────────┐ ┌────────┐ ┌──────────┐ ┌──────────┐ ┌──────┐  │
+│  │Terminal│ │FileTree│ │EditorPanel│ │ GitPanel │ │Settings│  │
+│  │xterm.js│ │ lazy   │ │CodeMirror │ │  diff    │ │ overlay│  │
+│  │ tabs   │ │ DnD    │ │ 20+ langs │ │ branches │ │ themes │  │
+│  └────────┘ └────────┘ └──────────┘ └──────────┘ └──────┘  │
+│  ┌────────┐ ┌─────────────────────────────────────────────┐  │
+│  │ TabBar │ │              StatusBar                      │  │
+│  │ reorder│ │  git ±  │  cwd  │  node  │  AI agents  │   │  │
+│  └────────┘ └─────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ## Data Storage
@@ -179,7 +195,7 @@ All user data is stored in `~/.config/eTty/` (Electron `userData`):
 
 | File | Purpose |
 |------|---------|
-| `settings.json` | App settings (theme, file tree behavior) |
+| `settings.json` | App settings (theme, focus indicator, file tree behavior, prompt style, agent proxy, force-disabled agents) |
 | `tabs-state.json` | Saved tab state for session restore |
 | `history/global.zsh_history` | Shared command history (5000 lines) |
 | `history/tabs/<id>.zsh_history` | Per-tab command history |
@@ -189,6 +205,7 @@ All user data is stored in `~/.config/eTty/` (Electron `userData`):
 - `node-pty` is a **native module**. electron-builder rebuilds it automatically via `npmRebuild: true`.
 - `build/entitlements.mac.plist` contains macOS entitlements required for node-pty under hardened runtime (JIT, unsigned memory, library validation).
 - Auto-update is **stubbed** — logs only, no update server configured yet.
+- Settings overlay blocks tab switching to prevent focus leaking to hidden terminals.
 
 ## License
 

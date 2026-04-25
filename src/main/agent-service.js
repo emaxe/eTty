@@ -1,3 +1,8 @@
+/**
+ * Сервис авто-детекта CLI ИИ-агентов.
+ * Проверяет наличие команд claude, codex, gh copilot, agent, opencode в $PATH.
+ * Результат кэшируется; обновляется при открытии настроек.
+ */
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 

@@ -16,19 +16,20 @@ src/
     history-manager.js — история команд (глобальная + per-tab, мержинг, мьютекс)
     tab-state.js     — сохранение/восстановление вкладок между сессиями
     settings-store.js — настройки приложения (JSON, deep merge)
-  preload/           — contextBridge API (~45 методов)
-    index.js         — IPC-мост: pty, fs, window, tabs, settings, git
+    agent-service.js — авто-детект CLI ИИ-агентов (Claude, Codex, Copilot, Cursor, OpenCode)
+  preload/           — contextBridge API (~50 методов)
+    index.js         — IPC-мост: pty, fs, window, tabs, settings, git, agents
   renderer/          — UI
     index.js         — инициализация, оркестрация компонентов
-    tab-bar.js       — управление вкладками терминала
-    file-tree.js     — дерево файлов с lazy-load, контекстными меню
+    tab-bar.js       — управление вкладками терминала (drag-and-drop, disabled state)
+    file-tree.js     — дерево файлов с lazy-load, контекстными меню, multi-select, DnD, undo
     editor-panel.js  — CodeMirror 6 редактор с подсветкой (20+ языков)
     editor-languages.js — динамическая загрузка языков (code-splitting)
     editor-theme.js  — построение темы CodeMirror из THEMES
     git-panel.js     — UI Git: ветки, diff, commit, push, discard
-    status-bar.js    — статус-бар с Git-статистикой (polling 5s)
-    settings-page.js — страница настроек
-    context-menu.js  — контекстное меню
+    status-bar.js    — статус-бар: Git ±, cwd, node, AI-агенты, proxy toggle
+    settings-page.js — страница настроек (overlay)
+    context-menu.js  — контекстное меню (поддержка disabled items)
     themes.js        — 7 тем (Catppuccin Mocha, Monokai, Dracula, One Dark, Nord, Solarized, Gruvbox)
     styles.css       — CSS variables + стили всех компонентов
     index.html       — HTML-разметка
@@ -61,12 +62,16 @@ docs/              — спецификации, планы, чеклисты п
 - Фильтрация скрытых файлов (toggle)
 - Кнопки навигации: cd .., cd ~
 - fs.watch для автообновления (debounce 300ms)
-- Контекстные меню: новый файл/папка, rename, delete, copy, paste
+- Контекстные меню: новый файл/папка, rename, delete, copy, paste, копирование относительного пути, меню корневого узла
 - Path traversal защита в FileManager
 - Resizable sidebar (150–600px)
+- Multi-select: Ctrl/Cmd+Click, Shift+Click range, Ctrl+A
+- Drag-and-drop перемещение файлов/папок
+- Undo (Ctrl+Z) для move-операций
+- Hover overlay с кнопкой cd
 
 ### Редактор файлов (CodeMirror 6)
-- Подсветка синтаксиса: JS/TS, Python, Go, Rust, HTML, CSS/SCSS, JSON, YAML, Markdown
+- Подсветка синтаксиса: JS/TS, Python, Go, Rust, HTML, CSS/SCSS, JSON, YAML, Markdown, Vue, C#
 - Cmd+S — сохранение, Cmd+E — toggle панели
 - Отправка выделенного кода в терминал (Cmd+Enter)
 - Индикация несохранённых изменений
@@ -78,21 +83,33 @@ docs/              — спецификации, планы, чеклисты п
 - Подсчёт additions/deletions per file
 - Поддержка untracked, modified, staged, deleted, renamed файлов
 
+### ИИ-агенты
+- Авто-детект CLI агентов в статус-баре (Claude Code, Codex, Copilot, Cursor Agent, OpenCode)
+- Запуск агента в активный терминал одним кликом
+- Подсветка активного агента и блокировка кнопок при busy
+- Force-disable агентов в настройках
+- Прокси URL для ИИ-агентов (с toggle в статус-баре)
+
 ### Настройки
 - Тема оформления (7 встроенных)
+- Индикатор фокуса: glow, border, line, none
 - Collapse children on close (file tree)
 - File open mode: double-click / single-click
+- Стиль промпта zsh для новых вкладок: default, short, minimal, arrow
 - Сохранение в `~/.config/eTty/settings.json`
 
 ### Сохранение состояния
 - Tab state: сохранение при закрытии, диалог восстановления при запуске
 - Состояние дерева файлов per-tab (expanded dirs, scroll position)
+- Состояние редактора per-tab (открытые файлы, активный файл)
+- Состояние git-панели per-tab
 - Версионирование формата (backward compat v1 → v2)
 
 ### Окно
 - Frameless с кастомным drag titlebar
 - hiddenInset на macOS
 - Минимальные размеры 400x300
+- Перетаскивание окна за titlebar даже когда табы занимают всю ширину
 
 ## IPC-каналы
 
@@ -102,6 +119,7 @@ docs/              — спецификации, планы, чеклисты п
 | `fs:*` | read-dir, create-file, create-dir, rename, delete, copy, read-file, write-file, get-cwd, set-root, watch-dir, unwatch-dir, dir-changed | Файловые операции |
 | `git:*` | get-status, get-root, get-diff, get-branches, checkout, create-branch, delete-branch, commit, push, discard | Git |
 | `tabs:*` | export-state, has-saved-state, load-saved-state, delete-saved-state, show-restore-dialog, trigger-restore, state-changed | Вкладки |
+| `agents:*` | get-status, refresh | AI-агенты (детект, кэш) |
 | `settings:*` | load, save | Настройки |
 | `history:*` | cleanup | История |
 | `window:*` | get-position, move | Окно |
@@ -136,9 +154,11 @@ docs/              — спецификации, планы, чеклисты п
 | electron-vite | 2.3.0 | Build tooling |
 | xterm.js | 5.5.0 | Terminal UI (+4 addon) |
 | node-pty | 1.0.0 | PTY backend (native) |
-| CodeMirror | 6.x | Code editor (12 lang packages) |
+| CodeMirror | 6.x | Code editor (13 lang packages) |
 | simple-git | 3.27.0 | Git operations |
 | electron-builder | 26.8.1 | Packaging |
+| electron-log | 5.4.3 | Logging |
+| electron-updater | 6.8.3 | Auto-update (stub) |
 
 ## Сборка дистрибутива — важные детали
 
@@ -202,7 +222,7 @@ electron-builder делает это автоматически через `"npm
 - `checklist.md` — прогресс
 - `starter-prompt.md` — промпт для новой сессии
 
-Текущие фичи: `init`, `sidebar-file-tree`, `tab-persistence`, `git-panel`, `app-packaging`.
+Текущие фичи: `init`, `sidebar-file-tree`, `tab-persistence`, `git-panel`, `app-packaging`, `config`, `fs-watch-recursive`, `file-tree-dnd`.
 
 ## Хранилище данных
 
