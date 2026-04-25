@@ -1,81 +1,33 @@
-import { app } from 'electron'
-import { join } from 'path'
-import { readFile, writeFile } from 'fs/promises'
+import { loadConfig, saveConfig } from './config-loader.js'
+import { loadThemes } from './theme-loader.js'
 import log from 'electron-log'
 
 /**
- * Настройки приложения. При загрузке — deep merge с дефолтами,
- * чтобы новые поля автоматически подхватывались.
+ * Оркестратор настроек: агрегирует config и themes из loader-модулей.
+ * Возвращает { config, themes, warnings } для renderer.
  */
-const SETTINGS_FILE = () => join(app.getPath('userData'), 'settings.json')
-const SETTINGS_VERSION = 1
-
-export function getDefaults() {
-  return {
-    version: SETTINGS_VERSION,
-    fileTree: {
-      collapseChildrenOnClose: true,
-      fileOpenMode: 'double'
-    },
-    appearance: {
-      theme: 'catppuccin-mocha',
-      focusIndicator: 'glow'
-    },
-    terminal: {
-      promptStyle: 'default'
-    },
-    agents: {
-      forceDisabled: {
-        claude: false,
-        codex: false,
-        copilot: false,
-        agent: false,
-        opencode: false
-      },
-      lastDetected: {},
-      proxy: '',
-      proxyEnabled: false
-    }
-  }
-}
-
 export async function loadSettings() {
-  try {
-    const raw = await readFile(SETTINGS_FILE(), 'utf-8')
-    const data = JSON.parse(raw)
-    if (data.version !== SETTINGS_VERSION) return getDefaults()
-    // Deep merge: defaults as base, saved values on top
-    const defaults = getDefaults()
-    return {
-      ...defaults,
-      ...data,
-      fileTree: { ...defaults.fileTree, ...data.fileTree },
-      appearance: { ...defaults.appearance, ...data.appearance },
-      terminal: { ...defaults.terminal, ...data.terminal },
-      agents: {
-        ...defaults.agents,
-        ...data.agents,
-        forceDisabled: {
-          ...defaults.agents.forceDisabled,
-          ...(data.agents?.forceDisabled || {})
-        },
-        lastDetected: { ...(data.agents?.lastDetected || {}) },
-        proxy: typeof data.agents?.proxy === 'string' ? data.agents.proxy : defaults.agents.proxy,
-        proxyEnabled: typeof data.agents?.proxyEnabled === 'boolean'
-          ? data.agents.proxyEnabled
-          : defaults.agents.proxyEnabled
-      }
-    }
-  } catch {
-    return getDefaults()
+  const { config, warnings: configWarnings } = await loadConfig()
+  const { themes, warnings: themeWarnings } = await loadThemes()
+
+  const warnings = [...configWarnings, ...themeWarnings]
+
+  // Если выбранная тема отсутствует — fallback на dark
+  if (!themes.has(config.appearance.theme)) {
+    const message = `Theme "${config.appearance.theme}" not found, falling back to "dark"`
+    log.warn('settings:', message)
+    warnings.push(message)
+    config.appearance.theme = 'dark'
   }
+
+  // themes как объект для удобства сериализации
+  const themesObject = Object.fromEntries(themes)
+
+  return { config, themes: themesObject, warnings }
 }
 
 export async function saveSettings(settings) {
-  try {
-    await writeFile(SETTINGS_FILE(), JSON.stringify(settings, null, 2), 'utf-8')
-    log.info('settings: saved')
-  } catch (e) {
-    log.error('settings: failed to save', e.message)
-  }
+  // Сохраняем только config-часть (без themes и warnings)
+  const config = settings?.config || settings
+  await saveConfig(config)
 }

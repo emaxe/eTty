@@ -13,7 +13,8 @@ import { StatusBar } from './status-bar.js'
 import { GitPanel } from './git-panel.js'
 import { EditorPanel } from './editor-panel.js'
 
-let currentThemeName = 'catppuccin-mocha'
+let currentThemeName = 'dark'
+let loadedThemes = THEMES
 /** @type {TabBar|null} */
 let tabBar = null
 /** @type {EditorPanel|null} */
@@ -26,7 +27,7 @@ function applyFocusIndicator(style) {
 
 /** Применяет тему: обновляет CSS-переменные, терминалы и редактор. */
 function applyTheme(themeName) {
-  const theme = THEMES[themeName]
+  const theme = loadedThemes[themeName]
   if (!theme) return
   currentThemeName = themeName
 
@@ -63,7 +64,7 @@ async function createTab(cwd, tabId) {
     fontFamily: 'Menlo, "SF Mono", Consolas, "Courier New", monospace',
     scrollback: 10000,
     allowProposedApi: true,
-    theme: THEMES[currentThemeName].terminal
+    theme: loadedThemes[currentThemeName].terminal
   })
 
   const fitAddon = new FitAddon()
@@ -72,8 +73,8 @@ async function createTab(cwd, tabId) {
   term.loadAddon(new SearchAddon())
 
   tabId = tabId || crypto.randomUUID()
-  const settings = await window.electronAPI.settingsLoad()
-  const promptStyle = settings.terminal?.promptStyle || 'default'
+  const { config } = await window.electronAPI.settingsLoad()
+  const promptStyle = config.terminal?.promptStyle || 'default'
   const { pid } = await window.electronAPI.ptyCreate({ cols: 80, rows: 24, cwd, tabId, promptStyle })
 
   return { term, fitAddon, pid, rootPath: cwd, tabId }
@@ -81,12 +82,16 @@ async function createTab(cwd, tabId) {
 
 async function init() {
   // Загружаем настройки до инициализации всего остального
-  const settings = await window.electronAPI.settingsLoad()
-  if (!settings.agents) settings.agents = {}
-  if (typeof settings.agents.proxy !== 'string') settings.agents.proxy = ''
-  if (typeof settings.agents.proxyEnabled !== 'boolean') settings.agents.proxyEnabled = false
-  applyTheme(settings.appearance.theme)
-  applyFocusIndicator(settings.appearance.focusIndicator)
+  const { config, themes, warnings } = await window.electronAPI.settingsLoad()
+  loadedThemes = { ...THEMES, ...themes }
+  if (warnings && warnings.length > 0) {
+    console.warn('Settings warnings:', ...warnings)
+  }
+  if (!config.agents) config.agents = {}
+  if (typeof config.agents.proxy !== 'string') config.agents.proxy = ''
+  if (typeof config.agents.proxyEnabled !== 'boolean') config.agents.proxyEnabled = false
+  applyTheme(config.appearance.theme)
+  applyFocusIndicator(config.appearance.focusIndicator)
 
   const terminalContainerEl = document.getElementById('terminal-container')
   const tabBarEl = document.getElementById('tab-bar')
@@ -119,7 +124,7 @@ async function init() {
   }
 
   const getNormalizedProxyUrl = () => {
-    const raw = (settings.agents?.proxy || '').trim()
+    const raw = (config.agents?.proxy || '').trim()
     if (!raw) return ''
     return raw.endsWith('/') ? raw : `${raw}/`
   }
@@ -128,7 +133,7 @@ async function init() {
     const cmd = (baseCommand || '').trim()
     if (!cmd) return ''
 
-    if (!settings.agents?.proxyEnabled) return `${cmd}\n`
+    if (!config.agents?.proxyEnabled) return `${cmd}\n`
 
     const proxyUrl = getNormalizedProxyUrl()
     if (!proxyUrl) return `${cmd}\n`
@@ -171,7 +176,7 @@ async function init() {
     getActiveCwd: () => tabBar.getActive()?.rootPath || startCwd,
   })
   // Apply current theme immediately (applyTheme ran before editorPanel was created)
-  const _initialTheme = THEMES[currentThemeName]
+  const _initialTheme = loadedThemes[currentThemeName]
   if (_initialTheme?.editor) editorPanel.setTheme(_initialTheme.editor)
 
   const fileTree = new FileTree(fileTreeContainerEl, {
@@ -189,8 +194,8 @@ async function init() {
     },
   })
   await fileTree.init(startCwd)
-  fileTree.setCollapseChildrenOnClose(settings.fileTree.collapseChildrenOnClose)
-  fileTree.setFileOpenMode(settings.fileTree.fileOpenMode || 'double')
+  fileTree.setCollapseChildrenOnClose(config.fileTree.collapseChildrenOnClose)
+  fileTree.setFileOpenMode(config.fileTree.fileOpenMode || 'double')
 
   function updateNavButtons() {
     const tab = tabBar.getActive()
@@ -277,8 +282,8 @@ async function init() {
       if (key === 'fileTree.fileOpenMode') fileTree.setFileOpenMode(value)
       if (key === 'agents.forceDisabled') statusBar.setForceDisabled(value)
       if (key === 'agents.proxy') {
-        settings.agents.proxy = value
-        statusBar.setProxyConfig({ proxy: settings.agents.proxy, enabled: settings.agents.proxyEnabled })
+        config.agents.proxy = value
+        statusBar.setProxyConfig({ proxy: config.agents.proxy, enabled: config.agents.proxyEnabled })
       }
     },
     onClose: () => {
@@ -324,16 +329,16 @@ async function init() {
     },
     proxyToggleEl: document.getElementById('btn-proxy-toggle'),
     onToggleProxy: (enabled) => {
-      settings.agents.proxyEnabled = enabled
-      window.electronAPI.settingsSave(settings)
+      config.agents.proxyEnabled = enabled
+      window.electronAPI.settingsSave(config)
     }
   })
 
   const agentsStatus = await window.electronAPI.agentsGetStatus().catch(() => ({ agents: [] }))
   applyAgentCommands(agentsStatus)
   statusBar.setAgentsStatus(agentsStatus)
-  statusBar.setForceDisabled(settings.agents?.forceDisabled || {})
-  statusBar.setProxyConfig({ proxy: settings.agents.proxy || '', enabled: settings.agents.proxyEnabled })
+  statusBar.setForceDisabled(config.agents?.forceDisabled || {})
+  statusBar.setProxyConfig({ proxy: config.agents.proxy || '', enabled: config.agents.proxyEnabled })
 
   statusBar.start(() => tabBar.getActive()?.rootPath)
 
@@ -348,7 +353,7 @@ async function init() {
   })
 
   window.electronAPI.onAgentsSettingsUpdated(({ forceDisabled }) => {
-    settings.agents.forceDisabled = forceDisabled
+    config.agents.forceDisabled = forceDisabled
     statusBar.setForceDisabled(forceDisabled)
   })
 

@@ -50,32 +50,35 @@ let _mainWindow = null
 app.whenReady().then(() => {
   agentService.refresh().then(async (result) => {
     try {
-      const settings = await loadSettings()
-      if (!settings.agents.lastDetected) settings.agents.lastDetected = {}
+      const { config, warnings } = await loadSettings()
+      if (warnings.length > 0) {
+        log.warn('settings: warnings during load:', warnings)
+      }
+      if (!config.agents.lastDetected) config.agents.lastDetected = {}
 
       let changed = false
       for (const agent of result.agents) {
         // Авто-включение: агент появился, ранее не был обнаружен, переключатель был выключен
         if (
           agent.detected &&
-          settings.agents.lastDetected[agent.id] === false &&
-          settings.agents.forceDisabled[agent.id] === true
+          config.agents.lastDetected[agent.id] === false &&
+          config.agents.forceDisabled[agent.id] === true
         ) {
-          settings.agents.forceDisabled[agent.id] = false
+          config.agents.forceDisabled[agent.id] = false
           changed = true
         }
         // Обновить историю обнаружения
-        if (settings.agents.lastDetected[agent.id] !== agent.detected) {
-          settings.agents.lastDetected[agent.id] = agent.detected
+        if (config.agents.lastDetected[agent.id] !== agent.detected) {
+          config.agents.lastDetected[agent.id] = agent.detected
           changed = true
         }
       }
 
       if (changed) {
-        await saveSettings(settings)
+        await saveSettings(config)
         if (_mainWindow && !_mainWindow.isDestroyed()) {
           _mainWindow.webContents.send('agents:settings-updated', {
-            forceDisabled: settings.agents.forceDisabled
+            forceDisabled: config.agents.forceDisabled
           })
         }
       }

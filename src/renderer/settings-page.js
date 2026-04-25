@@ -1,5 +1,3 @@
-import { THEMES } from './themes.js'
-
 const SUPPORTED_AGENTS = [
   { id: 'claude', label: 'Claude Code' },
   { id: 'codex', label: 'Codex' },
@@ -15,7 +13,8 @@ export class SettingsPage {
   constructor({ onSettingsChanged, onClose }) {
     this._onSettingsChanged = onSettingsChanged
     this._onClose = onClose
-    this._settings = null
+    this._config = null
+    this._themes = null
     this._overlay = null
     this._saveTimer = null
     this._agentsCategory = null
@@ -23,7 +22,12 @@ export class SettingsPage {
   }
 
   async init() {
-    this._settings = await window.electronAPI.settingsLoad()
+    const { config, themes, warnings } = await window.electronAPI.settingsLoad()
+    this._config = config
+    this._themes = themes
+    if (warnings && warnings.length > 0) {
+      console.warn('Settings warnings:', ...warnings)
+    }
     this._ensureAgentSettings()
     await this._loadAgentStatus()
     this._buildDOM()
@@ -52,14 +56,14 @@ export class SettingsPage {
   }
 
   _ensureAgentSettings() {
-    if (!this._settings.agents) this._settings.agents = {}
-    if (!this._settings.agents.forceDisabled) this._settings.agents.forceDisabled = {}
-    if (typeof this._settings.agents.proxy !== 'string') this._settings.agents.proxy = ''
-    if (typeof this._settings.agents.proxyEnabled !== 'boolean') this._settings.agents.proxyEnabled = false
+    if (!this._config.agents) this._config.agents = {}
+    if (!this._config.agents.forceDisabled) this._config.agents.forceDisabled = {}
+    if (typeof this._config.agents.proxy !== 'string') this._config.agents.proxy = ''
+    if (typeof this._config.agents.proxyEnabled !== 'boolean') this._config.agents.proxyEnabled = false
 
     for (const agent of SUPPORTED_AGENTS) {
-      if (typeof this._settings.agents.forceDisabled[agent.id] !== 'boolean') {
-        this._settings.agents.forceDisabled[agent.id] = false
+      if (typeof this._config.agents.forceDisabled[agent.id] !== 'boolean') {
+        this._config.agents.forceDisabled[agent.id] = false
       }
     }
   }
@@ -92,9 +96,9 @@ export class SettingsPage {
       {
         label: 'Сворачивать дочерние папки при закрытии родительской',
         control: this._createToggle(
-          this._settings.fileTree.collapseChildrenOnClose,
+          this._config.fileTree.collapseChildrenOnClose,
           (val) => {
-            this._settings.fileTree.collapseChildrenOnClose = val
+            this._config.fileTree.collapseChildrenOnClose = val
             this._onSettingsChanged('fileTree.collapseChildrenOnClose', val)
             this._scheduleSave()
           }
@@ -107,9 +111,9 @@ export class SettingsPage {
             { key: 'double', name: 'Двойной клик' },
             { key: 'single', name: 'Одинарный клик' }
           ],
-          this._settings.fileTree.fileOpenMode || 'double',
+          this._config.fileTree.fileOpenMode || 'double',
           (val) => {
-            this._settings.fileTree.fileOpenMode = val
+            this._config.fileTree.fileOpenMode = val
             this._onSettingsChanged('fileTree.fileOpenMode', val)
             this._scheduleSave()
           }
@@ -131,10 +135,10 @@ export class SettingsPage {
             { key: 'border', name: 'Рамка' },
             { key: 'line', name: 'Линия сверху' }
           ],
-          this._settings.appearance?.focusIndicator || 'glow',
+          this._config.appearance?.focusIndicator || 'glow',
           (val) => {
-            if (!this._settings.appearance) this._settings.appearance = {}
-            this._settings.appearance.focusIndicator = val
+            if (!this._config.appearance) this._config.appearance = {}
+            this._config.appearance.focusIndicator = val
             this._onSettingsChanged('appearance.focusIndicator', val)
             this._scheduleSave()
           }
@@ -152,10 +156,10 @@ export class SettingsPage {
             { key: 'minimal', name: 'Минимальный — >' },
             { key: 'arrow', name: 'Стрелка — dirname ❯' }
           ],
-          this._settings.terminal?.promptStyle || 'default',
+          this._config.terminal?.promptStyle || 'default',
           (val) => {
-            if (!this._settings.terminal) this._settings.terminal = {}
-            this._settings.terminal.promptStyle = val
+            if (!this._config.terminal) this._config.terminal = {}
+            this._config.terminal.promptStyle = val
             this._onSettingsChanged('terminal.promptStyle', val)
             this._scheduleSave()
           }
@@ -176,11 +180,11 @@ export class SettingsPage {
     const proxyRow = {
       label: 'Прокси URL для ИИ-агентов',
       control: this._createTextInput(
-        this._settings.agents.proxy || '',
+        this._config.agents.proxy || '',
         'http://135.28.52.90:6200',
         (val) => {
-          this._settings.agents.proxy = val.trim()
-          this._onSettingsChanged('agents.proxy', this._settings.agents.proxy)
+          this._config.agents.proxy = val.trim()
+          this._onSettingsChanged('agents.proxy', this._config.agents.proxy)
           this._scheduleSave()
         }
       )
@@ -207,14 +211,14 @@ export class SettingsPage {
 
     const stateLabel = document.createElement('span')
     stateLabel.className = 'settings-agent-switch-label'
-    stateLabel.textContent = this._settings.agents.forceDisabled[agentId] ? 'Выкл' : 'Вкл'
+    stateLabel.textContent = this._config.agents.forceDisabled[agentId] ? 'Выкл' : 'Вкл'
 
     const toggle = this._createToggle(
-      !this._settings.agents.forceDisabled[agentId],
+      !this._config.agents.forceDisabled[agentId],
       (isEnabled) => {
-        this._settings.agents.forceDisabled[agentId] = !isEnabled
+        this._config.agents.forceDisabled[agentId] = !isEnabled
         stateLabel.textContent = isEnabled ? 'Вкл' : 'Выкл'
-        this._onSettingsChanged('agents.forceDisabled', { ...this._settings.agents.forceDisabled })
+        this._onSettingsChanged('agents.forceDisabled', { ...this._config.agents.forceDisabled })
         this._scheduleSave()
       }
     )
@@ -319,16 +323,16 @@ export class SettingsPage {
     swatch.appendChild(swatchRight)
 
     const updateSwatch = (themeName) => {
-      const theme = THEMES[themeName]
+      const theme = this._themes[themeName]
       if (!theme) return
       swatchLeft.style.background = theme.ui.bg
       swatchRight.style.background = theme.ui.accent
     }
-    updateSwatch(this._settings.appearance.theme)
+    updateSwatch(this._config.appearance.theme)
 
-    const themeOptions = Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name }))
-    const select = this._createSelect(themeOptions, this._settings.appearance.theme, (val) => {
-      this._settings.appearance.theme = val
+    const themeOptions = Object.entries(this._themes).map(([key, t]) => ({ key, name: t.name }))
+    const select = this._createSelect(themeOptions, this._config.appearance.theme, (val) => {
+      this._config.appearance.theme = val
       updateSwatch(val)
       this._onSettingsChanged('appearance.theme', val)
       this._scheduleSave()
@@ -342,7 +346,7 @@ export class SettingsPage {
   _scheduleSave() {
     clearTimeout(this._saveTimer)
     this._saveTimer = setTimeout(() => {
-      window.electronAPI.settingsSave(this._settings)
+      window.electronAPI.settingsSave(this._config)
     }, 300)
   }
 }
