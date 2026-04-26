@@ -18,6 +18,7 @@ export class SettingsPage {
     this._overlay = null
     this._saveTimer = null
     this._agentsCategory = null
+    this._quickRepliesCategory = null
     this._agentStatusById = new Map()
   }
 
@@ -29,6 +30,7 @@ export class SettingsPage {
       console.warn('Settings warnings:', ...warnings)
     }
     this._ensureAgentSettings()
+    this._ensureQuickRepliesSettings()
     await this._loadAgentStatus()
     this._buildDOM()
   }
@@ -170,6 +172,9 @@ export class SettingsPage {
     this._agentsCategory = this._buildCategory('ИИ-агенты', this._buildAgentRows())
     body.appendChild(this._agentsCategory)
 
+    this._quickRepliesCategory = this._buildQuickRepliesCategory()
+    body.appendChild(this._quickRepliesCategory)
+
     overlay.appendChild(header)
     overlay.appendChild(body)
     document.body.appendChild(overlay)
@@ -235,6 +240,317 @@ export class SettingsPage {
     const next = this._buildCategory('ИИ-агенты', this._buildAgentRows())
     this._agentsCategory.replaceWith(next)
     this._agentsCategory = next
+  }
+
+  _ensureQuickRepliesSettings() {
+    if (!this._config.quickReplies) this._config.quickReplies = { items: [] }
+    if (!Array.isArray(this._config.quickReplies.items)) this._config.quickReplies.items = []
+  }
+
+  _buildQuickRepliesCategory() {
+    const category = document.createElement('div')
+    category.className = 'settings-category'
+
+    const title = document.createElement('div')
+    title.className = 'settings-category-title'
+    title.textContent = 'Быстрые ответы'
+    category.appendChild(title)
+
+    const list = document.createElement('div')
+    list.className = 'settings-quick-replies-list'
+
+    const items = this._config.quickReplies?.items || []
+    for (let i = 0; i < items.length; i++) {
+      list.appendChild(this._buildQuickReplyCompactRow(items[i], i, list))
+    }
+
+    // Drag & drop on the list
+    list.addEventListener('dragover', (e) => {
+      e.preventDefault()
+      const dragging = list.querySelector('.settings-quick-reply-compact-row.dragging')
+      if (!dragging) return
+
+      // Remove previous drop-target
+      for (const el of list.querySelectorAll('.settings-quick-reply-compact-row')) {
+        el.classList.remove('drop-target')
+      }
+
+      const afterElement = this._getDragAfterElement(list, e.clientY)
+      if (afterElement) {
+        afterElement.classList.add('drop-target')
+      } else if (list.lastElementChild) {
+        list.lastElementChild.classList.add('drop-target')
+      }
+    })
+
+    list.addEventListener('dragleave', (e) => {
+      // If leaving the list entirely, clear targets
+      if (!list.contains(e.relatedTarget)) {
+        for (const el of list.querySelectorAll('.settings-quick-reply-compact-row')) {
+          el.classList.remove('drop-target')
+        }
+      }
+    })
+
+    list.addEventListener('drop', (e) => {
+      e.preventDefault()
+      const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'), 10)
+      if (Number.isNaN(draggedIndex)) return
+
+      // Find target position
+      const rows = [...list.querySelectorAll('.settings-quick-reply-compact-row')]
+      const targetRow = rows.find(r => r.classList.contains('drop-target'))
+      let targetIndex = rows.length - 1
+      if (targetRow) {
+        targetIndex = parseInt(targetRow.dataset.index, 10)
+        targetRow.classList.remove('drop-target')
+      }
+
+      if (draggedIndex === targetIndex) return
+
+      this._ensureQuickRepliesSettings()
+      const items = this._config.quickReplies.items
+      const [moved] = items.splice(draggedIndex, 1)
+      // After removing dragged item, elements after it shift down by 1.
+      // If we dragged forward (draggedIndex < target), the target position
+      // in the shortened array is one less than the original index.
+      const newTargetIndex = parseInt(targetRow?.dataset.index || String(items.length), 10)
+      const adjustedIndex = draggedIndex < newTargetIndex ? newTargetIndex - 1 : newTargetIndex
+      items.splice(adjustedIndex, 0, moved)
+
+      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
+      this._scheduleSave()
+      this._rerenderQuickRepliesCategory()
+    })
+
+    const addBtn = document.createElement('button')
+    addBtn.className = 'settings-btn-add'
+    addBtn.textContent = 'Добавить быстрый ответ'
+    addBtn.addEventListener('click', () => {
+      this._openQuickReplyDialog({ id: crypto.randomUUID(), label: '', command: '', enabled: true, agents: [] }, -1)
+    })
+
+    category.appendChild(list)
+    category.appendChild(addBtn)
+    return category
+  }
+
+  _getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.settings-quick-reply-compact-row:not(.dragging)')]
+    return draggableElements.reduce((closest, child) => {
+      const box = child.getBoundingClientRect()
+      const offset = y - box.top - box.height / 2
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child }
+      }
+      return closest
+    }, { offset: Number.NEGATIVE_INFINITY }).element
+  }
+
+  _buildQuickReplyCompactRow(item, index, listEl) {
+    const row = document.createElement('div')
+    row.className = 'settings-quick-reply-compact-row'
+    row.dataset.index = String(index)
+    row.draggable = true
+
+    // Drag handle (grip icon)
+    const dragHandle = document.createElement('div')
+    dragHandle.className = 'settings-quick-reply-drag-handle'
+    dragHandle.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg>'
+    dragHandle.title = 'Перетащить'
+    // mousedown preventDefault removed — it blocks HTML5 drag initiation
+
+    const text = document.createElement('div')
+    text.className = 'settings-quick-reply-text'
+    const displayText = item.label || item.command
+    text.textContent = displayText || '(пусто)'
+    if (!displayText) text.classList.add('empty')
+    if (!item.enabled) text.classList.add('disabled')
+
+    const agents = document.createElement('div')
+    agents.className = 'settings-quick-reply-agents-text'
+    if (item.agents && item.agents.length > 0) {
+      const agentLabels = item.agents.map(id => {
+        const agent = SUPPORTED_AGENTS.find(a => a.id === id)
+        return agent ? agent.label : id
+      })
+      agents.textContent = agentLabels.join(', ')
+    } else {
+      agents.textContent = 'нет агентов'
+      agents.classList.add('empty')
+    }
+
+    // Edit icon button (pencil)
+    const editBtn = document.createElement('button')
+    editBtn.className = 'settings-quick-reply-edit-btn'
+    editBtn.title = 'Редактировать'
+    editBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5L13.5 4.5L5 13L2.5 13.5L3 11L11.5 2.5Z"/><path d="M10 4L12 6"/></svg>'
+    editBtn.addEventListener('click', () => this._openQuickReplyDialog(item, index))
+
+    row.appendChild(dragHandle)
+    row.appendChild(text)
+    row.appendChild(agents)
+    row.appendChild(editBtn)
+
+    // Drag events
+    row.addEventListener('dragstart', (e) => {
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', String(index))
+      row.classList.add('dragging')
+      // Hide drag ghost image to avoid rendering the whole row
+      const emptyImage = document.createElement('canvas')
+      e.dataTransfer.setDragImage(emptyImage, 0, 0)
+    })
+
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging')
+      // Remove any drop-target classes
+      if (listEl) {
+        for (const el of listEl.querySelectorAll('.settings-quick-reply-compact-row')) {
+          el.classList.remove('drop-target')
+        }
+      }
+    })
+
+    return row
+  }
+
+  _openQuickReplyDialog(item, index) {
+    const overlay = document.createElement('div')
+    overlay.className = 'settings-dialog-overlay'
+
+    const dialog = document.createElement('div')
+    dialog.className = 'settings-dialog'
+
+    const header = document.createElement('div')
+    header.className = 'settings-dialog-header'
+    header.textContent = index >= 0 ? 'Редактировать быстрый ответ' : 'Новый быстрый ответ'
+
+    const body = document.createElement('div')
+    body.className = 'settings-dialog-body'
+
+    // Text input (label = command)
+    const labelGroup = document.createElement('div')
+    labelGroup.className = 'settings-dialog-field'
+    const labelLabel = document.createElement('label')
+    labelLabel.textContent = 'Текст и команда'
+    const labelInput = document.createElement('input')
+    labelInput.type = 'text'
+    labelInput.className = 'settings-input'
+    labelInput.value = item.label || item.command || ''
+    labelInput.placeholder = 'Например: Ok'
+    labelGroup.appendChild(labelLabel)
+    labelGroup.appendChild(labelInput)
+
+    // Enabled toggle
+    const enabledRow = document.createElement('div')
+    enabledRow.className = 'settings-dialog-row'
+    const enabledLabel = document.createElement('span')
+    enabledLabel.textContent = 'Включено'
+    const enabledToggle = this._createToggle(!!item.enabled, () => {})
+    enabledRow.appendChild(enabledLabel)
+    enabledRow.appendChild(enabledToggle)
+
+    // Agents toggles
+    const agentsBlock = document.createElement('div')
+    agentsBlock.className = 'settings-dialog-field'
+    const agentsTitle = document.createElement('div')
+    agentsTitle.className = 'settings-dialog-label'
+    agentsTitle.textContent = 'Агенты'
+    agentsBlock.appendChild(agentsTitle)
+
+    const agentsGrid = document.createElement('div')
+    agentsGrid.className = 'settings-dialog-agents-grid'
+    const agentToggles = []
+    for (const agent of SUPPORTED_AGENTS) {
+      const isChecked = (item.agents || []).includes(agent.id)
+      const agentRow = document.createElement('div')
+      agentRow.className = 'settings-dialog-agent-row'
+      const agentToggle = this._createToggle(isChecked, () => {})
+      const agentLabel = document.createElement('span')
+      agentLabel.textContent = agent.label
+      agentRow.appendChild(agentToggle)
+      agentRow.appendChild(agentLabel)
+      agentsGrid.appendChild(agentRow)
+      agentToggles.push({ id: agent.id, toggle: agentToggle })
+    }
+    agentsBlock.appendChild(agentsGrid)
+
+    body.appendChild(labelGroup)
+    body.appendChild(enabledRow)
+    body.appendChild(agentsBlock)
+
+    const footer = document.createElement('div')
+    footer.className = 'settings-dialog-footer'
+
+    const deleteBtn = document.createElement('button')
+    deleteBtn.className = 'settings-dialog-btn-delete'
+    deleteBtn.textContent = 'Удалить'
+    deleteBtn.addEventListener('click', () => {
+      if (index >= 0) {
+        const items = this._config.quickReplies?.items || []
+        items.splice(index, 1)
+        this._onSettingsChanged('quickReplies.items', items)
+        this._scheduleSave()
+        this._rerenderQuickRepliesCategory()
+      }
+      overlay.remove()
+    })
+
+    const cancelBtn = document.createElement('button')
+    cancelBtn.className = 'settings-dialog-btn-secondary'
+    cancelBtn.textContent = 'Отмена'
+    cancelBtn.addEventListener('click', () => overlay.remove())
+
+    const saveBtn = document.createElement('button')
+    saveBtn.className = 'settings-dialog-btn-primary'
+    saveBtn.textContent = 'Сохранить'
+    saveBtn.addEventListener('click', () => {
+      const value = labelInput.value.trim()
+      const enabled = enabledToggle.querySelector('input').checked
+      const selectedAgents = agentToggles
+        .filter(({ toggle }) => toggle.querySelector('input').checked)
+        .map(({ id }) => id)
+
+      const newItem = {
+        id: item.id || crypto.randomUUID(),
+        label: value,
+        command: value,
+        enabled,
+        agents: selectedAgents
+      }
+
+      this._ensureQuickRepliesSettings()
+      if (index >= 0) {
+        this._config.quickReplies.items[index] = newItem
+      } else {
+        this._config.quickReplies.items.push(newItem)
+      }
+
+      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
+      this._scheduleSave()
+      this._rerenderQuickRepliesCategory()
+      overlay.remove()
+    })
+
+    footer.appendChild(deleteBtn)
+    footer.appendChild(cancelBtn)
+    footer.appendChild(saveBtn)
+
+    dialog.appendChild(header)
+    dialog.appendChild(body)
+    dialog.appendChild(footer)
+    overlay.appendChild(dialog)
+    document.body.appendChild(overlay)
+
+    setTimeout(() => labelInput.focus(), 0)
+  }
+
+  _rerenderQuickRepliesCategory() {
+    if (!this._quickRepliesCategory) return
+    const next = this._buildQuickRepliesCategory()
+    this._quickRepliesCategory.replaceWith(next)
+    this._quickRepliesCategory = next
   }
 
   _buildCategory(title, rows) {
