@@ -1461,39 +1461,70 @@ button svg {
 .settings-quick-replies-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
-.settings-quick-reply-row {
+.settings-quick-reply-compact-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--surface);
-  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
 }
 
-.settings-quick-reply-row .settings-input {
-  min-width: 0;
+.settings-quick-reply-compact-row:last-child {
+  border-bottom: none;
+}
+
+.settings-quick-reply-text {
+  font-size: 13px;
+  color: var(--text);
   flex: 1;
-  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.settings-quick-reply-agents {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
+.settings-quick-reply-text.empty {
+  color: var(--muted);
+  font-style: italic;
 }
 
-.settings-quick-reply-agent {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.settings-quick-reply-text.disabled {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.settings-quick-reply-agents-text {
   font-size: 11px;
   color: var(--subtext);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.settings-quick-reply-agents-text.empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.settings-quick-reply-edit-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--subtext);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.settings-quick-reply-edit-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .settings-btn-add {
@@ -1512,20 +1543,125 @@ button svg {
   opacity: 0.85;
 }
 
-.settings-btn-delete {
-  background: none;
-  border: none;
-  color: var(--red);
-  font-size: 18px;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
-  line-height: 1;
+/* Dialog overlay */
+.settings-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 600;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 20px;
 }
 
-.settings-btn-delete:hover {
+.settings-dialog {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  font-family: inherit;
+}
+
+.settings-dialog-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 16px;
+}
+
+.settings-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-dialog-field label,
+.settings-dialog-label {
+  font-size: 12px;
+  color: var(--subtext);
+}
+
+.settings-dialog-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-dialog-row span {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.settings-dialog-agents-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.settings-dialog-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.settings-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.settings-dialog-btn-primary,
+.settings-dialog-btn-secondary,
+.settings-dialog-btn-delete {
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+
+.settings-dialog-btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.settings-dialog-btn-primary:hover {
+  opacity: 0.85;
+}
+
+.settings-dialog-btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.settings-dialog-btn-secondary:hover {
   background: var(--hover);
+}
+
+.settings-dialog-btn-delete {
+  background: none;
+  color: var(--red);
+  border-color: var(--border);
+  margin-right: auto;
+}
+
+.settings-dialog-btn-delete:hover {
+  border-color: var(--red);
+  background: var(--surface);
 }

@@ -261,18 +261,14 @@ export class SettingsPage {
 
     const items = this._config.quickReplies?.items || []
     for (let i = 0; i < items.length; i++) {
-      list.appendChild(this._buildQuickReplyRow(items[i], i))
+      list.appendChild(this._buildQuickReplyCompactRow(items[i], i))
     }
 
     const addBtn = document.createElement('button')
     addBtn.className = 'settings-btn-add'
     addBtn.textContent = 'Добавить быстрый ответ'
     addBtn.addEventListener('click', () => {
-      this._ensureQuickRepliesSettings()
-      this._config.quickReplies.items.push({ id: crypto.randomUUID(), label: '', command: '', enabled: true, agents: [] })
-      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
-      this._scheduleSave()
-      this._rerenderQuickRepliesCategory()
+      this._openQuickReplyDialog({ id: crypto.randomUUID(), label: '', command: '', enabled: true, agents: [] }, -1)
     })
 
     category.appendChild(list)
@@ -280,83 +276,170 @@ export class SettingsPage {
     return category
   }
 
-  _buildQuickReplyRow(item, index) {
+  _buildQuickReplyCompactRow(item, index) {
     const row = document.createElement('div')
-    row.className = 'settings-quick-reply-row'
+    row.className = 'settings-quick-reply-compact-row'
 
+    const text = document.createElement('div')
+    text.className = 'settings-quick-reply-text'
+    const displayText = item.label || item.command
+    text.textContent = displayText || '(пусто)'
+    if (!displayText) text.classList.add('empty')
+    if (!item.enabled) text.classList.add('disabled')
+
+    const agents = document.createElement('div')
+    agents.className = 'settings-quick-reply-agents-text'
+    if (item.agents && item.agents.length > 0) {
+      const agentLabels = item.agents.map(id => {
+        const agent = SUPPORTED_AGENTS.find(a => a.id === id)
+        return agent ? agent.label : id
+      })
+      agents.textContent = agentLabels.join(', ')
+    } else {
+      agents.textContent = 'нет агентов'
+      agents.classList.add('empty')
+    }
+
+    const editBtn = document.createElement('button')
+    editBtn.className = 'settings-quick-reply-edit-btn'
+    editBtn.textContent = 'Редактировать'
+    editBtn.addEventListener('click', () => this._openQuickReplyDialog(item, index))
+
+    row.appendChild(text)
+    row.appendChild(agents)
+    row.appendChild(editBtn)
+    return row
+  }
+
+  _openQuickReplyDialog(item, index) {
+    const overlay = document.createElement('div')
+    overlay.className = 'settings-dialog-overlay'
+
+    const dialog = document.createElement('div')
+    dialog.className = 'settings-dialog'
+
+    const header = document.createElement('div')
+    header.className = 'settings-dialog-header'
+    header.textContent = index >= 0 ? 'Редактировать быстрый ответ' : 'Новый быстрый ответ'
+
+    const body = document.createElement('div')
+    body.className = 'settings-dialog-body'
+
+    // Text input (label = command)
+    const labelGroup = document.createElement('div')
+    labelGroup.className = 'settings-dialog-field'
+    const labelLabel = document.createElement('label')
+    labelLabel.textContent = 'Текст и команда'
     const labelInput = document.createElement('input')
     labelInput.type = 'text'
     labelInput.className = 'settings-input'
-    labelInput.value = item.label || ''
-    labelInput.placeholder = 'Текст кнопки'
-    labelInput.addEventListener('input', () => {
-      item.label = labelInput.value
-      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
-      this._scheduleSave()
-    })
+    labelInput.value = item.label || item.command || ''
+    labelInput.placeholder = 'Например: Ok'
+    labelGroup.appendChild(labelLabel)
+    labelGroup.appendChild(labelInput)
 
-    const commandInput = document.createElement('input')
-    commandInput.type = 'text'
-    commandInput.className = 'settings-input'
-    commandInput.value = item.command || ''
-    commandInput.placeholder = 'Команда'
-    commandInput.addEventListener('input', () => {
-      item.command = commandInput.value
-      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
-      this._scheduleSave()
-    })
+    // Enabled toggle
+    const enabledRow = document.createElement('div')
+    enabledRow.className = 'settings-dialog-row'
+    const enabledLabel = document.createElement('span')
+    enabledLabel.textContent = 'Включено'
+    const enabledToggle = this._createToggle(!!item.enabled, () => {})
+    enabledRow.appendChild(enabledLabel)
+    enabledRow.appendChild(enabledToggle)
 
-    const enabledToggle = this._createToggle(!!item.enabled, (val) => {
-      item.enabled = val
-      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
-      this._scheduleSave()
-    })
+    // Agents toggles
+    const agentsBlock = document.createElement('div')
+    agentsBlock.className = 'settings-dialog-field'
+    const agentsTitle = document.createElement('div')
+    agentsTitle.className = 'settings-dialog-label'
+    agentsTitle.textContent = 'Агенты'
+    agentsBlock.appendChild(agentsTitle)
 
-    const agentsWrapper = document.createElement('div')
-    agentsWrapper.className = 'settings-quick-reply-agents'
+    const agentsGrid = document.createElement('div')
+    agentsGrid.className = 'settings-dialog-agents-grid'
+    const agentToggles = []
     for (const agent of SUPPORTED_AGENTS) {
-      const agentWrapper = document.createElement('div')
-      agentWrapper.className = 'settings-quick-reply-agent'
-
       const isChecked = (item.agents || []).includes(agent.id)
-      const agentToggle = this._createToggle(isChecked, (val) => {
-        if (!item.agents) item.agents = []
-        if (val) {
-          if (!item.agents.includes(agent.id)) item.agents.push(agent.id)
-        } else {
-          item.agents = item.agents.filter(id => id !== agent.id)
-        }
-        this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
-        this._scheduleSave()
-      })
-
+      const agentRow = document.createElement('div')
+      agentRow.className = 'settings-dialog-agent-row'
+      const agentToggle = this._createToggle(isChecked, () => {})
       const agentLabel = document.createElement('span')
-      agentLabel.className = 'settings-quick-reply-agent-label'
       agentLabel.textContent = agent.label
-
-      agentWrapper.appendChild(agentToggle)
-      agentWrapper.appendChild(agentLabel)
-      agentsWrapper.appendChild(agentWrapper)
+      agentRow.appendChild(agentToggle)
+      agentRow.appendChild(agentLabel)
+      agentsGrid.appendChild(agentRow)
+      agentToggles.push({ id: agent.id, toggle: agentToggle })
     }
+    agentsBlock.appendChild(agentsGrid)
+
+    body.appendChild(labelGroup)
+    body.appendChild(enabledRow)
+    body.appendChild(agentsBlock)
+
+    const footer = document.createElement('div')
+    footer.className = 'settings-dialog-footer'
 
     const deleteBtn = document.createElement('button')
-    deleteBtn.className = 'settings-btn-delete'
-    deleteBtn.textContent = '×'
-    deleteBtn.title = 'Удалить'
+    deleteBtn.className = 'settings-dialog-btn-delete'
+    deleteBtn.textContent = 'Удалить'
     deleteBtn.addEventListener('click', () => {
-      const items = this._config.quickReplies?.items || []
-      items.splice(index, 1)
-      this._onSettingsChanged('quickReplies.items', items)
-      this._scheduleSave()
-      this._rerenderQuickRepliesCategory()
+      if (index >= 0) {
+        const items = this._config.quickReplies?.items || []
+        items.splice(index, 1)
+        this._onSettingsChanged('quickReplies.items', items)
+        this._scheduleSave()
+        this._rerenderQuickRepliesCategory()
+      }
+      overlay.remove()
     })
 
-    row.appendChild(labelInput)
-    row.appendChild(commandInput)
-    row.appendChild(enabledToggle)
-    row.appendChild(agentsWrapper)
-    row.appendChild(deleteBtn)
-    return row
+    const cancelBtn = document.createElement('button')
+    cancelBtn.className = 'settings-dialog-btn-secondary'
+    cancelBtn.textContent = 'Отмена'
+    cancelBtn.addEventListener('click', () => overlay.remove())
+
+    const saveBtn = document.createElement('button')
+    saveBtn.className = 'settings-dialog-btn-primary'
+    saveBtn.textContent = 'Сохранить'
+    saveBtn.addEventListener('click', () => {
+      const value = labelInput.value.trim()
+      const enabled = enabledToggle.querySelector('input').checked
+      const selectedAgents = agentToggles
+        .filter(({ toggle }) => toggle.querySelector('input').checked)
+        .map(({ id }) => id)
+
+      const newItem = {
+        id: item.id || crypto.randomUUID(),
+        label: value,
+        command: value,
+        enabled,
+        agents: selectedAgents
+      }
+
+      this._ensureQuickRepliesSettings()
+      if (index >= 0) {
+        this._config.quickReplies.items[index] = newItem
+      } else {
+        this._config.quickReplies.items.push(newItem)
+      }
+
+      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
+      this._scheduleSave()
+      this._rerenderQuickRepliesCategory()
+      overlay.remove()
+    })
+
+    footer.appendChild(deleteBtn)
+    footer.appendChild(cancelBtn)
+    footer.appendChild(saveBtn)
+
+    dialog.appendChild(header)
+    dialog.appendChild(body)
+    dialog.appendChild(footer)
+    overlay.appendChild(dialog)
+    document.body.appendChild(overlay)
+
+    setTimeout(() => labelInput.focus(), 0)
   }
 
   _rerenderQuickRepliesCategory() {
