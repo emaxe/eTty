@@ -82,6 +82,7 @@ export class FileTree {
         this._injectToPty?.('\x1b[200~' + pathToUse + '\x1b[201~')
       } else {
         await navigator.clipboard.writeText(pathToUse)
+        this._focusTerminal?.()
         // Flash OK icon to indicate success
         copyBtn.innerHTML = Icons.ok
         copyBtn.classList.add('success')

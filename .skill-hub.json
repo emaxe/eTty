@@ -1,0 +1,19 @@
+{
+  "registryUrl": "https://github.com/emaxe/skill-hub-catalog.git",
+  "extensions": [
+    {
+      "type": "skill",
+      "name": "feature-accept",
+      "version": "1.0.0",
+      "scope": "project"
+    },
+    {
+      "type": "skill",
+      "name": "feature-planning",
+      "version": "1.0.0",
+      "scope": "project"
+    }
+  ],
+  "project": "etty",
+  "gitignoreAgentDirs": true
+}

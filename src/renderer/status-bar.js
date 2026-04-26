@@ -201,7 +201,7 @@ export class StatusBar {
       const branch = (result.branch || 'HEAD').replace(/[<>&"]/g, c =>
         ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]))
       this._btnEl.innerHTML =
-        `${Icons.gitBranch} ${branch}&nbsp;&nbsp;<span class="stat-add">+${result.totalAdditions}</span> <span class="stat-del">-${result.totalDeletions}</span>`
+        `${Icons.gitBranch}${branch}<span class="stat-add">+${result.totalAdditions}</span><span class="stat-del">-${result.totalDeletions}</span>`
       this._btnEl.classList.remove('hidden')
     } catch (e) {
       this._btnEl.classList.add('hidden')

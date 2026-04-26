@@ -182,6 +182,7 @@ async function init() {
 
   const fileTree = new FileTree(fileTreeContainerEl, {
     writeToPty: shellCmdToPtyActive,
+    injectToPty: writeToPtyActive,
     focusTerminal: focusActiveTerminal,
     onFileOpen: (filePath) => editorPanel.openFile(filePath),
     runInNewTab: async (filePath) => {
@@ -322,12 +323,11 @@ async function init() {
     onLaunchAgent: launchAgentInActiveTab,
     agentCommandsPanelEl: document.getElementById('agent-commands-panel'),
     onAgentCommand: (cmd) => {
-      const isCopilot = tabBar.getActive()?.activeAgentId === 'copilot'
-      const isClaude = tabBar.getActive()?.activeAgentId === 'claude'
-      navigator.clipboard.writeText(cmd).then(() => {
-        const bracketedPaste = `\x1b[200~${cmd + ''}\x1b[201~`
-        shellCmdToPtyActive(bracketedPaste)
-      })
+      const tab = tabBar.getActive()
+      if (tab) {
+        tab.term.focus()
+        window.electronAPI.ptyWrite(tab.pid, `\x1b[200~${cmd + ''}\x1b[201~`)
+      }
     },
     proxyToggleEl: document.getElementById('btn-proxy-toggle'),
     onToggleProxy: (enabled) => {

@@ -5,3 +5,11 @@ release/
 .DS_Store
 *.log
 .worktrees/
+.skill-hub.local.json
+
+# AI agent directories (skill-hub)
+.claude/
+.cursor/
+.github/
+.codex/
+.agents/

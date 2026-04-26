@@ -898,6 +898,9 @@ html, body {
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 .status-bar-btn:hover { background: var(--border); }
 
