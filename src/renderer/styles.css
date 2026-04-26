@@ -1502,6 +1502,7 @@ button svg {
   padding: 2px;
   border-radius: 3px;
   flex-shrink: 0;
+  -webkit-user-select: none;
   user-select: none;
 }
 

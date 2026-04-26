@@ -311,9 +311,11 @@ export class SettingsPage {
       this._ensureQuickRepliesSettings()
       const items = this._config.quickReplies.items
       const [moved] = items.splice(draggedIndex, 1)
-      // Recalculate index after splice
+      // After removing dragged item, elements after it shift down by 1.
+      // If we dragged forward (draggedIndex < target), the target position
+      // in the shortened array is one less than the original index.
       const newTargetIndex = parseInt(targetRow?.dataset.index || String(items.length), 10)
-      const adjustedIndex = draggedIndex < newTargetIndex ? newTargetIndex : newTargetIndex
+      const adjustedIndex = draggedIndex < newTargetIndex ? newTargetIndex - 1 : newTargetIndex
       items.splice(adjustedIndex, 0, moved)
 
       this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
@@ -356,10 +358,7 @@ export class SettingsPage {
     dragHandle.className = 'settings-quick-reply-drag-handle'
     dragHandle.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg>'
     dragHandle.title = 'Перетащить'
-    dragHandle.addEventListener('mousedown', (e) => {
-      // Prevent text selection while dragging
-      e.preventDefault()
-    })
+    // mousedown preventDefault removed — it blocks HTML5 drag initiation
 
     const text = document.createElement('div')
     text.className = 'settings-quick-reply-text'
