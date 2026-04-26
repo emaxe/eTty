@@ -1466,13 +1466,52 @@ button svg {
 .settings-quick-reply-compact-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 0;
+  gap: 10px;
+  padding: 6px 0;
   border-bottom: 1px solid var(--border);
+  position: relative;
 }
 
 .settings-quick-reply-compact-row:last-child {
   border-bottom: none;
+}
+
+.settings-quick-reply-compact-row.dragging {
+  opacity: 0.25;
+}
+
+.settings-quick-reply-compact-row.drop-target::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.settings-quick-reply-drag-handle {
+  color: var(--muted);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.settings-quick-reply-drag-handle:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.settings-quick-reply-drag-handle:active {
+  cursor: grabbing;
 }
 
 .settings-quick-reply-text {
@@ -1511,20 +1550,20 @@ button svg {
 
 .settings-quick-reply-edit-btn {
   background: none;
-  border: 1px solid var(--border);
-  color: var(--subtext);
-  font-size: 11px;
-  padding: 2px 8px;
+  border: none;
+  color: var(--muted);
+  padding: 2px;
   border-radius: 4px;
   cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
 .settings-quick-reply-edit-btn:hover {
-  border-color: var(--accent);
   color: var(--accent);
+  background: var(--hover);
 }
 
 .settings-btn-add {

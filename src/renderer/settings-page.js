@@ -261,8 +261,65 @@ export class SettingsPage {
 
     const items = this._config.quickReplies?.items || []
     for (let i = 0; i < items.length; i++) {
-      list.appendChild(this._buildQuickReplyCompactRow(items[i], i))
+      list.appendChild(this._buildQuickReplyCompactRow(items[i], i, list))
     }
+
+    // Drag & drop on the list
+    list.addEventListener('dragover', (e) => {
+      e.preventDefault()
+      const dragging = list.querySelector('.settings-quick-reply-compact-row.dragging')
+      if (!dragging) return
+
+      // Remove previous drop-target
+      for (const el of list.querySelectorAll('.settings-quick-reply-compact-row')) {
+        el.classList.remove('drop-target')
+      }
+
+      const afterElement = this._getDragAfterElement(list, e.clientY)
+      if (afterElement) {
+        afterElement.classList.add('drop-target')
+      } else if (list.lastElementChild) {
+        list.lastElementChild.classList.add('drop-target')
+      }
+    })
+
+    list.addEventListener('dragleave', (e) => {
+      // If leaving the list entirely, clear targets
+      if (!list.contains(e.relatedTarget)) {
+        for (const el of list.querySelectorAll('.settings-quick-reply-compact-row')) {
+          el.classList.remove('drop-target')
+        }
+      }
+    })
+
+    list.addEventListener('drop', (e) => {
+      e.preventDefault()
+      const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'), 10)
+      if (Number.isNaN(draggedIndex)) return
+
+      // Find target position
+      const rows = [...list.querySelectorAll('.settings-quick-reply-compact-row')]
+      const targetRow = rows.find(r => r.classList.contains('drop-target'))
+      let targetIndex = rows.length - 1
+      if (targetRow) {
+        targetIndex = parseInt(targetRow.dataset.index, 10)
+        targetRow.classList.remove('drop-target')
+      }
+
+      if (draggedIndex === targetIndex) return
+
+      this._ensureQuickRepliesSettings()
+      const items = this._config.quickReplies.items
+      const [moved] = items.splice(draggedIndex, 1)
+      // Recalculate index after splice
+      const newTargetIndex = parseInt(targetRow?.dataset.index || String(items.length), 10)
+      const adjustedIndex = draggedIndex < newTargetIndex ? newTargetIndex : newTargetIndex
+      items.splice(adjustedIndex, 0, moved)
+
+      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
+      this._scheduleSave()
+      this._rerenderQuickRepliesCategory()
+    })
 
     const addBtn = document.createElement('button')
     addBtn.className = 'settings-btn-add'
@@ -276,9 +333,33 @@ export class SettingsPage {
     return category
   }
 
-  _buildQuickReplyCompactRow(item, index) {
+  _getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.settings-quick-reply-compact-row:not(.dragging)')]
+    return draggableElements.reduce((closest, child) => {
+      const box = child.getBoundingClientRect()
+      const offset = y - box.top - box.height / 2
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child }
+      }
+      return closest
+    }, { offset: Number.NEGATIVE_INFINITY }).element
+  }
+
+  _buildQuickReplyCompactRow(item, index, listEl) {
     const row = document.createElement('div')
     row.className = 'settings-quick-reply-compact-row'
+    row.dataset.index = String(index)
+    row.draggable = true
+
+    // Drag handle (grip icon)
+    const dragHandle = document.createElement('div')
+    dragHandle.className = 'settings-quick-reply-drag-handle'
+    dragHandle.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg>'
+    dragHandle.title = 'Перетащить'
+    dragHandle.addEventListener('mousedown', (e) => {
+      // Prevent text selection while dragging
+      e.preventDefault()
+    })
 
     const text = document.createElement('div')
     text.className = 'settings-quick-reply-text'
@@ -300,14 +381,38 @@ export class SettingsPage {
       agents.classList.add('empty')
     }
 
+    // Edit icon button (pencil)
     const editBtn = document.createElement('button')
     editBtn.className = 'settings-quick-reply-edit-btn'
-    editBtn.textContent = 'Редактировать'
+    editBtn.title = 'Редактировать'
+    editBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5L13.5 4.5L5 13L2.5 13.5L3 11L11.5 2.5Z"/><path d="M10 4L12 6"/></svg>'
     editBtn.addEventListener('click', () => this._openQuickReplyDialog(item, index))
 
+    row.appendChild(dragHandle)
     row.appendChild(text)
     row.appendChild(agents)
     row.appendChild(editBtn)
+
+    // Drag events
+    row.addEventListener('dragstart', (e) => {
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', String(index))
+      row.classList.add('dragging')
+      // Hide drag ghost image to avoid rendering the whole row
+      const emptyImage = document.createElement('canvas')
+      e.dataTransfer.setDragImage(emptyImage, 0, 0)
+    })
+
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging')
+      // Remove any drop-target classes
+      if (listEl) {
+        for (const el of listEl.querySelectorAll('.settings-quick-reply-compact-row')) {
+          el.classList.remove('drop-target')
+        }
+      }
+    })
+
     return row
   }
 
