@@ -66,6 +66,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Active agent highlight** — launched agent button glows while running
 - **Force-disable** — toggle agents on/off in Settings
 - **Proxy support** — configure HTTP proxy for all agent commands
+- **Customizable quick replies** — define agent-specific quick commands (e.g., `/clear`, `Ok`, `Продолжай`) via Settings; drag-and-drop to reorder
 
 ### Settings
 
@@ -73,6 +74,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Focus indicator** — glow, border, top-line, or none
 - **File tree behavior** — collapse children on close, single/double-click to open
 - **Prompt style** — default (from `~/.zshrc`), short, minimal, arrow (for new tabs)
+- **AI agent quick replies** — CRUD editor with per-agent toggles; drag-and-drop reordering
 - **Auto-persisted** to disk with debounced saves
 
 ### Session Persistence
@@ -195,7 +197,7 @@ All user data is stored in `~/.config/eTty/` (Electron `userData`):
 
 | File | Purpose |
 |------|---------|
-| `settings.json` | App settings (theme, focus indicator, file tree behavior, prompt style, agent proxy, force-disabled agents) |
+| `settings.json` | App settings (theme, focus indicator, file tree behavior, prompt style, agent proxy, force-disabled agents, quick replies) |
 | `tabs-state.json` | Saved tab state for session restore |
 | `history/global.zsh_history` | Shared command history (5000 lines) |
 | `history/tabs/<id>.zsh_history` | Per-tab command history |

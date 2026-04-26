@@ -11,7 +11,14 @@
 - [x] Задача #4: Стили для новых элементов (`src/renderer/styles.css`)
 - [x] Задача #5: Подключить `quickReplies` в `index.js` (`src/renderer/index.js`)
 
+## Улучшения UX (пост-ревью)
+- [x] Компактный UI: объединить label и command в одно поле, edit-диалог
+- [x] Иконка карандаша вместо кнопки «Редактировать»
+- [x] Drag-and-drop для изменения порядка с grip-иконкой и индикатором вставки
+- [x] Фикс DnD: убрать preventDefault, поправить adjustedIndex после splice
+
 ## Финализация
 - [x] Все проверки пройдены
 - [x] Код закоммичен
-- [x] Статус в README.md обновлён на `Done`
+- [x] README.md обновлён
+- [x] CHANGELOG.md создан
