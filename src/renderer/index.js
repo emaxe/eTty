@@ -287,6 +287,11 @@ async function init() {
         config.agents.proxy = value
         statusBar.setProxyConfig({ proxy: config.agents.proxy, enabled: config.agents.proxyEnabled })
       }
+      if (key === 'quickReplies.items') {
+        if (!config.quickReplies) config.quickReplies = { items: [] }
+        config.quickReplies.items = value
+        statusBar.setQuickReplies({ items: value })
+      }
     },
     onClose: () => {
       btnSettings.classList.remove('active')
@@ -333,7 +338,8 @@ async function init() {
     onToggleProxy: (enabled) => {
       config.agents.proxyEnabled = enabled
       window.electronAPI.settingsSave(config)
-    }
+    },
+    quickReplies: config.quickReplies || { items: [] }
   })
 
   const agentsStatus = await window.electronAPI.agentsGetStatus().catch(() => ({ agents: [] }))

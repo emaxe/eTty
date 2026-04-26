@@ -18,6 +18,7 @@ export class SettingsPage {
     this._overlay = null
     this._saveTimer = null
     this._agentsCategory = null
+    this._quickRepliesCategory = null
     this._agentStatusById = new Map()
   }
 
@@ -29,6 +30,7 @@ export class SettingsPage {
       console.warn('Settings warnings:', ...warnings)
     }
     this._ensureAgentSettings()
+    this._ensureQuickRepliesSettings()
     await this._loadAgentStatus()
     this._buildDOM()
   }
@@ -170,6 +172,9 @@ export class SettingsPage {
     this._agentsCategory = this._buildCategory('ИИ-агенты', this._buildAgentRows())
     body.appendChild(this._agentsCategory)
 
+    this._quickRepliesCategory = this._buildQuickRepliesCategory()
+    body.appendChild(this._quickRepliesCategory)
+
     overlay.appendChild(header)
     overlay.appendChild(body)
     document.body.appendChild(overlay)
@@ -235,6 +240,130 @@ export class SettingsPage {
     const next = this._buildCategory('ИИ-агенты', this._buildAgentRows())
     this._agentsCategory.replaceWith(next)
     this._agentsCategory = next
+  }
+
+  _ensureQuickRepliesSettings() {
+    if (!this._config.quickReplies) this._config.quickReplies = { items: [] }
+    if (!Array.isArray(this._config.quickReplies.items)) this._config.quickReplies.items = []
+  }
+
+  _buildQuickRepliesCategory() {
+    const category = document.createElement('div')
+    category.className = 'settings-category'
+
+    const title = document.createElement('div')
+    title.className = 'settings-category-title'
+    title.textContent = 'Быстрые ответы'
+    category.appendChild(title)
+
+    const list = document.createElement('div')
+    list.className = 'settings-quick-replies-list'
+
+    const items = this._config.quickReplies?.items || []
+    for (let i = 0; i < items.length; i++) {
+      list.appendChild(this._buildQuickReplyRow(items[i], i))
+    }
+
+    const addBtn = document.createElement('button')
+    addBtn.className = 'settings-btn-add'
+    addBtn.textContent = 'Добавить быстрый ответ'
+    addBtn.addEventListener('click', () => {
+      this._ensureQuickRepliesSettings()
+      this._config.quickReplies.items.push({ id: crypto.randomUUID(), label: '', command: '', enabled: true, agents: [] })
+      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
+      this._scheduleSave()
+      this._rerenderQuickRepliesCategory()
+    })
+
+    category.appendChild(list)
+    category.appendChild(addBtn)
+    return category
+  }
+
+  _buildQuickReplyRow(item, index) {
+    const row = document.createElement('div')
+    row.className = 'settings-quick-reply-row'
+
+    const labelInput = document.createElement('input')
+    labelInput.type = 'text'
+    labelInput.className = 'settings-input'
+    labelInput.value = item.label || ''
+    labelInput.placeholder = 'Текст кнопки'
+    labelInput.addEventListener('input', () => {
+      item.label = labelInput.value
+      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
+      this._scheduleSave()
+    })
+
+    const commandInput = document.createElement('input')
+    commandInput.type = 'text'
+    commandInput.className = 'settings-input'
+    commandInput.value = item.command || ''
+    commandInput.placeholder = 'Команда'
+    commandInput.addEventListener('input', () => {
+      item.command = commandInput.value
+      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
+      this._scheduleSave()
+    })
+
+    const enabledToggle = this._createToggle(!!item.enabled, (val) => {
+      item.enabled = val
+      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
+      this._scheduleSave()
+    })
+
+    const agentsWrapper = document.createElement('div')
+    agentsWrapper.className = 'settings-quick-reply-agents'
+    for (const agent of SUPPORTED_AGENTS) {
+      const agentWrapper = document.createElement('div')
+      agentWrapper.className = 'settings-quick-reply-agent'
+
+      const isChecked = (item.agents || []).includes(agent.id)
+      const agentToggle = this._createToggle(isChecked, (val) => {
+        if (!item.agents) item.agents = []
+        if (val) {
+          if (!item.agents.includes(agent.id)) item.agents.push(agent.id)
+        } else {
+          item.agents = item.agents.filter(id => id !== agent.id)
+        }
+        this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
+        this._scheduleSave()
+      })
+
+      const agentLabel = document.createElement('span')
+      agentLabel.className = 'settings-quick-reply-agent-label'
+      agentLabel.textContent = agent.label
+
+      agentWrapper.appendChild(agentToggle)
+      agentWrapper.appendChild(agentLabel)
+      agentsWrapper.appendChild(agentWrapper)
+    }
+
+    const deleteBtn = document.createElement('button')
+    deleteBtn.className = 'settings-btn-delete'
+    deleteBtn.textContent = '×'
+    deleteBtn.title = 'Удалить'
+    deleteBtn.addEventListener('click', () => {
+      const items = this._config.quickReplies?.items || []
+      items.splice(index, 1)
+      this._onSettingsChanged('quickReplies.items', items)
+      this._scheduleSave()
+      this._rerenderQuickRepliesCategory()
+    })
+
+    row.appendChild(labelInput)
+    row.appendChild(commandInput)
+    row.appendChild(enabledToggle)
+    row.appendChild(agentsWrapper)
+    row.appendChild(deleteBtn)
+    return row
+  }
+
+  _rerenderQuickRepliesCategory() {
+    if (!this._quickRepliesCategory) return
+    const next = this._buildQuickRepliesCategory()
+    this._quickRepliesCategory.replaceWith(next)
+    this._quickRepliesCategory = next
   }
 
   _buildCategory(title, rows) {

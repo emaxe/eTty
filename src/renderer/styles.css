@@ -1453,3 +1453,79 @@ button svg {
   filter: brightness(1.15);
   transform: scale(1.08);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Quick Replies Settings
+   ═══════════════════════════════════════════════════════════════ */
+
+.settings-quick-replies-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-quick-reply-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+
+.settings-quick-reply-row .settings-input {
+  min-width: 0;
+  flex: 1;
+  font-size: 12px;
+}
+
+.settings-quick-reply-agents {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.settings-quick-reply-agent {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--subtext);
+}
+
+.settings-btn-add {
+  margin-top: 8px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.settings-btn-add:hover {
+  opacity: 0.85;
+}
+
+.settings-btn-delete {
+  background: none;
+  border: none;
+  color: var(--red);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-btn-delete:hover {
+  background: var(--hover);
+}

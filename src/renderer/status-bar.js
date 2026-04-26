@@ -5,7 +5,7 @@ import { Icons } from './icons.js'
  * Polling каждые 5 секунд. Клик по Git-кнопке открывает полную Git-панель.
  */
 export class StatusBar {
-  constructor({ btnEl, cwdEl, nodeEl, onOpen, agentButtons = [], onLaunchAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null }) {
+  constructor({ btnEl, cwdEl, nodeEl, onOpen, agentButtons = [], onLaunchAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [] } }) {
     this._btnEl = btnEl
     this._cwdEl = cwdEl
     this._nodeEl = nodeEl
@@ -16,6 +16,7 @@ export class StatusBar {
     this._onAgentCommand = onAgentCommand
     this._proxyToggleEl = proxyToggleEl
     this._onToggleProxy = onToggleProxy
+    this._quickReplies = quickReplies
     this._getRootPath = null
     this._intervalId = null
     this._homeDir = null
@@ -34,16 +35,6 @@ export class StatusBar {
         const agentId = button.dataset.agentId
         if (agentId) this._onLaunchAgent?.(agentId)
       })
-    }
-
-    if (this._agentCommandsPanelEl) {
-      for (const button of this._agentCommandsPanelEl.querySelectorAll('.agent-cmd-btn')) {
-        button.addEventListener('click', (e) => {
-          const cmd = button.dataset.cmd
-          if (!cmd || !this._onAgentCommand) return
-          this._onAgentCommand(cmd, false)
-        })
-      }
     }
 
     if (this._proxyToggleEl) {
@@ -108,6 +99,11 @@ export class StatusBar {
     this._updateProxyButton()
   }
 
+  setQuickReplies(quickReplies) {
+    this._quickReplies = quickReplies || { items: [] }
+    this._updateAgentCommandsPanel()
+  }
+
   _updateAgentButtons() {
     for (const button of this._agentButtons) {
       const agentId = button.dataset.agentId
@@ -138,22 +134,21 @@ export class StatusBar {
     this._agentCommandsPanelEl.classList.toggle('hidden', !busy)
     if (!busy) return
 
-    const AGENT_COMMANDS = {
-      claude: ['/clear', '/model', 'Ok', 'Продолжай', '/exit'],
-      codex: ['/clear', '/model', 'Ok', 'Продолжай', '/exit'],
-      copilot: ['/clear', '/model', 'Ok', 'Продолжай', '/exit'],
-      agent: ['/clear', '/model', 'Ok', 'Продолжай', '/exit'],
-      opencode: ['/new', '/model', 'Ok', 'Продолжай', '/exit']
+    this._agentCommandsPanelEl.innerHTML = ''
+    const items = this._quickReplies?.items || []
+    const filtered = items.filter(i => i.enabled && i.agents?.includes(this._activeAgentId))
+    for (const item of filtered) {
+      const btn = document.createElement('button')
+      btn.className = 'agent-cmd-btn'
+      btn.dataset.cmd = item.command
+      btn.textContent = item.label
+      btn.title = item.command ? `Отправить ${item.command}` : ''
+      btn.addEventListener('click', () => {
+        if (!this._onAgentCommand || !item.command) return
+        this._onAgentCommand(item.command, false)
+      })
+      this._agentCommandsPanelEl.appendChild(btn)
     }
-    const commands = AGENT_COMMANDS[this._activeAgentId] || []
-    const buttons = this._agentCommandsPanelEl.querySelectorAll('.agent-cmd-btn')
-    buttons.forEach((btn, i) => {
-      const cmd = commands[i] || ''
-      btn.dataset.cmd = cmd
-      btn.textContent = cmd
-      btn.title = cmd ? `Отправить ${cmd}` : ''
-      btn.style.display = cmd ? '' : 'none'
-    })
   }
 
   _updateProxyButton() {
