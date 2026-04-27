@@ -31,34 +31,18 @@ export class StatusBar {
     this._btnEl.addEventListener('click', () => this._onOpen())
 
     for (const button of this._agentButtons) {
-      button._ettyPendingTimer = null
-      button._ettyClickCount = 0
-
       button.addEventListener('click', () => {
-        button._ettyClickCount = (button._ettyClickCount || 0) + 1
-        if (button._ettyClickCount === 1) {
-          button._ettyPendingTimer = setTimeout(() => {
-            button._ettyClickCount = 0
-            button._ettyPendingTimer = null
-            if (button.disabled || button.classList.contains('status-agent-busy')) return
-            const agentId = button.dataset.agentId
-            if (agentId) this._onLaunchAgent?.(agentId)
-          }, 250)
-        } else if (button._ettyClickCount >= 2) {
-          clearTimeout(button._ettyPendingTimer)
-          button._ettyPendingTimer = null
-          button._ettyClickCount = 0
-          const agentId = button.dataset.agentId
-          if (!agentId) return
-          if (this._activeTabBusy && !this._activeAgentId) {
-            if (button.classList.contains('status-agent-busy')) {
-              this._onSelectAgent?.(agentId)
-            }
-          } else if (!this._activeTabBusy) {
-            if (!button.disabled && !button.classList.contains('status-agent-busy')) {
-              this._onLaunchAgent?.(agentId)
-            }
-          }
+        if (button.disabled || button.classList.contains('status-agent-busy')) return
+        const agentId = button.dataset.agentId
+        if (agentId) this._onLaunchAgent?.(agentId)
+      })
+
+      button.addEventListener('dblclick', (e) => {
+        e.preventDefault()
+        const agentId = button.dataset.agentId
+        if (!agentId) return
+        if (this._activeTabBusy && !this._activeAgentId) {
+          this._onSelectAgent?.(agentId)
         }
       })
     }
@@ -94,17 +78,6 @@ export class StatusBar {
     if (this._intervalId !== null) {
       clearInterval(this._intervalId)
       this._intervalId = null
-    }
-  }
-
-  destroy() {
-    this.stop()
-    for (const button of this._agentButtons) {
-      if (button._ettyPendingTimer) {
-        clearTimeout(button._ettyPendingTimer)
-        button._ettyPendingTimer = null
-      }
-      button._ettyClickCount = 0
     }
   }
 
