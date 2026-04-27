@@ -947,6 +947,14 @@ html, body {
   background: color-mix(in srgb, var(--accent) 28%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 0 10px color-mix(in srgb, var(--accent) 32%, transparent);
 }
+.status-agent-btn.status-agent-busy {
+  opacity: 0.35;
+  cursor: default;
+}
+.status-agent-btn.status-agent-busy:hover {
+  opacity: 0.6;
+  cursor: pointer;
+}
 
 #agent-commands-panel {
   display: flex;
