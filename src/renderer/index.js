@@ -321,8 +321,13 @@ async function init() {
 
   const selectAgentAsActive = (agentId) => {
     const tab = tabBar.getActive()
-    if (!tab || !tab.isBusy) return
+    console.log('[Renderer] selectAgentAsActive called for:', agentId, 'tab:', tab?.tabId, 'isBusy:', tab?.isBusy, 'activeAgentId:', tab?.activeAgentId)
+    if (!tab || !tab.isBusy) {
+      console.log('[Renderer] selectAgentAsActive rejected: no tab or not busy')
+      return
+    }
     tab.activeAgentId = agentId
+    console.log('[Renderer] selectAgentAsActive set activeAgentId to:', agentId)
     syncStatusBarTerminalState()
   }
 

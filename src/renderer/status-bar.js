@@ -36,18 +36,26 @@ export class StatusBar {
       button.addEventListener('click', () => {
         const now = Date.now()
         const isDoubleClick = now - lastClickTime < 500
+        const timeSinceLast = now - lastClickTime
         lastClickTime = now
+
+        console.log('[StatusBar] click:', button.dataset.agentId, 'isDoubleClick:', isDoubleClick, 'timeSinceLast:', timeSinceLast, 'activeTabBusy:', this._activeTabBusy, 'activeAgentId:', this._activeAgentId, 'disabled:', button.disabled, 'hasBusyClass:', button.classList.contains('status-agent-busy'))
 
         // Double-click: если терминал занят и нет активного агента — назначаем
         if (isDoubleClick && this._activeTabBusy && !this._activeAgentId) {
           const agentId = button.dataset.agentId
+          console.log('[StatusBar] double-click detected, calling onSelectAgent for:', agentId)
           if (agentId) this._onSelectAgent?.(agentId)
           return
         }
 
         // Single-click: запуск агента только если терминал свободен
-        if (button.disabled || button.classList.contains('status-agent-busy')) return
+        if (button.disabled || button.classList.contains('status-agent-busy')) {
+          console.log('[StatusBar] single-click ignored (disabled or busy)')
+          return
+        }
         const agentId = button.dataset.agentId
+        console.log('[StatusBar] single-click launching:', agentId)
         if (agentId) this._onLaunchAgent?.(agentId)
       })
     }
@@ -102,6 +110,7 @@ export class StatusBar {
   }
 
   setTerminalState({ isBusy, activeAgentId }) {
+    console.log('[StatusBar] setTerminalState:', 'isBusy:', isBusy, 'activeAgentId:', activeAgentId)
     this._activeTabBusy = !!isBusy
     this._activeAgentId = activeAgentId || null
     this._updateAgentButtons()
@@ -148,6 +157,8 @@ export class StatusBar {
       } else {
         button.title = `Запустить ${agentStatus?.label || button.textContent}`
       }
+
+      console.log('[StatusBar] button state:', agentId, 'display:', button.style.display, 'disabled:', button.disabled, 'classes:', button.className, 'title:', button.title)
     }
   }
 
