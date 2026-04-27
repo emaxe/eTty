@@ -31,19 +31,24 @@ export class StatusBar {
     this._btnEl.addEventListener('click', () => this._onOpen())
 
     for (const button of this._agentButtons) {
+      let lastClickTime = 0
+
       button.addEventListener('click', () => {
+        const now = Date.now()
+        const isDoubleClick = now - lastClickTime < 500
+        lastClickTime = now
+
+        // Double-click: если терминал занят и нет активного агента — назначаем
+        if (isDoubleClick && this._activeTabBusy && !this._activeAgentId) {
+          const agentId = button.dataset.agentId
+          if (agentId) this._onSelectAgent?.(agentId)
+          return
+        }
+
+        // Single-click: запуск агента только если терминал свободен
         if (button.disabled || button.classList.contains('status-agent-busy')) return
         const agentId = button.dataset.agentId
         if (agentId) this._onLaunchAgent?.(agentId)
-      })
-
-      button.addEventListener('dblclick', (e) => {
-        e.preventDefault()
-        const agentId = button.dataset.agentId
-        if (!agentId) return
-        if (this._activeTabBusy && !this._activeAgentId) {
-          this._onSelectAgent?.(agentId)
-        }
       })
     }
 
@@ -133,7 +138,13 @@ export class StatusBar {
       button.classList.toggle('status-agent-active', isActive)
 
       if (this._activeTabBusy) {
-        button.title = isActive ? 'Терминал занят' : 'Терминал занят'
+        if (isActive) {
+          button.title = 'Терминал занят'
+        } else if (!this._activeAgentId) {
+          button.title = `Терминал занят — двойной клик для выбора ${agentStatus?.label || button.textContent}`
+        } else {
+          button.title = 'Терминал занят'
+        }
       } else {
         button.title = `Запустить ${agentStatus?.label || button.textContent}`
       }
