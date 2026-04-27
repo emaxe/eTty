@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Double-click to select active AI agent** — when terminal is busy but no agent was auto-detected, double-click any agent button to manually assign it as active
+  - Enables quick-reply buttons for agents launched manually or via other applications
+  - Click-based detection (500ms threshold) for reliable cross-platform behavior
+  - Busy-state buttons use `status-agent-busy` CSS class instead of `disabled` attribute to allow click events
 - **Configurable quick replies for AI agents** — replace hardcoded agent command buttons with fully customizable quick replies
   - Define command text, enable/disable per item, assign to specific agents (Claude, Codex, Copilot, Cursor Agent, OpenCode)
   - Compact Settings UI: list view with inline agent tags, click pencil icon to open edit dialog

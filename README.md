@@ -67,6 +67,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Force-disable** — toggle agents on/off in Settings
 - **Proxy support** — configure HTTP proxy for all agent commands
 - **Customizable quick replies** — define agent-specific quick commands (e.g., `/clear`, `Ok`, `Продолжай`) via Settings; drag-and-drop to reorder
+- **Double-click to select active agent** — when the terminal is busy but the active agent wasn't auto-detected (e.g., launched manually or via another app), double-click any agent button in the status bar to manually assign it as active. This enables that agent's quick-reply buttons.
 
 ### Settings
 

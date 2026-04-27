@@ -947,6 +947,11 @@ html, body {
   background: color-mix(in srgb, var(--accent) 28%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 0 10px color-mix(in srgb, var(--accent) 32%, transparent);
 }
+
+/* status-agent-busy — кнопка агента при занятом терминале (busy).
+ * Используется вместо :disabled, чтобы click-события доходили для double-click обработки.
+ * Hover с opacity: 0.6 намекает, что кнопка интерактивна (double-click назначает агента активным).
+ */
 .status-agent-btn.status-agent-busy {
   opacity: 0.35;
   cursor: default;

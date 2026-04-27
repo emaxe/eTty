@@ -17,13 +17,14 @@
 
 ### StatusBar (renderer)
 
-- Добавить обработчик `dblclick` на `.status-agent-btn`.
-- При `dblclick`:
-  - Если `!_activeTabBusy` — игнорировать (одинарный клик уже запускает агента).
-  - Если `_activeTabBusy && !_activeAgentId` — вызвать новый колбэк `_onSelectAgent(agentId)`.
-  - Если `_activeTabBusy && _activeAgentId` — игнорировать (уже назначен).
-- При `click` на disabled-кнопку в busy-режиме — ничего не делать (сейчас уже так).
-- Защита от конфликта click + dblclick: в `dblclick`-обработчике установить флаг на 300ms, в `click` проверять флаг.
+- **Click-based double-click detection** (вместо нативного `dblclick`, т.к. порог ОС ~500ms, а JS-таймер — ~250ms).
+  - Отслеживаем `lastClickTime` на каждой кнопке.
+  - Если разница между кликами < 500ms — считаем double-click.
+  - При double-click + busy + нет activeAgentId — вызываем `_onSelectAgent(agentId)`.
+  - При одинарном клике на busy-кнопку — ничего не делаем (return early).
+- **Кнопки в busy-состоянии** больше не получают атрибут `disabled` (иначе click не доходит).
+  - Вместо этого используется CSS-класс `status-agent-busy`.
+  - Disabled остаётся только для: а) агента, активного по кнопке; б) скрытых через Settings.
 
 ### Renderer (index.js)
 

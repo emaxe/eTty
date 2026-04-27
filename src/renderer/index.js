@@ -319,6 +319,13 @@ async function init() {
     tab.term.focus()
   }
 
+  /**
+   * Назначает агента активным по double-click из StatusBar.
+   * Используется когда терминал занят (busy), но агент не был определён автоматически
+   * через OSC 133 (например, запущен вручную или через другое приложение).
+   * Не отправляет команду в PTY — только декларативно устанавливает activeAgentId,
+   * чтобы StatusBar показал быстрые команды (quick replies) этого агента.
+   */
   const selectAgentAsActive = (agentId) => {
     const tab = tabBar.getActive()
     if (!tab || !tab.isBusy) return

@@ -3,6 +3,15 @@ import { Icons } from './icons.js'
 /**
  * Статус-бар. Показывает текущую директорию, версию Node.js и Git-статистику.
  * Polling каждые 5 секунд. Клик по Git-кнопке открывает полную Git-панель.
+ *
+ * Кнопки ИИ-агентов (Claude, Codex, Copilot, Agent, OpenCode):
+ * - Одинарный клик при свободном терминале — запускает агента
+ * - Двойной клик при занятом терминале (busy) без активного агента — назначает агента активным
+ *   и показывает его быстрые команды (quick replies). Это нужно когда агент запущен вручную
+ *   или через другое приложение, и eTty не смогла авто-определить его через OSC 133.
+ * - Когда агент активен, остальные кнопки скрываются
+ * - Кнопки агентов в busy-состоянии имеют класс status-agent-busy (а не disabled),
+ *   чтобы click-события доходили для double-click обработки.
  */
 export class StatusBar {
   constructor({ btnEl, cwdEl, nodeEl, onOpen, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [] } }) {

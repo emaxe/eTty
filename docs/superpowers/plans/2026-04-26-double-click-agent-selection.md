@@ -4,51 +4,43 @@
 
 **Goal:** Allow double-clicking an agent button to manually set it as the active agent when the terminal is busy but no agent was auto-detected.
 
-**Architecture:** Extend StatusBar with a `dblclick` handler on agent buttons that invokes a new `onSelectAgent` callback. The renderer callback sets `tab.activeAgentId` without sending any command to the PTY. Add CSS hover feedback for disabled agent buttons to hint at interactivity.
+**Architecture:** StatusBar tracks `lastClickTime` per button to detect double-clicks (500ms threshold) within the `click` handler. When double-clicked while terminal is busy and no agent is active, it invokes `onSelectAgent`. The renderer callback sets `tab.activeAgentId` without sending any command to the PTY. Busy-state buttons use CSS class `status-agent-busy` instead of `disabled` attribute to allow click events through. Add CSS hover feedback for busy agent buttons to hint at double-click interactivity.
 
 **Tech Stack:** Vanilla JS (Electron renderer), CSS
 
 ---
 
-### Task 1: StatusBar — Add double-click handler and click/dblclick guard
+### Task 1: StatusBar — Add click-based double-click detection
 
 **Files:**
 - Modify: `src/renderer/status-bar.js`
 
-**Context:** The `StatusBar` constructor currently attaches `click` listeners to agent buttons. We need to add `dblclick` listeners and prevent the `click` handler from firing when a double-click occurs.
+**Context:** The `StatusBar` constructor currently attaches simple `click` listeners to agent buttons. We need to detect double-clicks (two clicks within 500ms) within the `click` handler itself, because native `dblclick` is unreliable in Electron when combined with click timers (OS threshold ~500ms vs JS timer ~250ms causes race conditions).
 
-- [ ] **Step 1: Add dblclick handler and click guard in StatusBar constructor**
+- [ ] **Step 1: Add click-based double-click detection in StatusBar constructor**
 
-Modify the agent button loop in `StatusBar` constructor (lines 32-38). Replace it with:
+Modify the agent button loop in `StatusBar` constructor. Replace it with:
 
 ```js
     for (const button of this._agentButtons) {
-      let dblClickTimer = null
+      let lastClickTime = 0
 
       button.addEventListener('click', () => {
-        if (dblClickTimer) {
-          clearTimeout(dblClickTimer)
-          dblClickTimer = null
-          return // dblclick will handle this
-        }
-        dblClickTimer = setTimeout(() => {
-          dblClickTimer = null
-          if (button.disabled) return
-          const agentId = button.dataset.agentId
-          if (agentId) this._onLaunchAgent?.(agentId)
-        }, 250)
-      })
+        const now = Date.now()
+        const isDoubleClick = now - lastClickTime < 500
+        lastClickTime = now
 
-      button.addEventListener('dblclick', () => {
-        if (dblClickTimer) {
-          clearTimeout(dblClickTimer)
-          dblClickTimer = null
+        // Double-click: если терминал занят и нет активного агента — назначаем
+        if (isDoubleClick && this._activeTabBusy && !this._activeAgentId) {
+          const agentId = button.dataset.agentId
+          if (agentId) this._onSelectAgent?.(agentId)
+          return
         }
+
+        // Single-click: запуск агента только если терминал свободен
+        if (button.disabled || button.classList.contains('status-agent-busy')) return
         const agentId = button.dataset.agentId
-        if (!agentId) return
-        // Only allow selection when busy and no active agent yet
-        if (!this._activeTabBusy || this._activeAgentId) return
-        this._onSelectAgent?.(agentId)
+        if (agentId) this._onLaunchAgent?.(agentId)
       })
     }
 ```
@@ -139,19 +131,23 @@ git commit -m "feat(renderer): wire up onSelectAgent for double-click agent sele
 
 ---
 
-### Task 3: CSS — Add hover feedback for disabled agent buttons
+### Task 3: CSS — Add styles for busy agent buttons
 
 **Files:**
 - Modify: `src/renderer/styles.css`
 
-**Context:** When a button is disabled, the default cursor is `default`. We want a subtle hover effect to hint that double-click is available.
+**Context:** Busy-state buttons no longer use `disabled` attribute (to allow click events for double-click detection). Instead they use class `status-agent-busy`. We need styles that make them look disabled but hint at interactivity on hover.
 
-- [ ] **Step 1: Add hover style for disabled agent buttons**
+- [ ] **Step 1: Add styles for status-agent-busy class**
 
 After the `.status-agent-btn.status-agent-active` block (after line 960), add:
 
 ```css
-.status-agent-btn:disabled:hover {
+.status-agent-btn.status-agent-busy {
+  opacity: 0.35;
+  cursor: default;
+}
+.status-agent-btn.status-agent-busy:hover {
   opacity: 0.6;
   cursor: pointer;
 }
@@ -169,9 +165,10 @@ git commit -m "feat(styles): add hover feedback on disabled agent buttons for do
 ## Self-Review Checklist
 
 **1. Spec coverage:**
-- [x] Double-click on agent button when busy + no active agent → Task 1 (Step 1 dblclick handler)
+- [x] Double-click on agent button when busy + no active agent → Task 1 (click-based detection, 500ms threshold)
 - [x] Sets activeAgentId without sending command → Task 2 (Step 1 `selectAgentAsActive` — no PTY write)
-- [x] Single click stays disabled when busy → Task 1 (Step 1 click handler still checks `button.disabled`)
+- [x] Single click stays disabled when busy → Task 1 (click handler checks `status-agent-busy` class)
+- [x] Busy buttons allow click events → Task 1 (uses `status-agent-busy` class instead of `disabled` attribute)
 - [x] Auto-detection via OSC 133 unchanged — no code touched for OSC 133
 - [x] Hiding inactive agents preserved — `_updateAgentButtons` logic unchanged
 
