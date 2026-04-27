@@ -873,7 +873,8 @@ html, body {
 }
 .status-item {
   font-size: 11px;
-  padding: 1px 7px;
+  line-height: 1;
+  padding: 0 7px;
   border-radius: 3px;
   background: var(--hover);
   color: var(--text);
@@ -882,6 +883,11 @@ html, body {
   text-overflow: ellipsis;
   max-width: 260px;
   flex-shrink: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 18px;
 }
 #status-node {
   color: var(--green);
@@ -890,7 +896,8 @@ html, body {
 }
 .status-bar-btn {
   font-size: 11px;
-  padding: 1px 7px;
+  line-height: 1;
+  padding: 0 7px;
   border: none;
   border-radius: 3px;
   background: var(--hover);
@@ -898,9 +905,11 @@ html, body {
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 3px;
+  height: 18px;
 }
 .status-bar-btn:hover { background: var(--border); }
 
@@ -942,10 +951,12 @@ html, body {
   cursor: default;
 }
 .status-agent-btn.status-agent-active {
+  opacity: 1;
   color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 90%, transparent);
-  background: color-mix(in srgb, var(--accent) 28%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 0 10px color-mix(in srgb, var(--accent) 32%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 100%, transparent);
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 80%, transparent), 0 0 18px color-mix(in srgb, var(--accent) 65%, transparent);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 90%, transparent);
 }
 
 #agent-commands-panel {
