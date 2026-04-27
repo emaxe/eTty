@@ -5,13 +5,14 @@ import { Icons } from './icons.js'
  * Polling каждые 5 секунд. Клик по Git-кнопке открывает полную Git-панель.
  */
 export class StatusBar {
-  constructor({ btnEl, cwdEl, nodeEl, onOpen, agentButtons = [], onLaunchAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [] } }) {
+  constructor({ btnEl, cwdEl, nodeEl, onOpen, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [] } }) {
     this._btnEl = btnEl
     this._cwdEl = cwdEl
     this._nodeEl = nodeEl
     this._onOpen = onOpen
     this._agentButtons = agentButtons
     this._onLaunchAgent = onLaunchAgent
+    this._onSelectAgent = onSelectAgent
     this._agentCommandsPanelEl = agentCommandsPanelEl
     this._onAgentCommand = onAgentCommand
     this._proxyToggleEl = proxyToggleEl
@@ -30,8 +31,22 @@ export class StatusBar {
     this._btnEl.addEventListener('click', () => this._onOpen())
 
     for (const button of this._agentButtons) {
+      let lastClickTime = 0
+
       button.addEventListener('click', () => {
-        if (button.disabled) return
+        const now = Date.now()
+        const isDoubleClick = now - lastClickTime < 500
+        lastClickTime = now
+
+        // Double-click: если терминал занят и нет активного агента — назначаем
+        if (isDoubleClick && this._activeTabBusy && !this._activeAgentId) {
+          const agentId = button.dataset.agentId
+          if (agentId) this._onSelectAgent?.(agentId)
+          return
+        }
+
+        // Single-click: запуск агента только если терминал свободен
+        if (button.disabled || button.classList.contains('status-agent-busy')) return
         const agentId = button.dataset.agentId
         if (agentId) this._onLaunchAgent?.(agentId)
       })
@@ -116,15 +131,24 @@ export class StatusBar {
       // Скрываем кнопки агентов: неактивные — когда терминал занят, все — когда агент не запущен
       button.style.display = disabledBySettings ? 'none' : (isOtherBusy ? 'none' : '')
 
-      // Неактивные кнопки при занятой вкладке — disabled; активная — disabled + подсветка
-      button.disabled = isActive || !(!disabledBySettings && !this._activeTabBusy)
+      // Неактивные кнопки при занятой вкладке — busy class; активная — disabled + подсветка
+      const isBusyState = this._activeTabBusy && !isActive
+      button.disabled = disabledBySettings || isActive
+      button.classList.toggle('status-agent-busy', isBusyState)
       button.classList.toggle('status-agent-active', isActive)
 
       if (this._activeTabBusy) {
-        button.title = isActive ? 'Терминал занят' : 'Терминал занят'
+        if (isActive) {
+          button.title = 'Терминал занят'
+        } else if (!this._activeAgentId) {
+          button.title = `Терминал занят — двойной клик для выбора ${agentStatus?.label || button.textContent}`
+        } else {
+          button.title = 'Терминал занят'
+        }
       } else {
         button.title = `Запустить ${agentStatus?.label || button.textContent}`
       }
+
     }
   }
 

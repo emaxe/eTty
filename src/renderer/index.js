@@ -319,6 +319,13 @@ async function init() {
     tab.term.focus()
   }
 
+  const selectAgentAsActive = (agentId) => {
+    const tab = tabBar.getActive()
+    if (!tab || !tab.isBusy) return
+    tab.activeAgentId = agentId
+    syncStatusBarTerminalState()
+  }
+
   const statusBar = new StatusBar({
     btnEl: document.getElementById('btn-git-diff'),
     cwdEl: document.getElementById('status-cwd'),
@@ -326,6 +333,7 @@ async function init() {
     onOpen: () => gitPanel.show(tabBar.getActive()?.rootPath),
     agentButtons: [...document.querySelectorAll('.status-agent-btn')],
     onLaunchAgent: launchAgentInActiveTab,
+    onSelectAgent: selectAgentAsActive,
     agentCommandsPanelEl: document.getElementById('agent-commands-panel'),
     onAgentCommand: (cmd) => {
       const tab = tabBar.getActive()
