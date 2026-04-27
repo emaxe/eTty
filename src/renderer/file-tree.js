@@ -38,6 +38,10 @@ export class FileTree {
     this._autoExpandTimer = null
     this._isDragging = false
 
+    // Auto-scroll during drag
+    this._autoScrollTimer = null
+    this._autoScrollDirection = 0
+
     this._container.addEventListener('scroll', () => {
       if (this._hoverOverlay.style.display !== 'none' && this._hoverOverlay._currentRow) {
         this._positionHoverOverlay(this._hoverOverlay._currentRow)
@@ -353,6 +357,67 @@ export class FileTree {
         this._showMenuEmpty(e.clientX, e.clientY, this._cwd, this._rootContainer, 1)
       }
     })
+
+    // Container-level drop target for root (covers root row and empty space)
+    this._container.addEventListener('dragover', (e) => {
+      if (!this._isDragging) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      this._handleAutoScroll(e.clientY)
+
+      const row = e.target.closest('.tree-node-row, .tree-root-node-row')
+      if (row?.classList.contains('tree-root-node-row')) {
+        row.classList.add('drag-over')
+      } else if (!row && this._rootNodeRow) {
+        this._rootNodeRow.classList.add('drag-over')
+      } else {
+        this._rootNodeRow?.classList.remove('drag-over')
+      }
+    })
+
+    this._container.addEventListener('dragleave', (e) => {
+      if (!this._container.contains(e.relatedTarget)) {
+        this._stopAutoScroll()
+        this._rootNodeRow?.classList.remove('drag-over')
+        this._clearDragOver()
+      }
+    })
+
+    this._container.addEventListener('drop', async (e) => {
+      if (!this._isDragging) return
+      this._stopAutoScroll()
+      this._rootNodeRow?.classList.remove('drag-over')
+
+      const row = e.target.closest('.tree-node-row, .tree-root-node-row')
+      // Normal folders have their own _setupDropTarget handler (stopPropagation)
+      if (row?.classList.contains('tree-node-row')) return
+
+      e.preventDefault()
+
+      let paths
+      try {
+        paths = JSON.parse(e.dataTransfer.getData('application/x-etty-paths') || '[]')
+      } catch {
+        paths = []
+      }
+      if (paths.length === 0) return
+
+      const dirPath = this._cwd
+      const isInvalid = paths.some(p => p === dirPath || dirPath.startsWith(p + '/'))
+      if (isInvalid) return
+
+      this._setMoving(true)
+      try {
+        const result = await window.electronAPI.fsMove(paths, dirPath)
+        if (result && result.results) {
+          this._pushMoveHistory(result.results)
+          // Force refresh the root immediately (watcher may lag or be pruned)
+          await this._refreshList(this._rootContainer, dirPath, 1)
+        }
+      } finally {
+        this._setMoving(false)
+      }
+    })
   }
 
   _renderRootNode(dirPath) {
@@ -394,9 +459,6 @@ export class FileTree {
       e.stopPropagation()
       this._showMenuRoot(e.clientX, e.clientY)
     })
-
-    // Drop target for root
-    this._setupDropTarget(row, dirPath)
 
     return { row, children }
   }
@@ -549,6 +611,7 @@ export class FileTree {
       this._isDragging = false
       this._updateDragState(false)
       this._clearDragOver()
+      this._stopAutoScroll()
     })
 
     // Drop target (directories only)
@@ -713,6 +776,8 @@ export class FileTree {
       e.stopPropagation()
       e.dataTransfer.dropEffect = 'move'
       row.classList.add('drag-over')
+      this._rootNodeRow?.classList.remove('drag-over')
+      this._handleAutoScroll(e.clientY)
 
       // Auto-expand collapsed folders on hover (only if target changed)
       if (childrenEl && !childrenEl.classList.contains('open')) {
@@ -749,6 +814,7 @@ export class FileTree {
         row.classList.remove('drag-over', 'drag-over-invalid')
         this._cancelAutoExpand()
         this._autoExpandTarget = null
+        this._stopAutoScroll()
       }
     })
 
@@ -756,6 +822,7 @@ export class FileTree {
       e.preventDefault()
       e.stopPropagation()
       this._clearDragOver()
+      this._stopAutoScroll()
 
       let paths
       try {
@@ -791,6 +858,7 @@ export class FileTree {
     })
     this._cancelAutoExpand()
     this._autoExpandTarget = null
+    this._stopAutoScroll()
   }
 
   _cancelAutoExpand() {
@@ -851,6 +919,39 @@ export class FileTree {
     if (isDragging) {
       this._hideHoverOverlay()
     }
+  }
+
+  _handleAutoScroll(clientY) {
+    const rect = this._container.getBoundingClientRect()
+    const edgeSize = 24
+    const y = clientY - rect.top
+    const maxScroll = this._container.scrollHeight - this._container.clientHeight
+
+    if (y < edgeSize && this._container.scrollTop > 0) {
+      this._startAutoScroll(-1)
+    } else if (y > rect.height - edgeSize && this._container.scrollTop < maxScroll) {
+      this._startAutoScroll(1)
+    } else {
+      this._stopAutoScroll()
+    }
+  }
+
+  _startAutoScroll(direction) {
+    if (this._autoScrollDirection === direction) return
+    this._stopAutoScroll()
+    this._autoScrollDirection = direction
+    const speed = 6
+    this._autoScrollTimer = setInterval(() => {
+      this._container.scrollTop += direction * speed
+    }, 16)
+  }
+
+  _stopAutoScroll() {
+    if (this._autoScrollTimer) {
+      clearInterval(this._autoScrollTimer)
+      this._autoScrollTimer = null
+    }
+    this._autoScrollDirection = 0
   }
 
   // ── Undo helpers ─────────────────────────────────────────────────
