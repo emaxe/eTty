@@ -1,4 +1,4 @@
-import { APP_CONFIG } from '../../core/config/app-config.js'
+import { APP_CONFIG } from '../../../core/config/app-config.js'
 
 /**
  * Generic drag-and-drop tab reordering.
