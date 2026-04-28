@@ -17,7 +17,7 @@ export class Button {
    * @param {'default'|'primary'|'danger'|'ghost'} [options.variant='default']
    * @param {'sm'|'md'|'lg'} [options.size='md']
    * @param {string} [options.label='']
-   * @param {string|null} [options.icon=null] — SVG string or null
+   * @param {string|null} [options.icon=null] — SVG string or null. Must be trusted/sanitized SVG.
    * @param {Function|null} [options.onClick=null]
    * @param {boolean} [options.disabled=false]
    * @param {string} [options.title='']
@@ -52,6 +52,7 @@ export class Button {
       text.className = 'btn__label'
       text.textContent = label
       this.element.appendChild(text)
+      this._labelEl = text
     }
 
     this.setDisabled(disabled)
@@ -75,14 +76,16 @@ export class Button {
   }
 
   setLabel(text) {
-    const labelEl = this.element.querySelector('.btn__label')
-    if (labelEl) labelEl.textContent = text
+    if (this._labelEl) this._labelEl.textContent = text
   }
 
   destroy() {
     if (this._clickHandler) {
       this.element.removeEventListener('click', this._clickHandler)
+      this._clickHandler = null
     }
     this.element.remove()
+    this.element = null
+    this._onClick = null
   }
 }
