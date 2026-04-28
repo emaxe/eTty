@@ -1,4 +1,5 @@
 import { Icons } from './icons.js'
+import { UI_DIMENSIONS } from './core/config/ui-dimensions.js'
 import { EditorState, Compartment } from '@codemirror/state'
 import {
   EditorView,
@@ -664,9 +665,9 @@ export class EditorPanel {
     if (!coordsFrom || !coordsTo) { this._hideFloatBtn(); return }
 
     const bodyRect = this._bodyEl.getBoundingClientRect()
-    const btnW = 24
-    const btnH = 24
-    const margin = 6
+    const btnW = UI_DIMENSIONS.FLOAT_BTN.WIDTH
+    const btnH = UI_DIMENSIONS.FLOAT_BTN.HEIGHT
+    const margin = UI_DIMENSIONS.FLOAT_BTN.MARGIN
 
     // Horizontally: to the LEFT of the selection start
     let left = coordsFrom.left - bodyRect.left - btnW - margin

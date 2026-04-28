@@ -13,6 +13,8 @@ import { StatusBar } from './status-bar.js'
 import { GitPanel } from './git-panel.js'
 import { EditorPanel } from './editor-panel.js'
 import { Icons } from './icons.js'
+import { TERMINAL_CONFIG } from './core/config/terminal-config.js'
+import { APP_CONFIG } from './core/config/app-config.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
@@ -60,12 +62,12 @@ function applyTheme(themeName) {
 /** Создаёт новую вкладку: Terminal + FitAddon + PTY-сессия. */
 async function createTab(cwd, tabId) {
   const term = new Terminal({
-    cursorBlink: true,
-    fontSize: 14,
-    fontFamily: 'Menlo, "SF Mono", Consolas, "Courier New", monospace',
-    scrollback: 10000,
-    allowProposedApi: true,
-    theme: loadedThemes[currentThemeName].terminal
+    cursorBlink: TERMINAL_CONFIG.CURSOR_BLINK,
+    fontSize: TERMINAL_CONFIG.FONT_SIZE,
+    fontFamily: TERMINAL_CONFIG.FONT_FAMILY,
+    scrollback: TERMINAL_CONFIG.SCROLLBACK,
+    allowProposedApi: TERMINAL_CONFIG.ALLOW_PROPOSED_API,
+    theme: loadedThemes[currentThemeName].terminal,
   })
 
   const fitAddon = new FitAddon()
@@ -76,7 +78,13 @@ async function createTab(cwd, tabId) {
   tabId = tabId || crypto.randomUUID()
   const { config } = await window.electronAPI.settingsLoad()
   const promptStyle = config.terminal?.promptStyle || 'default'
-  const { pid } = await window.electronAPI.ptyCreate({ cols: 80, rows: 24, cwd, tabId, promptStyle })
+  const { pid } = await window.electronAPI.ptyCreate({
+    cols: TERMINAL_CONFIG.DEFAULT_COLS,
+    rows: TERMINAL_CONFIG.DEFAULT_ROWS,
+    cwd,
+    tabId,
+    promptStyle,
+  })
 
   return { term, fitAddon, pid, rootPath: cwd, tabId }
 }
@@ -223,6 +231,13 @@ async function init() {
       // Очищаем все watchers перед сменой вкладки
       fileTree.unwatchAll()
       if (prevTab) {
+        // Destroy previously suspended editor views to prevent memory leaks
+        // when rapidly switching between tabs.
+        if (prevTab.editorState?._detachedTabs) {
+          for (const [, etab] of prevTab.editorState._detachedTabs) {
+            etab.view.destroy()
+          }
+        }
         prevTab.treeExpandedDirs = fileTree.getExpandedDirs()
         prevTab.treeScrollTop = fileTree.getScrollTop()
         prevTab.editorState = editorPanel.suspendState()
@@ -711,7 +726,7 @@ async function init() {
     if (!dragState) return
     const dx = e.screenX - dragState.startScreenX
     const dy = e.screenY - dragState.startScreenY
-    if (!titlebarDidDrag && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+    if (!titlebarDidDrag && (Math.abs(dx) > APP_CONFIG.TITLEBAR_DRAG_THRESHOLD_PX || Math.abs(dy) > APP_CONFIG.TITLEBAR_DRAG_THRESHOLD_PX)) {
       titlebarDidDrag = true
     }
     if (titlebarDidDrag) {
@@ -738,7 +753,10 @@ async function init() {
     const startX = e.clientX
     const startWidth = sidebar.offsetWidth
     const onMove = (e) => {
-      const newWidth = Math.max(150, Math.min(600, startWidth + e.clientX - startX))
+      const newWidth = Math.max(
+        APP_CONFIG.SIDEBAR_MIN_WIDTH,
+        Math.min(APP_CONFIG.SIDEBAR_MAX_WIDTH, startWidth + e.clientX - startX)
+      )
       sidebar.style.width = newWidth + 'px'
       tabBar.getActive()?.fitAddon.fit()
     }
@@ -760,7 +778,10 @@ async function init() {
     const startWidth = editorPanel._panelEl.offsetWidth
     const onMove = (e) => {
       // Перетаскиваем влево — редактор расширяется
-      const newWidth = Math.max(250, Math.min(window.innerWidth * 0.8, startWidth - (e.clientX - startX)))
+      const newWidth = Math.max(
+        APP_CONFIG.EDITOR_MIN_WIDTH,
+        Math.min(window.innerWidth * APP_CONFIG.EDITOR_MAX_WIDTH_RATIO, startWidth - (e.clientX - startX))
+      )
       editorPanel._panelEl.style.width = newWidth + 'px'
       tabBar.getActive()?.fitAddon.fit()
     }
@@ -774,7 +795,16 @@ async function init() {
   })
 
   // ResizeObserver — подгонка активного терминала при изменении размера
-  new ResizeObserver(() => tabBar.getActive()?.fitAddon.fit()).observe(terminalContainerEl)
+  // Debounced: fitAddon.resize → pty:resize цепочка не должна молотить при
+  // анимациях или быстрых resize-событиях (sidebar drag, fullscreen toggle).
+  function debounce(fn, ms) {
+    let timer
+    return (...args) => {
+      clearTimeout(timer)
+      timer = setTimeout(() => fn(...args), ms)
+    }
+  }
+  new ResizeObserver(debounce(() => tabBar.getActive()?.fitAddon.fit(), APP_CONFIG.RESIZE_OBSERVER_DEBOUNCE_MS)).observe(terminalContainerEl)
 }
 
 init()
