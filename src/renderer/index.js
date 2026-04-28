@@ -1,3 +1,8 @@
+/**
+ * Renderer process — bootstrap and orchestration.
+ * Initializes DI Container, EventBus, StateStore, and all UI components.
+ * All component communication goes through EventBus; state lives in StateStore.
+ */
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'

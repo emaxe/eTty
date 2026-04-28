@@ -48,6 +48,16 @@ window.electronAPI.ptyCreate(...);
 window.electronAPI.onPtyData((data) => xterm.write(data));
 ```
 
+## eTty-specific Architecture (post-refactor)
+
+After Blocks 1–4 refactoring:
+
+- **`shared/ipc-channels.js`** — single source of truth for all IPC channel names. No string literals.
+- **`main/ipc-handlers/`** — each domain group (pty, fs, git, tabs, etc.) has its own `register*Handlers(ipcMain, deps)` module.
+- **`main/services/app-service.js`** — AppService handles window, menu, auto-updater, and state save on quit.
+- **`renderer/core/`** — DI Container, EventBus, StateStore, and config constants.
+- **`renderer/features/terminal/`** — keyboard and OSC handlers extracted from the God Object.
+
 ## Документация
 
 - [Electron Process Model](https://www.electronjs.org/docs/latest/tutorial/process-model)

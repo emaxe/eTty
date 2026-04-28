@@ -13,3 +13,4 @@ release/
 .github/
 .codex/
 .agents/
+!.agents/rules/

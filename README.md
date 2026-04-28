@@ -17,7 +17,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Shell directory tracking** via OSC 7 — file tree syncs automatically
 - **Command busy indicator** via OSC 133 — navigation buttons reflect shell state
 - **Tab drag-and-drop** — reorder tabs by dragging the grip handle
-- **10,000 lines** scrollback buffer
+- **2,500 lines** scrollback buffer (performance-optimized)
 
 ### Command History
 
@@ -32,7 +32,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Lazy-loaded** directory tree with expand/collapse
 - **Hidden files** toggle
 - **Quick navigation** — `cd ..` and `cd ~` buttons
-- **Live sync** — filesystem watcher with 300ms debounce
+- **Live sync** — filesystem watcher with 500ms debounce
 - **Context menus** — new file/folder, rename, delete, copy, paste, open external, copy relative path
 - **Multi-select** — Ctrl/Cmd+Click, Shift+Click range, Ctrl+A select all
 - **Drag-and-drop** — move files/folders within the tree
@@ -161,36 +161,58 @@ spctl -a -vvv -t install dist/mac-arm64/eTty.app
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                       Main Process                       │
-│  ┌──────────┐ ┌──────────┐ ┌──────────────────────────┐  │
-│  │PtyManager│ │FileManager│ │   HistoryManager        │  │
-│  │ node-pty │ │ fs ops   │ │   global + per-tab      │  │
-│  └──────────┘ └──────────┘ └──────────────────────────┘  │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐  │
-│  │GitService│ │ TabState │ │SettingsStore│ │AgentService│  │
-│  │simple-git│ │ persist  │ │ JSON config  │ │ detect CLI │  │
-│  └──────────┘ └──────────┘ └──────────────┘ └────────────┘  │
-└──────────────────────┬─────────────────────────────────────┘
-                       │ IPC (~50 channels)
-┌──────────────────────┴─────────────────────────────────────┐
-│                  Preload (contextBridge)                   │
-│              ~50 methods on window.electronAPI               │
-└──────────────────────┴─────────────────────────────────────┘
-                       │
-┌──────────────────────┴─────────────────────────────────────┐
-│                     Renderer Process                         │
-│  ┌────────┐ ┌────────┐ ┌──────────┐ ┌──────────┐ ┌──────┐  │
-│  │Terminal│ │FileTree│ │EditorPanel│ │ GitPanel │ │Settings│  │
-│  │xterm.js│ │ lazy   │ │CodeMirror │ │  diff    │ │ overlay│  │
-│  │ tabs   │ │ DnD    │ │ 20+ langs │ │ branches │ │ themes │  │
-│  └────────┘ └────────┘ └──────────┘ └──────────┘ └──────┘  │
-│  ┌────────┐ ┌─────────────────────────────────────────────┐  │
-│  │ TabBar │ │              StatusBar                      │  │
-│  │ reorder│ │  git ±  │  cwd  │  node  │  AI agents  │   │  │
-│  └────────┘ └─────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                         Main Process                                   │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────────────────┐              │
+│  │PtyManager│ │FileManager│ │   HistoryManager        │              │
+│  │ node-pty │ │ fs ops   │ │   global + per-tab      │              │
+│  └──────────┘ └──────────┘ └──────────────────────────┘              │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐               │
+│  │GitService│ │ TabState │ │SettingsStore│ │AgentService│              │
+│  │ countDiff│ │ persist  │ │ JSON config  │ │ detect CLI │              │
+│  └──────────┘ └──────────┘ └──────────────┘ └────────────┘               │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ AppService — window, menu, auto-updater, state save on quit       │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐        │
+│  │pty-handl│ │fs-handl │ │git-handl│ │tabs-hand│ │settings │ ...    │
+│  │ ers     │ │ ers     │ │ ers     │ │ ers     │ │-handlers│        │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘        │
+└──────────────────────────┬───────────────────────────────────────────┘
+                           │ IPC (~50 channels, constants in shared/)
+┌──────────────────────────┴───────────────────────────────────────────┐
+│                    Preload (contextBridge)                             │
+│                ~50 methods on window.electronAPI                     │
+└──────────────────────────┴───────────────────────────────────────────┘
+                           │
+┌──────────────────────────┴───────────────────────────────────────────┐
+│                       Renderer Process                                 │
+│  ┌─────────────────────────────────────────────────────────────────┐  │
+│  │ Core Infrastructure                                              │  │
+│  │  EventBus  │  StateStore  │  DI Container  │  ElectronApiAdapter │  │
+│  └─────────────────────────────────────────────────────────────────┘  │
+│  ┌────────┐ ┌────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐  │
+│  │Terminal│ │FileTree│ │EditorPanel│ │ GitPanel │ │SettingsPage  │  │
+│  │xterm.js│ │ lazy   │ │CodeMirror │ │  diff    │ │ overlay    │  │
+│  │ tabs   │ │ DnD    │ │ 20+ langs │ │ branches │ │ themes     │  │
+│  └────────┘ └────────┘ └──────────┘ └──────────┘ └──────────────┘  │
+│  ┌────────┐ ┌─────────────────────────────────────────────────────┐  │
+│  │ TabBar │ │              StatusBar                              │  │
+│  │reorder │ │  git ±  │  cwd  │  node  │  AI agents  │ proxy   │  │
+│  └────────┘ └─────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
 ```
+
+## Architecture Patterns
+
+The codebase follows a layered architecture after a 4-block refactoring:
+
+- **DI Container** (`renderer/core/container.js`) — components receive dependencies via constructor injection, not global variables
+- **EventBus** (`renderer/core/event-bus.js`) — pub/sub communication between decoupled components
+- **StateStore** (`renderer/core/state-store.js`) — centralized reactive state with subscriptions (`ui.theme`, `ui.sidebarVisible`, etc.)
+- **IPC_CHANNEL constants** (`shared/ipc-channels.js`) — single source of truth for all IPC channel names, no string literals
+- **IPC handler modules** (`main/ipc-handlers/*.js`) — each domain group in its own file with `register*Handlers(ipcMain, deps)` signature
+- **AppService** (`main/services/app-service.js`) — application lifecycle in main process (window, menu, updater, state save)
 
 ## Data Storage
 

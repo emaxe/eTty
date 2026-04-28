@@ -1,3 +1,8 @@
+/**
+ * Main process — slim bootstrap only.
+ * Creates services, wires all IPC handlers via domain modules, instantiates AppService.
+ * All application lifecycle logic lives in AppService (window, menu, updater, state save).
+ */
 import { app, ipcMain } from 'electron'
 import { PtyManager } from './pty-manager'
 import { FileManager } from './file-manager'
