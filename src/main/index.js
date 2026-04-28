@@ -61,7 +61,7 @@ app.whenReady().then(() => {
   appService.createWindow()
 
   // Periodic main-process diagnostics (every 10s)
-  setInterval(() => {
+  const diagnosticsInterval = setInterval(() => {
     const mem = process.memoryUsage()
     log.info(
       `[MainDiagnostics] Watchers=${fileManager.getWatcherCount()} ` +

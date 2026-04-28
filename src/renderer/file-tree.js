@@ -247,7 +247,7 @@ export class FileTree {
       const li = childrenEl.closest('li[data-path]')
       const arrow = li?.querySelector(':scope > .tree-node-row > .tree-arrow')
       if (arrow) arrow.classList.remove('expanded')
-      if (li?.dataset.path) window.electronAPI.fsUnwatchDir(li.dataset.path)
+      if (li?.dataset.path) { window.electronAPI.fsUnwatchDir(li.dataset.path) }
     }
   }
 
@@ -281,7 +281,7 @@ export class FileTree {
       const li = ch.closest('li[data-path]')
       const arrow = li?.querySelector(':scope > .tree-node-row > .tree-arrow')
       if (arrow) arrow.classList.remove('expanded')
-      if (li?.dataset.path) window.electronAPI.fsUnwatchDir(li.dataset.path)
+      if (li?.dataset.path) { window.electronAPI.fsUnwatchDir(li.dataset.path) }
     }
   }
 
@@ -311,7 +311,9 @@ export class FileTree {
    * Удаляет все watchers рекурсивно (корневая и все раскрытые папки)
    */
   unwatchAll() {
-    // Отключаем watcher корневой директории
+    for (const timerId of this._dirTimers.values()) clearTimeout(timerId)
+    this._dirTimers.clear()
+
     if (this._cwd) {
       window.electronAPI.fsUnwatchDir(this._cwd)
     }

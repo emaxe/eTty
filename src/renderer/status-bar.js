@@ -85,14 +85,32 @@ export class StatusBar {
 
   start(getRootPath) {
     this._getRootPath = getRootPath
+    this._polling = false
     this._poll()
     this._intervalId = setInterval(() => this._poll(), APP_CONFIG.STATUS_POLL_INTERVAL_MS)
+
+    this._onVisibilityChange = () => {
+      if (document.hidden) {
+        if (this._intervalId !== null) {
+          clearInterval(this._intervalId)
+          this._intervalId = null
+        }
+      } else if (this._intervalId === null) {
+        this._poll()
+        this._intervalId = setInterval(() => this._poll(), APP_CONFIG.STATUS_POLL_INTERVAL_MS)
+      }
+    }
+    document.addEventListener('visibilitychange', this._onVisibilityChange)
   }
 
   stop() {
     if (this._intervalId !== null) {
       clearInterval(this._intervalId)
       this._intervalId = null
+    }
+    if (this._onVisibilityChange) {
+      document.removeEventListener('visibilitychange', this._onVisibilityChange)
+      this._onVisibilityChange = null
     }
   }
 
@@ -196,6 +214,8 @@ export class StatusBar {
   }
 
   async _poll() {
+    if (this._polling) return
+    this._polling = true
     try {
       const rootPath = this._getRootPath ? this._getRootPath() : null
 
@@ -234,6 +254,8 @@ export class StatusBar {
       this._btnEl.classList.remove('hidden')
     } catch (e) {
       this._btnEl.classList.add('hidden')
+    } finally {
+      this._polling = false
     }
   }
 }

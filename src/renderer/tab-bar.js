@@ -57,6 +57,7 @@ export class TabBar {
       treeExpandedDirs: new Set(),
       treeScrollTop: 0,
       _pendingData: [],
+      _pendingDataSize: 0,
       _isActive: false,
     }
     this.tabs.push(tab)
@@ -109,6 +110,7 @@ export class TabBar {
     if (tab._pendingData.length > 0) {
       const data = tab._pendingData.join('')
       tab._pendingData = []
+      tab._pendingDataSize = 0
       tab.term.write(data)
     }
 

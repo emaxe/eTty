@@ -346,7 +346,11 @@ async function init() {
   bus.on('tab.close', ({ index }) => {
     if (settingsPage.isVisible()) return
     const tab = tabBar.tabs[index]
-    // Destroy suspended editor views to prevent memory leaks
+    if (tab._writeRaf) {
+      cancelAnimationFrame(tab._writeRaf)
+      tab._writeRaf = null
+      tab._writeBuffer = null
+    }
     if (tab.editorState?._detachedTabs) {
       for (const [, etab] of tab.editorState._detachedTabs) {
         etab.view.destroy()
@@ -589,13 +593,12 @@ async function init() {
     if (tab._isActive) {
       batchedWrite(tab, data)
     } else {
-      // Buffer data for inactive tabs to avoid xterm.js rendering cost
       tab._pendingData.push(data)
-      // Limit buffer size to prevent unbounded growth (max ~1MB)
-      const total = tab._pendingData.reduce((s, d) => s + d.length, 0)
-      if (total > 1024 * 1024) {
+      tab._pendingDataSize += data.length
+      if (tab._pendingDataSize > 1024 * 1024) {
         tab._pendingData.splice(0, tab._pendingData.length - 1)
         tab._pendingData[0] = '…[truncated]\n'
+        tab._pendingDataSize = tab._pendingData[0].length
       }
     }
     // Track xterm.js buffer state for diagnostics
@@ -607,7 +610,15 @@ async function init() {
 
   window.electronAPI.onPtyExit(({ pid }) => {
     const index = tabBar.tabs.findIndex(t => t.pid === pid)
-    if (index >= 0) tabBar.removeTab(index)
+    if (index >= 0) {
+      const tab = tabBar.tabs[index]
+      if (tab._writeRaf) {
+        cancelAnimationFrame(tab._writeRaf)
+        tab._writeRaf = null
+        tab._writeBuffer = null
+      }
+      tabBar.removeTab(index)
+    }
   })
 
   function setupTabHandlers(tab) {
