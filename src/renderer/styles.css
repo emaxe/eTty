@@ -316,13 +316,14 @@ html, body {
   padding: 5px;
 }
 
-/* Анимация переливов для glow — медленный дрейф оттенка + яркости */
-@keyframes focus-glow-shimmer {
-  0%   { filter: hue-rotate(0deg)   brightness(0.85); }
-  25%  { filter: hue-rotate(22deg)  brightness(1.05); }
-  50%  { filter: hue-rotate(8deg)   brightness(1.12); }
-  75%  { filter: hue-rotate(-16deg) brightness(0.95); }
-  100% { filter: hue-rotate(0deg)   brightness(0.85); }
+/* Glow — тонкая рамка + внутреннее свечение (статичное, без анимации
+   filter, чтобы не нагружать GPU перекомпоновкой canvas 60 FPS) */
+[data-focus-style="glow"] #terminal-container.panel-focused::before,
+[data-focus-style="glow"] #editor-panel.panel-focused::before {
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow:
+    inset 0 0 18px color-mix(in srgb, var(--accent) 14%, transparent),
+    inset 0 0 55px color-mix(in srgb, var(--accent) 5%, transparent);
 }
 
 /* Индикатор фокуса — ::before overlay поверх canvas/редактора */
@@ -562,46 +563,6 @@ html, body {
   padding: 1px 4px;
   outline: none;
   border-radius: 2px;
-}
-
-/* Context menu */
-.context-menu {
-  position: fixed;
-  z-index: 1000;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 0;
-  min-width: 180px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
-  color: var(--text);
-}
-
-.context-menu-item {
-  padding: 5px 14px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.context-menu-item:hover {
-  background: var(--border);
-}
-
-.context-menu-item.disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.context-menu-item.disabled:hover {
-  background: transparent;
-}
-
-.context-menu-separator {
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
 }
 
 /* ── Settings overlay ────────────────────────────────────────────── */
@@ -882,6 +843,9 @@ html, body {
   text-overflow: ellipsis;
   max-width: 260px;
   flex-shrink: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 #status-node {
   color: var(--green);
@@ -911,7 +875,6 @@ html, body {
   justify-content: center;
   padding: 1px 5px;
   margin-left: 10px;
-  padding-left: 10px;
   position: relative;
 }
 
@@ -933,8 +896,20 @@ html, body {
   background: color-mix(in srgb, var(--green) 14%, transparent);
 }
 
+.status-proxy-btn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+.status-proxy-btn.active:hover {
+  background: color-mix(in srgb, var(--green) 25%, transparent);
+}
+
 .status-proxy-btn.hidden {
   display: none;
+}
+
+.status-agent-btn:hover {
+  background: var(--border);
 }
 
 .status-agent-btn:disabled {
@@ -979,7 +954,10 @@ html, body {
   cursor: pointer;
   white-space: nowrap;
 }
-.agent-cmd-btn:hover { background: var(--border); }
+.agent-cmd-btn:hover {
+  background: #585b70;
+  color: var(--accent);
+}
 
 .stat-add { color: var(--green); }
 .stat-del { color: var(--red); }

@@ -4,7 +4,7 @@
  * Сохраняет per-tab состояние дерева файлов (expandedDirs, scrollTop) при переключении.
  * Поддерживает drag-and-drop переупорядочивание и disabled-режим (блокировка переключения).
  */
-import { ContextMenu } from './context-menu.js'
+import { ContextMenu } from './components/base/context-menu/context-menu.js'
 
 export class TabBar {
   constructor({ tabBarEl, terminalContainerEl, onSwitch, onAddTab, onCloseTab }) {

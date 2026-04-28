@@ -1,4 +1,4 @@
-import { ContextMenu } from './context-menu.js'
+import { ContextMenu } from './components/base/context-menu/context-menu.js'
 import { Icons } from './icons.js'
 
 /**
@@ -1228,12 +1228,10 @@ export class FileTree {
   }
 
   _handleDirChanged({ dirPath }) {
-    console.log('[FileTree] _handleDirChanged:', dirPath, 'cwd:', this._cwd, 'isRoot:', dirPath === this._cwd)
     clearTimeout(this._dirTimers.get(dirPath))
     this._dirTimers.set(dirPath, setTimeout(() => {
       this._dirTimers.delete(dirPath)
       if (dirPath === this._cwd) {
-        console.log('[FileTree] Refreshing root container')
         this._refreshList(this._rootContainer, dirPath, 1)
         return
       }
@@ -1243,7 +1241,7 @@ export class FileTree {
       if (!childrenEl || !childrenEl.classList.contains('open')) return
       const depth = parseInt(li.dataset.depth, 10)
       this._refreshList(childrenEl, dirPath, depth + 1)
-    }, 300))
+    }, 500))
   }
 
   // Find the container div for a given dir path in the tree

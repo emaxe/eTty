@@ -34,7 +34,7 @@ const _fallbackHighlight = syntaxHighlighting(defaultHighlightStyle, { fallback:
 import { buildEditorTheme } from './editor-theme.js'
 import { getLanguageExtension } from './editor-languages.js'
 import { fileLinksExtension, normalizePath } from './editor-file-links.js'
-import { ContextMenu } from './context-menu.js'
+import { ContextMenu } from './components/base/context-menu/context-menu.js'
 
 export class EditorPanel {
   /**
