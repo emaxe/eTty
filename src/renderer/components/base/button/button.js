@@ -81,11 +81,12 @@ export class Button {
 
   destroy() {
     if (this._clickHandler) {
-      this.element.removeEventListener('click', this._clickHandler)
+      this.element?.removeEventListener('click', this._clickHandler)
       this._clickHandler = null
     }
-    this.element.remove()
+    this.element?.remove()
     this.element = null
     this._onClick = null
+    this._labelEl = null
   }
 }
