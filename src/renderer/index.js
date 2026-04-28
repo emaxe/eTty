@@ -5,8 +5,7 @@
  */
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-// NOTE: WebGL disabled — causes GPU texture leaks and FPS drops with high-throughput PTY data (AI agents)
-// import { WebglAddon } from '@xterm/addon-webgl'
+import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { SearchAddon } from '@xterm/addon-search'
 import '@xterm/xterm/css/xterm.css'
@@ -663,8 +662,13 @@ async function init() {
       },
     })
     oscHandler.attach(tab.term, tab.pid)
-    // WebGL addon disabled — canvas renderer only (WebGL causes GPU texture leaks
-    // and FPS drops to ~5 with high-throughput PTY data from AI agents)
+
+    // WebGL addon — try to load for better rendering performance, fallback to canvas
+    try {
+      tab.term.loadAddon(new WebglAddon())
+    } catch (e) {
+      console.warn('WebGL addon failed, using canvas renderer:', e)
+    }
   }
 
   // Expose tab state export for main process (before-quit)
@@ -963,12 +967,9 @@ async function init() {
   }
   new ResizeObserver(debounce(() => tabBar.getActive()?.fitAddon.fit(), APP_CONFIG.RESIZE_OBSERVER_DEBOUNCE_MS)).observe(terminalContainerEl)
 
-  // Start performance diagnostics in dev mode
-  if (process.env.NODE_ENV === 'development' || location.port) {
-    diagnostics.start(3000)
-    console.info('[Diagnostics] Press window.__diagnostics.dump() in console for full snapshot')
-    console.info('[Diagnostics] window.__diagnostics.exportJSON() to get JSON for file export')
-  }
+  // Performance diagnostics — disabled by default, enable via window.__diagnostics.start()
+  // (querySelectorAll('*') every 3s can cause style recalculation and UI stutter)
+  window.__diagnostics = diagnostics
 }
 
 init()
