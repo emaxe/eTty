@@ -49,12 +49,13 @@ export class EditorPanel {
    * @param {Function}   opts.shellCmdToPty  — (data: string) => void, clears line + writes for shell commands
    * @param {Function}   opts.getActiveCwd   — () => string, active terminal cwd
    */
-  constructor({ panelEl, resizeHandleEl, eventBus, electronAPI, getActiveCwd }) {
+  constructor({ panelEl, resizeHandleEl, eventBus, electronAPI, getActiveCwd, store }) {
     this._panelEl = panelEl
     this._resizeHandleEl = resizeHandleEl
     this._bus = eventBus
     this._api = electronAPI
     this._getActiveCwd = getActiveCwd
+    this._store = store
 
     this._tabBarEl = panelEl.querySelector('#editor-tab-bar')
     this._bodyEl = panelEl.querySelector('#editor-body')
@@ -82,6 +83,11 @@ export class EditorPanel {
     this._wordWrap = false
 
     this._setupListeners()
+  }
+
+  _syncStore() {
+    this._store.set('editor.files', [...this._tabs.keys()])
+    this._store.set('editor.activePath', this._activeFilePath)
   }
 
   // ── Public API ───────────────────────────────────────────────────────────
@@ -127,6 +133,7 @@ export class EditorPanel {
 
     this._tabBarEl.appendChild(tabEl)
     this._draggable.observeElement(tabEl)
+    this._syncStore()
     this._switchToTab(filePath)
   }
 
@@ -478,6 +485,7 @@ export class EditorPanel {
 
     // Mount new view
     this._activeFilePath = filePath
+    this._syncStore()
     tab.element.classList.add('active')
     tab.element.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
 
@@ -512,6 +520,7 @@ export class EditorPanel {
     }
     tab.view.destroy()
     this._tabs.delete(filePath)
+    this._syncStore()
 
     // Switch to adjacent tab or show empty state
     if (this._activeFilePath === filePath) {

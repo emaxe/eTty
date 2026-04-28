@@ -217,12 +217,15 @@ async function init() {
     }
   }
 
+  appStore.set('editor', { files: [], activePath: null })
+
   editorPanel = new EditorPanel({
     panelEl: document.getElementById('editor-panel'),
     resizeHandleEl: document.getElementById('resize-handle-right'),
     eventBus: bus,
     electronAPI: new ElectronApiAdapter(),
     getActiveCwd: () => tabBar.getActive()?.rootPath || startCwd,
+    store: appStore,
   })
   // Apply current theme immediately (applyTheme ran before editorPanel was created)
   const _initialTheme = loadedThemes[currentThemeName]
