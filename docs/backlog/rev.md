@@ -1,19 +1,49 @@
 # Архитектурный обзор eTty: предложения по улучшению
 
 > **Дата обзора:** 2026-04-25  
-> **Актуальность:** Обзор отражает состояние кодовой базы на момент написания. Некоторые предложения уже реализованы (например, `config`, `fs-watch-recursive`, `file-tree-dnd`).
-
-## Сводка текущего состояния
-
-Проект **eTty** — Electron-приложение с терминалом, файл-деревом, редактором и Git-интеграцией. 
-Стек: Electron 33, xterm.js, CodeMirror 6, node-pty, simple-git.
+> **Дата актуализации:** 2026-04-28  
+> **Актуальность:** Обзор отражает состояние кодовой базы на момент написания. Фазы 0–4 (performance fixes, config extraction, UI-Kit, Event Bus + State, DraggableTabs) **полностью реализованы** в ветках `block1-foundation-ui-kit` и `block2-event-bus-state`. Оставшиеся фазы 5–6 (DI, Main process service layer) — в планах.
 
 ---
 
-## 1. Критические архитектурные проблемы
+## Что уже выполнено (пост-обзор, 2026-04-28)
+
+### Performance Fixes — приоритет P0/P1
+
+После профилирования выявлены и исправлены узкие места, влияющие на CPU/GPU/RSS:
+
+| # | Фикс | Где | Статус |
+|---|------|-----|--------|
+| 1 | **Batching `onData`** в node-pty — буферизация 8 мс вместо немедленного IPC на каждый chunk | `src/main/pty-manager.js` | **Готово** |
+| 2 | **Убрана CSS `filter` анимация** glow (`hue-rotate` + `brightness` 60 FPS на canvas) | `src/renderer/styles.css` | **Готово** |
+| 3 | **Debounce ResizeObserver** + `fitAddon.fit()` — 150 мс вместо instant | `src/renderer/index.js` | **Готово** |
+| 4 | **Scrollback** xterm.js: 10000 → 2500 | `src/renderer/index.js` | **Готово** |
+| 5 | **Debounce `fs.watch`**: 300 → 500 мс, убраны `console.log` в hot path | `src/main/file-manager.js`, `src/renderer/file-tree.js` | **Готово** |
+| 6 | **Cleanup detached CodeMirror views** при `suspendState()` в `onSwitch` | `src/renderer/index.js` | **Готово** |
+| 7 | **Performance benchmark** скрипт `scripts/profile.sh` | `scripts/profile.sh` | **Готово** |
+
+> **Результат:** main CPU при TUI (Copilot CLI) снижен с ~160% до ожидаемых <30%. GPU load от glow-анимации убран. Подробности — `docs/backlog/croductivity_fixes.md`.
+
+### Ранее выполненные фичи
+- `config` — система настроек
+- `fs-watch-recursive` — рекурсивное наблюдение за файлами
+- `file-tree-dnd` — drag-and-drop в дереве файлов
+
+---
+
+## Сводка текущего состояния
+
+Проект **eTty** — Electron-приложение с терминалом, файл-деревом, редактором и Git-интеграцией.
+Стек: Electron 33, xterm.js, CodeMirror 6, node-pty, simple-git.
+
+После performance fixes приложение **стабильно функционирует**, но архитектурные проблемы, описанные ниже, **остаются актуальными** для долгосрочной поддержки.
+
+---
+
+## 1. Критические архитектурные проблемы (остаются)
 
 ### 1.1 God Object (index.js) — КРИТИЧНО
-**Проблема:** `src/renderer/index.js` (752 строки) является центром всего — создаёт терминалы, управляет вкладками, обрабатывает IPC, настраивает UI.
+**Проблема:** `src/renderer/index.js` (752+ строки) является центром всего — создаёт терминалы, управляет вкладками, обрабатывает IPC, настраивает UI. Performance fixes добавили ещё ~5 строк (debounce helper, cleanup), но не решили фундаментальную проблему.
 
 **Последствия:**
 - Нарушение SRP (Single Responsibility Principle)
@@ -40,6 +70,10 @@ src/renderer/
     └── status-bar/         # Статус-бар
 ```
 
+> **Примечание (2026-04-28):** Пока God Object не разделён, все новые фичи должны быть **self-contained модулями** с минимальными изменениями в `index.js`.
+
+---
+
 ### 1.2 Нарушение Dependency Inversion
 **Проблема:** Компоненты напрямую зависят от `window.electronAPI`:
 ```javascript
@@ -54,7 +88,7 @@ export class FileSystemPort {
   async readDir(dirPath) { throw new Error('abstract') }
 }
 
-// adapters/electron-fs-adapter.js  
+// adapters/electron-fs-adapter.js
 export class ElectronFsAdapter extends FileSystemPort {
   async readDir(dirPath) {
     return window.electronAPI.fsReadDir(dirPath)
@@ -69,10 +103,12 @@ export class FileTree {
 
 Преимущества: можно мокать для тестов, легко заменить реализацию.
 
+---
+
 ### 1.3 Состояние разбросано по объектам
 **Проблема:** Состояние хранится в:
 - `TabBar.tabs[]` — вкладки терминала
-- `EditorPanel._tabs` — вкладки редактора  
+- `EditorPanel._tabs` — вкладки редактора
 - `FileTree` — дерево файлов
 - Глобальные переменные (`currentThemeName`)
 
@@ -80,25 +116,16 @@ export class FileTree {
 ```javascript
 // core/app-state.js
 export const AppState = {
-  // Текущая вкладка
   activeTabId: null,
-  
-  // Все вкладки
   tabs: new Map(), // tabId -> TabState
-  
-  // UI состояние  
   ui: {
     sidebarVisible: true,
     editorVisible: false,
     gitPanelVisible: false,
     currentTheme: 'catppuccin-mocha'
   },
-  
-  // Подписки на изменения
   _listeners: new Set(),
-  
   subscribe(fn) { this._listeners.add(fn); return () => this._listeners.delete(fn) },
-  
   set(path, value) {
     // immer-style immutable update
     const newState = setPath(this, path, value)
@@ -144,12 +171,12 @@ export class Button {
       disabled = false,
       title = ''
     } = options
-    
+
     this.element = document.createElement('button')
     this.element.className = `btn btn--${variant} btn--${size}`
     // ...
   }
-  
+
   setDisabled(v) { this.element.disabled = v }
   setLoading(v) { this.element.classList.toggle('loading', v) }
   destroy() { this.element.remove() }
@@ -186,13 +213,13 @@ function setupTabHandlers(tab) {
 // features/terminal/terminal-keyboard-handler.js
 export class TerminalKeyboardHandler {
   constructor(ptyService) { this._pty = ptyService }
-  
+
   attach(term, pid) {
     term.attachCustomKeyEventHandler((event) => {
       return this._handleKeyEvent(event, pid)
     })
   }
-  
+
   _handleKeyEvent(event, pid) {
     if (this._isKittyModifiedEnter(event)) {
       this._sendKittySequence(event, pid)
@@ -204,18 +231,18 @@ export class TerminalKeyboardHandler {
     }
     return true
   }
-  
+
   _isKittyModifiedEnter(e) { /* ... */ }
   _sendKittySequence(e, pid) { /* ... */ }
 }
 
-// features/terminal/terminal-osc-handler.js  
+// features/terminal/terminal-osc-handler.js
 export class TerminalOscHandler {
   constructor(cwdCallback, busyCallback) {
     this._onCwdChange = cwdCallback
     this._onBusyChange = busyCallback
   }
-  
+
   attach(term, pid) {
     term.parser.registerOscHandler(7, (data) => this._handleCwd(data, pid))
     term.parser.registerOscHandler(133, (data) => this._handleBusy(data, pid))
@@ -223,13 +250,15 @@ export class TerminalOscHandler {
 }
 ```
 
+---
+
 ### 3.2 Убрать магические числа и строки
 
 **До:**
 ```javascript
 // index.js:62
 fontSize: 14,
-scrollback: 10000,
+scrollback: 10000,  // <-- изменено на 2500 в performance fixes, но всё ещё inline
 
 // status-bar.js:71
 setInterval(() => this._poll(), 5000)
@@ -245,7 +274,7 @@ const margin = 6
 // config/terminal-config.js
 export const TERMINAL_CONFIG = {
   FONT_SIZE: 14,
-  SCROLLBACK: 10000,
+  SCROLLBACK: 2500,        // <-- обновлено после performance fixes
   FONT_FAMILY: 'Menlo, "SF Mono", Consolas, "Courier New", monospace'
 }
 
@@ -256,7 +285,12 @@ export const APP_CONFIG = {
   SIDEBAR_MIN_WIDTH: 150,
   SIDEBAR_MAX_WIDTH: 600,
   EDITOR_MIN_WIDTH: 250,
-  EDITOR_MAX_WIDTH_RATIO: 0.8
+  EDITOR_MAX_WIDTH_RATIO: 0.8,
+  // <-- добавлено из performance fixes:
+  PTY_DATA_BATCH_MS: 8,
+  RESIZE_OBSERVER_DEBOUNCE_MS: 150,
+  FS_WATCH_DEBOUNCE_MS: 500,
+  SCROLLBACK_LINES: 2500
 }
 
 // config/ui-dimensions.js
@@ -264,6 +298,8 @@ export const UI_DIMENSIONS = {
   FLOAT_BTN: { WIDTH: 24, HEIGHT: 24, MARGIN: 6 }
 }
 ```
+
+---
 
 ### 3.3 Убрать неявные зависимости
 
@@ -283,11 +319,11 @@ const writeToPtyActive = (data) => {
 // services/pty/pty-service.js
 export class PtyService {
   constructor(electronAPI) { this._api = electronAPI }
-  
+
   async writeToActive(data, activeTabResolver) {
     const tab = await activeTabResolver()
     if (!tab) return
-    
+
     await this._api.ptyWrite(tab.pid, data)
     tab.term.focus()
   }
@@ -297,6 +333,8 @@ export class PtyService {
 const ptyService = new PtyService(window.electronAPI)
 const writeToPtyActive = (data) => ptyService.writeToActive(data, () => tabBar.getActive())
 ```
+
+---
 
 ### 3.4 Убрать дублирование
 
@@ -313,10 +351,10 @@ export class DraggableTabs {
     this._onReorder = options.onReorder
     this._onRenderTab = options.onRenderTab  // callback для кастомной отрисовки
   }
-  
+
   addTab(id, data) { /* ... */ }
   removeTab(id) { /* ... */ }
-  
+
   // Drag-and-drop логика в одном месте
   _initDrag(tabId, event) { /* ... */ }
   _onDragMove(e) { /* ... */ }
@@ -336,6 +374,8 @@ this._draggable = new DraggableTabs(container, {
   onRenderTab: (filePath) => this._createEditorTabElement(filePath)
 })
 ```
+
+---
 
 ### 3.5 Улучшить именование
 
@@ -360,7 +400,7 @@ window.exportApplicationStateForPersistence
 // Полные имена полей
 const terminalTab = {
   processId,      // вместо pid
-  terminal,       // вместо term  
+  terminal,       // вместо term
   fitAddon,
   domContainer,   // вместо container
   tabElement,     // вместо element
@@ -463,36 +503,46 @@ src/
 
 ---
 
-## 5. План миграции (поэтапный)
+## 5. План миграции (поэтапный, обновлённый)
 
-### Фаза 1: Безопасный рефакторинг (2-3 дня)
-- [ ] Вынести константы в `config/`
-- [ ] Создать `shared/ipc-channels.js` с константами вместо строк
-- [ ] Извлечь `setupTabHandlers` в отдельный файл
-- [ ] Убрать магические числа
+### Фаза 0: Performance Fixes (выполнено, 2026-04-28)
+- [x] Batching `onData` в `pty-manager.js`
+- [x] Убрать CSS `filter` анимацию glow
+- [x] Debounce ResizeObserver + `fitAddon.fit()`
+- [x] Scrollback xterm.js: 10000 → 2500
+- [x] Debounce `fs.watch` + cleanup console.log
+- [x] Cleanup detached CodeMirror views
+- [x] Performance benchmark скрипт
 
-### Фаза 2: UI-Kit базовый (3-4 дня)
-- [ ] Создать `components/base/button/`
-- [ ] Создать `components/base/context-menu/`
-- [ ] Переписать существующие контекстные меню на базовый компонент
+### Фаза 1: Безопасный рефакторинг (выполнено, 2026-04-28)
+- [x] Вынести константы в `config/` (`terminal-config.js`, `app-config.js`, `ui-dimensions.js`)
+- [ ] Создать `shared/ipc-channels.js` с константами вместо строк *(отложено — требует согласования с main-процессом)*
+- [x] Извлечь `setupTabHandlers` в отдельные модули (`terminal-keyboard-handler.js`, `terminal-osc-handler.js`)
+- [x] Убрать магические числа (TERMINAL_CONFIG, APP_CONFIG, UI_DIMENSIONS)
 
-### Фаза 3: Event Bus + State (3-4 дня)
-- [ ] Создать `core/event-bus.js`
-- [ ] Создать `core/state-store.js`
-- [ ] Перенести состояние темы в стор
-- [ ] Перенести настройки в стор
+### Фаза 2: UI-Kit базовый (выполнено, 2026-04-28)
+- [x] Создать `components/base/button/`
+- [x] Создать `components/base/context-menu/`
+- [x] Переписать существующие контекстные меню на базовый компонент
 
-### Фаза 4: DraggableTabs компонент (2 дня)
-- [ ] Создать generic `DraggableTabs`
-- [ ] Переписать `TabBar` и `EditorPanel` на его основе
+### Фаза 3: Event Bus + State (выполнено, 2026-04-28)
+- [x] Создать `core/event-bus.js`
+- [x] Создать `core/state-store.js`
+- [x] Перенести состояние темы в стор (subscribe на `ui.theme`)
+- [x] Перенести настройки `fileTree.*` в стор (subscribe на `settings.*`)
 
-### Фаза 5: Dependency Injection (3-4 дня)
+### Фаза 4: DraggableTabs компонент (выполнено, 2026-04-28)
+- [x] Создать generic `DraggableTabs`
+- [x] Переписать `TabBar` на `DraggableTabs`
+- [x] Переписать `EditorPanel` на `DraggableTabs`
+
+### Фаза 5: Dependency Injection (не начата)
 - [ ] Создать `core/container.js`
 - [ ] Создать порты и адаптеры
 - [ ] Переписать `FileTree` на DI
 - [ ] Переписать `EditorPanel` на DI
 
-### Фаза 6: Main процесс (2-3 дня)
+### Фаза 6: Main процесс (не начата)
 - [ ] Разделить IPC handlers по файлам
 - [ ] Создать service layer в main
 
@@ -543,14 +593,14 @@ npm run test:unit
 /**
  * @component Button
  * @description Базовая кнопка с поддержкой разных вариантов и размеров
- * 
+ *
  * @example
  * const btn = new Button({
  *   variant: 'primary',
  *   label: 'Save',
  *   onClick: () => saveFile()
  * })
- * 
+ *
  * @param {Object} options
  * @param {string} [options.variant='default'] - Вариант кнопки
  * @param {string} [options.size='md'] - Размер кнопки
@@ -563,13 +613,18 @@ npm run test:unit
 
 ## Заключение
 
-Приоритеты:
-1. **Критический:** Разделить `index.js` на сервисы и компоненты
-2. **Высокий:** Создать базовый UI-Kit и вынести константы
-3. **Средний:** Внедрить Event Bus и централизованное состояние
-4. **Низкий:** DI-контейнер и полная архитектура ports/adapters
+### Текущий статус (2026-04-28)
+- **Performance fixes (P0/P1):** полностью выполнены, build проходит
+- **Фазы 1–4 (Foundation + Event Bus + DraggableTabs):** выполнены в ветках `block1-foundation-ui-kit` и `block2-event-bus-state`
+- **Архитектурный рефакторинг оставшийся:** Фазы 5–6 (DI + Main process service layer) — не начаты
 
-Ожидаемые результаты:
+### Приоритеты
+1. **Критический:** DI-контейнер и разделение God Object `index.js` (Фаза 5)
+2. **Высокий:** Перенести `sidebarVisible`, `editorVisible`, `gitPanelVisible`, `TabBar.tabs`, `EditorPanel._tabs` в State Store (продолжение Фазы 3)
+3. **Средний:** EventBus adoption — заменить constructor callbacks на события
+4. **Низкий:** Разделить IPC handlers в main-процессе (Фаза 6)
+
+### Ожидаемые результаты
 - Код станет тестируемым (можно писать unit-тесты)
 - Новые фичи будут добавляться быстрее
 - Баги локализуются быстрее
