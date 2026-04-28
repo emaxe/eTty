@@ -10,8 +10,8 @@ const SUPPORTED_AGENTS = [
  * Страница настроек (overlay). Категории: оформление, дерево файлов, терминал, ИИ-агенты.
  */
 export class SettingsPage {
-  constructor({ onSettingsChanged, onClose }) {
-    this._onSettingsChanged = onSettingsChanged
+  constructor({ eventBus, onClose }) {
+    this._bus = eventBus
     this._onClose = onClose
     this._config = null
     this._themes = null
@@ -101,7 +101,7 @@ export class SettingsPage {
           this._config.fileTree.collapseChildrenOnClose,
           (val) => {
             this._config.fileTree.collapseChildrenOnClose = val
-            this._onSettingsChanged('fileTree.collapseChildrenOnClose', val)
+            this._bus.emit('settings.changed', { key: 'fileTree.collapseChildrenOnClose', value: val })
             this._scheduleSave()
           }
         )
@@ -116,7 +116,7 @@ export class SettingsPage {
           this._config.fileTree.fileOpenMode || 'double',
           (val) => {
             this._config.fileTree.fileOpenMode = val
-            this._onSettingsChanged('fileTree.fileOpenMode', val)
+            this._bus.emit('settings.changed', { key: 'fileTree.fileOpenMode', value: val })
             this._scheduleSave()
           }
         )
@@ -141,7 +141,7 @@ export class SettingsPage {
           (val) => {
             if (!this._config.appearance) this._config.appearance = {}
             this._config.appearance.focusIndicator = val
-            this._onSettingsChanged('appearance.focusIndicator', val)
+            this._bus.emit('settings.changed', { key: 'appearance.focusIndicator', value: val })
             this._scheduleSave()
           }
         )
@@ -162,7 +162,7 @@ export class SettingsPage {
           (val) => {
             if (!this._config.terminal) this._config.terminal = {}
             this._config.terminal.promptStyle = val
-            this._onSettingsChanged('terminal.promptStyle', val)
+            this._bus.emit('settings.changed', { key: 'terminal.promptStyle', value: val })
             this._scheduleSave()
           }
         )
@@ -189,7 +189,7 @@ export class SettingsPage {
         'http://135.28.52.90:6200',
         (val) => {
           this._config.agents.proxy = val.trim()
-          this._onSettingsChanged('agents.proxy', this._config.agents.proxy)
+            this._bus.emit('settings.changed', { key: 'agents.proxy', value: this._config.agents.proxy })
           this._scheduleSave()
         }
       )
@@ -223,7 +223,7 @@ export class SettingsPage {
       (isEnabled) => {
         this._config.agents.forceDisabled[agentId] = !isEnabled
         stateLabel.textContent = isEnabled ? 'Вкл' : 'Выкл'
-        this._onSettingsChanged('agents.forceDisabled', { ...this._config.agents.forceDisabled })
+        this._bus.emit('settings.changed', { key: 'agents.forceDisabled', value: { ...this._config.agents.forceDisabled } })
         this._scheduleSave()
       }
     )
@@ -318,7 +318,7 @@ export class SettingsPage {
       const adjustedIndex = draggedIndex < newTargetIndex ? newTargetIndex - 1 : newTargetIndex
       items.splice(adjustedIndex, 0, moved)
 
-      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
+      this._bus.emit('settings.changed', { key: 'quickReplies.items', value: this._config.quickReplies.items })
       this._scheduleSave()
       this._rerenderQuickRepliesCategory()
     })
@@ -490,7 +490,7 @@ export class SettingsPage {
       if (index >= 0) {
         const items = this._config.quickReplies?.items || []
         items.splice(index, 1)
-        this._onSettingsChanged('quickReplies.items', items)
+        this._bus.emit('settings.changed', { key: 'quickReplies.items', value: items })
         this._scheduleSave()
         this._rerenderQuickRepliesCategory()
       }
@@ -527,7 +527,7 @@ export class SettingsPage {
         this._config.quickReplies.items.push(newItem)
       }
 
-      this._onSettingsChanged('quickReplies.items', this._config.quickReplies.items)
+      this._bus.emit('settings.changed', { key: 'quickReplies.items', value: this._config.quickReplies.items })
       this._scheduleSave()
       this._rerenderQuickRepliesCategory()
       overlay.remove()
@@ -650,7 +650,7 @@ export class SettingsPage {
     const select = this._createSelect(themeOptions, this._config.appearance.theme, (val) => {
       this._config.appearance.theme = val
       updateSwatch(val)
-      this._onSettingsChanged('appearance.theme', val)
+      this._bus.emit('settings.changed', { key: 'appearance.theme', value: val })
       this._scheduleSave()
     })
 

@@ -12,13 +12,9 @@ import { Icons } from './icons.js'
  * - Undo: Ctrl+Z для отката move-операций
  */
 export class FileTree {
-  constructor(container, terminalActions = null) {
+  constructor(container, { eventBus } = {}) {
     this._container = container
-    this._writeToPty = terminalActions?.writeToPty ?? null
-    this._injectToPty = terminalActions?.injectToPty ?? null
-    this._focusTerminal = terminalActions?.focusTerminal ?? null
-    this._onFileOpen = terminalActions?.onFileOpen ?? null
-    this._runInNewTab = terminalActions?.runInNewTab ?? null
+    this._bus = eventBus
     this._cwd = null
     this._modKeys = { shift: false, meta: false, ctrl: false }
     this._contextMenu = new ContextMenu()
@@ -82,11 +78,11 @@ export class FileTree {
       const rel = overlay.dataset.currentRel
       const pathToUse = e.shiftKey ? path : rel
       if (e.metaKey || e.ctrlKey) {
-        this._focusTerminal?.()
-        this._injectToPty?.('\x1b[200~' + pathToUse + '\x1b[201~')
+        this._bus.emit('terminal.focus')
+        this._bus.emit('filetree.inject', pathToUse)
       } else {
         await navigator.clipboard.writeText(pathToUse)
-        this._focusTerminal?.()
+        this._bus.emit('terminal.focus')
         // Flash OK icon to indicate success
         copyBtn.innerHTML = Icons.ok
         copyBtn.classList.add('success')
@@ -103,8 +99,8 @@ export class FileTree {
       e.preventDefault()
       const path = overlay.dataset.currentPath
       const escaped = path.replace(/'/g, "'\\''")
-      this._writeToPty?.(`cd '${escaped}'\r`)
-      this._focusTerminal?.()
+      this._bus.emit('filetree.shellCmd', `cd '${escaped}'\r`)
+      this._bus.emit('terminal.focus')
     })
 
     overlay.addEventListener('mouseenter', () => {
@@ -632,11 +628,11 @@ export class FileTree {
 
     if (!entry.isDirectory) {
       const openInEditor = () => {
-        if (this._onFileOpen) {
-          this._onFileOpen(entry.path)
+        if (this._bus) {
+          this._bus.emit('filetree.openFile', entry.path)
         } else if (!this._isBusy) {
           const escaped = entry.path.replace(/'/g, "'\\''")
-          this._writeToPty?.(`open '${escaped}'\n`)
+          this._bus.emit('filetree.shellCmd', `open '${escaped}'\n`)
         }
       }
       if (this._fileOpenMode === 'single') {
@@ -659,7 +655,7 @@ export class FileTree {
           }
           if (e.altKey) {
             e.preventDefault()
-            this._runInNewTab?.(entry.path)
+            this._bus.emit('filetree.runInNewTab', entry.path)
             return
           }
           openInEditor()
@@ -684,7 +680,7 @@ export class FileTree {
           }
           if (e.altKey) {
             e.preventDefault()
-            this._runInNewTab?.(entry.path)
+            this._bus.emit('filetree.runInNewTab', entry.path)
           }
         })
       }
@@ -999,14 +995,14 @@ export class FileTree {
       { separator: true },
       { label: 'Открыть в терминале', disabled: this._isBusy, action: () => {
           const escaped = entry.path.replace(/'/g, "'\\''")
-          this._writeToPty?.(`open '${escaped}'\n`)
-          this._focusTerminal?.()
+          this._bus.emit('filetree.shellCmd', `open '${escaped}'\n`)
+          this._bus.emit('terminal.focus')
         }
       },
       { separator: true },
       { label: 'Копировать', action: () => { this._clipboard = { path: entry.path } } },
-      { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(entry.path); this._focusTerminal?.() } },
-      { label: 'Копировать относительный путь', action: () => { navigator.clipboard.writeText(rel); this._focusTerminal?.() } }
+      { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(entry.path); this._bus.emit('terminal.focus') } },
+      { label: 'Копировать относительный путь', action: () => { navigator.clipboard.writeText(rel); this._bus.emit('terminal.focus') } }
     ], x, y)
   }
 
@@ -1017,8 +1013,8 @@ export class FileTree {
     this._contextMenu.show([
       { label: 'cd в директорию', disabled: this._isBusy, action: () => {
           const escaped = entry.path.replace(/'/g, "'\\''")
-          this._writeToPty?.(`cd '${escaped}'\r`)
-          this._focusTerminal?.()
+          this._bus.emit('filetree.shellCmd', `cd '${escaped}'\r`)
+          this._bus.emit('terminal.focus')
         }
       },
       { separator: true },
@@ -1030,8 +1026,8 @@ export class FileTree {
       { separator: true },
       { label: 'Копировать', action: () => { this._clipboard = { path: entry.path } } },
       { label: 'Вставить', action: () => this._paste(entry.path, childrenEl, childDepth) },
-      { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(entry.path); this._focusTerminal?.() } },
-      { label: 'Копировать относительный путь', action: () => { navigator.clipboard.writeText(rel); this._focusTerminal?.() } }
+      { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(entry.path); this._bus.emit('terminal.focus') } },
+      { label: 'Копировать относительный путь', action: () => { navigator.clipboard.writeText(rel); this._bus.emit('terminal.focus') } }
     ], x, y)
   }
 
@@ -1039,15 +1035,15 @@ export class FileTree {
     this._contextMenu.show([
       { label: 'cd в директорию', disabled: this._isBusy, action: () => {
           const escaped = this._cwd.replace(/'/g, "'\\''")
-          this._writeToPty?.(`cd '${escaped}'\r`)
-          this._focusTerminal?.()
+          this._bus.emit('filetree.shellCmd', `cd '${escaped}'\r`)
+          this._bus.emit('terminal.focus')
         }
       },
       { separator: true },
       { label: 'Новый файл', action: () => this._createInline('file', this._cwd, this._rootContainer, 1) },
       { label: 'Новая папка', action: () => this._createInline('dir', this._cwd, this._rootContainer, 1) },
       { separator: true },
-      { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(this._cwd); this._focusTerminal?.() } }
+      { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(this._cwd); this._bus.emit('terminal.focus') } }
     ], x, y)
   }
 

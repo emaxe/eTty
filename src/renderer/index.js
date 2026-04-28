@@ -228,21 +228,7 @@ async function init() {
   const _initialTheme = loadedThemes[currentThemeName]
   if (_initialTheme?.editor) editorPanel.setTheme(_initialTheme.editor)
 
-  const fileTree = new FileTree(fileTreeContainerEl, {
-    writeToPty: shellCmdToPtyActive,
-    injectToPty: writeToPtyActive,
-    focusTerminal: focusActiveTerminal,
-    onFileOpen: (filePath) => editorPanel.openFile(filePath),
-    runInNewTab: async (filePath) => {
-      const tabData = await createTab(tabBar.getActive()?.rootPath || startCwd)
-      const tab = tabBar.addTab(tabData)
-      tab.isBusy = false
-      tab.activeAgentId = null
-      setupTabHandlers(tab)
-      tab.fitAddon.fit()
-      window.electronAPI.ptyWrite(tab.pid, filePath + '\n')
-    },
-  })
+  const fileTree = new FileTree(fileTreeContainerEl, { eventBus: bus })
   await fileTree.init(startCwd)
   fileTree.setCollapseChildrenOnClose(config.fileTree.collapseChildrenOnClose)
   fileTree.setFileOpenMode(config.fileTree.fileOpenMode || 'double')
@@ -340,28 +326,7 @@ async function init() {
 
   // Страница настроек
   const settingsPage = new SettingsPage({
-    onSettingsChanged: (key, value) => {
-      if (key === 'appearance.theme') applyTheme(value)
-      if (key === 'appearance.focusIndicator') applyFocusIndicator(value)
-      if (key === 'fileTree.collapseChildrenOnClose') {
-        appStore.set('settings.collapseChildrenOnClose', value)
-        fileTree.setCollapseChildrenOnClose(value)
-      }
-      if (key === 'fileTree.fileOpenMode') {
-        appStore.set('settings.fileOpenMode', value)
-        fileTree.setFileOpenMode(value)
-      }
-      if (key === 'agents.forceDisabled') statusBar.setForceDisabled(value)
-      if (key === 'agents.proxy') {
-        config.agents.proxy = value
-        statusBar.setProxyConfig({ proxy: config.agents.proxy, enabled: config.agents.proxyEnabled })
-      }
-      if (key === 'quickReplies.items') {
-        if (!config.quickReplies) config.quickReplies = { items: [] }
-        config.quickReplies.items = value
-        statusBar.setQuickReplies({ items: value })
-      }
-    },
+    eventBus: bus,
     onClose: () => {
       btnSettings.classList.remove('active')
       tabBar.disabled = false
@@ -489,6 +454,59 @@ async function init() {
     if (tab) {
       window.electronAPI.ptyWrite(tab.pid, '\x15' + cmd)
       tab.term.focus()
+    }
+  })
+
+  // — FileTree EventBus subscribers —
+  bus.on('filetree.shellCmd', (cmd) => {
+    const tab = tabBar.getActive()
+    if (tab) {
+      window.electronAPI.ptyWrite(tab.pid, '\x15' + cmd)
+      tab.term.focus()
+    }
+  })
+  bus.on('filetree.inject', (path) => {
+    const tab = tabBar.getActive()
+    if (tab) {
+      window.electronAPI.ptyWrite(tab.pid, '\x1b[200~' + path + '\x1b[201~')
+      tab.term.focus()
+    }
+  })
+  bus.on('terminal.focus', () => {
+    tabBar.getActive()?.term.focus()
+  })
+  bus.on('filetree.openFile', (path) => editorPanel.openFile(path))
+  bus.on('filetree.runInNewTab', async (path) => {
+    const tabData = await createTab(tabBar.getActive()?.rootPath || startCwd)
+    const tab = tabBar.addTab(tabData)
+    tab.isBusy = false
+    tab.activeAgentId = null
+    setupTabHandlers(tab)
+    tab.fitAddon.fit()
+    window.electronAPI.ptyWrite(tab.pid, path + '\n')
+  })
+
+  // — Settings EventBus subscriber —
+  bus.on('settings.changed', ({ key, value }) => {
+    if (key === 'appearance.theme') applyTheme(value)
+    if (key === 'appearance.focusIndicator') applyFocusIndicator(value)
+    if (key === 'fileTree.collapseChildrenOnClose') {
+      appStore.set('settings.collapseChildrenOnClose', value)
+      fileTree.setCollapseChildrenOnClose(value)
+    }
+    if (key === 'fileTree.fileOpenMode') {
+      appStore.set('settings.fileOpenMode', value)
+      fileTree.setFileOpenMode(value)
+    }
+    if (key === 'agents.forceDisabled') statusBar.setForceDisabled(value)
+    if (key === 'agents.proxy') {
+      config.agents.proxy = value
+      statusBar.setProxyConfig({ proxy: config.agents.proxy, enabled: config.agents.proxyEnabled })
+    }
+    if (key === 'quickReplies.items') {
+      if (!config.quickReplies) config.quickReplies = { items: [] }
+      config.quickReplies.items = value
+      statusBar.setQuickReplies({ items: value })
     }
   })
 
