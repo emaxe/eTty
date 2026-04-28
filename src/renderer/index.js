@@ -20,6 +20,7 @@ import { APP_CONFIG } from './core/config/app-config.js'
 import { TerminalKeyboardHandler } from './features/terminal/terminal-keyboard-handler.js'
 import { TerminalOscHandler } from './features/terminal/terminal-osc-handler.js'
 import { EventBus } from './core/event-bus.js'
+import { StateStore } from './core/state-store.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
