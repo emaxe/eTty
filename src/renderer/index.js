@@ -562,13 +562,33 @@ async function init() {
     statusBar.setForceDisabled(forceDisabled)
   })
 
+  // Batched PTY write: accumulate incoming data and flush once per frame
+  // to reduce xterm.js parse+render cycles when copilot/agents emit many small chunks.
+  function batchedWrite(tab, data) {
+    if (!tab._writeBuffer) {
+      tab._writeBuffer = []
+      tab._writeRaf = requestAnimationFrame(() => {
+        const combined = tab._writeBuffer.join('')
+        tab._writeBuffer = null
+        tab._writeRaf = null
+        const t0 = performance.now()
+        tab.term.write(combined)
+        const dt = performance.now() - t0
+        if (dt > 16) {
+          console.warn(`[xterm] Slow write: ${dt.toFixed(1)}ms for ${combined.length} chars`)
+        }
+      })
+    }
+    tab._writeBuffer.push(data)
+  }
+
   // Глобальные IPC обработчики — маршрутизируют по pid
   window.electronAPI.onPtyData((pid, data) => {
     diagnostics.recordPtyData(pid, data.length)
     const tab = tabBar.tabs.find(t => t.pid === pid)
     if (!tab) return
     if (tab._isActive) {
-      tab.term.write(data)
+      batchedWrite(tab, data)
     } else {
       // Buffer data for inactive tabs to avoid xterm.js rendering cost
       tab._pendingData.push(data)
