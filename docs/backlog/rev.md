@@ -2,7 +2,10 @@
 
 > **Дата обзора:** 2026-04-25  
 > **Дата актуализации:** 2026-04-28  
-> **Актуальность:** Обзор отражает состояние кодовой базы на момент написания. Фазы 0–4 (performance fixes, config extraction, UI-Kit, Event Bus + State, DraggableTabs) **полностью реализованы** в ветках `block1-foundation-ui-kit` и `block2-event-bus-state`. Оставшиеся фазы 5–6 (DI, Main process service layer) — в планах.
+> **Актуальность:** Обзор отражает состояние кодовой базы на момент написания. Фазы 0–6 **полностью реализованы**:
+> - Фазы 0–4: `block1-foundation-ui-kit`, `block2-event-bus-state`
+> - Фаза 5 (DI Container): `block3-di-full-state`
+> - Фаза 6 (Main process service layer): `block4-main-service-layer`
 
 ---
 
@@ -71,6 +74,8 @@ src/renderer/
 ```
 
 > **Примечание (2026-04-28):** Пока God Object не разделён, все новые фичи должны быть **self-contained модулями** с минимальными изменениями в `index.js`.
+>
+> **Обновление (2026-04-28, post-Block 3 & 4):** God Object в `src/renderer/index.js` разделён через DI Container + EventBus. Main process разделён на IPC handlers + AppService.
 
 ---
 
@@ -536,15 +541,18 @@ src/
 - [x] Переписать `TabBar` на `DraggableTabs`
 - [x] Переписать `EditorPanel` на `DraggableTabs`
 
-### Фаза 5: Dependency Injection (не начата)
-- [ ] Создать `core/container.js`
-- [ ] Создать порты и адаптеры
-- [ ] Переписать `FileTree` на DI
-- [ ] Переписать `EditorPanel` на DI
+### Фаза 5: Dependency Injection (выполнено, 2026-04-28)
+- [x] Создать `core/container.js`
+- [x] Создать порты и адаптеры
+- [x] Переписать `FileTree` на DI
+- [x] Переписать `EditorPanel` на DI
+- [x] Внедрить EventBus для коммуникации компонентов
+- [x] Полная миграция State Store
 
-### Фаза 6: Main процесс (не начата)
-- [ ] Разделить IPC handlers по файлам
-- [ ] Создать service layer в main
+### Фаза 6: Main процесс (выполнено, 2026-04-28)
+- [x] Разделить IPC handlers по файлам (`src/main/ipc-handlers/`)
+- [x] Создать service layer в main (`AppService`)
+- [x] Упразднить God Object `src/main/index.js` (404 → 58 строк)
 
 ---
 
@@ -616,13 +624,15 @@ npm run test:unit
 ### Текущий статус (2026-04-28)
 - **Performance fixes (P0/P1):** полностью выполнены, build проходит
 - **Фазы 1–4 (Foundation + Event Bus + DraggableTabs):** выполнены в ветках `block1-foundation-ui-kit` и `block2-event-bus-state`
-- **Архитектурный рефакторинг оставшийся:** Фазы 5–6 (DI + Main process service layer) — не начаты
+- **Фаза 5 (DI Container + EventBus adoption):** выполнена в `block3-di-full-state`
+- **Фаза 6 (Main process service layer):** выполнена в `block4-main-service-layer`
+- **Архитектурный рефакторинг:** God Object как в renderer (`src/renderer/index.js`), так и в main (`src/main/index.js`) разделены
 
-### Приоритеты
-1. **Критический:** DI-контейнер и разделение God Object `index.js` (Фаза 5)
-2. **Высокий:** Перенести `sidebarVisible`, `editorVisible`, `gitPanelVisible`, `TabBar.tabs`, `EditorPanel._tabs` в State Store (продолжение Фазы 3)
-3. **Средний:** EventBus adoption — заменить constructor callbacks на события
-4. **Низкий:** Разделить IPC handlers в main-процессе (Фаза 6)
+### Приоритеты (все архитектурные фазы выполнены)
+1. ~~**Критический:** DI-контейнер и разделение God Object `index.js` (Фаза 5)~~ ✅
+2. ~~**Высокий:** Перенести состояние в State Store (Фаза 3)~~ ✅
+3. ~~**Средний:** EventBus adoption (Фаза 4)~~ ✅
+4. ~~**Низкий:** Разделить IPC handlers в main-процессе (Фаза 6)~~ ✅
 
 ### Ожидаемые результаты
 - Код станет тестируемым (можно писать unit-тесты)
