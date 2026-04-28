@@ -22,6 +22,7 @@ import { TerminalOscHandler } from './features/terminal/terminal-osc-handler.js'
 import { EventBus } from './core/event-bus.js'
 import { StateStore } from './core/state-store.js'
 import { ElectronApiAdapter } from './core/adapters/electron-api.js'
+import { AppContainer } from './core/container.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
@@ -160,6 +161,12 @@ async function init() {
   const sidebar = document.getElementById('sidebar')
   const resizeHandle = document.getElementById('resize-handle')
 
+  // — DI Container —
+  const container = new AppContainer()
+  container.register('store', () => appStore)
+  container.register('bus', () => bus)
+  container.register('api', () => new ElectronApiAdapter())
+
   const { cwd: startCwd } = await window.electronAPI.getCwd()
   const agentCommands = {
     claude: 'claude\n',
@@ -218,20 +225,25 @@ async function init() {
   }
 
   appStore.set('editor', { files: [], activePath: null })
+  appStore.set('tabs', { items: [], activeIndex: -1 })
 
-  editorPanel = new EditorPanel({
+  // Register components in DI container
+  container.register('editorPanel', (r) => new EditorPanel({
     panelEl: document.getElementById('editor-panel'),
     resizeHandleEl: document.getElementById('resize-handle-right'),
-    eventBus: bus,
-    electronAPI: new ElectronApiAdapter(),
-    getActiveCwd: () => tabBar.getActive()?.rootPath || startCwd,
-    store: appStore,
-  })
+    eventBus: r('bus'),
+    electronAPI: r('api'),
+    getActiveCwd: () => container.resolve('tabBar').getActive()?.rootPath || startCwd,
+    store: r('store'),
+  }))
+  container.register('fileTree', (r) => new FileTree(fileTreeContainerEl, { eventBus: r('bus') }))
+
+  editorPanel = container.resolve('editorPanel')
   // Apply current theme immediately (applyTheme ran before editorPanel was created)
   const _initialTheme = loadedThemes[currentThemeName]
   if (_initialTheme?.editor) editorPanel.setTheme(_initialTheme.editor)
 
-  const fileTree = new FileTree(fileTreeContainerEl, { eventBus: bus })
+  const fileTree = container.resolve('fileTree')
   await fileTree.init(startCwd)
   fileTree.setCollapseChildrenOnClose(config.fileTree.collapseChildrenOnClose)
   fileTree.setFileOpenMode(config.fileTree.fileOpenMode || 'double')
@@ -252,14 +264,14 @@ async function init() {
     })
   }
 
-  appStore.set('tabs', { items: [], activeIndex: -1 })
-
-  tabBar = new TabBar({
+  container.register('tabBar', (r) => new TabBar({
     tabBarEl,
     terminalContainerEl,
-    eventBus: bus,
-    store: appStore,
-  })
+    eventBus: r('bus'),
+    store: r('store'),
+  }))
+
+  tabBar = container.resolve('tabBar')
 
   bus.on('tab.switch', async ({ tab, prevTab }) => {
     if (settingsPage.isVisible()) return
@@ -331,23 +343,25 @@ async function init() {
   })
 
   // Страница настроек
-  const settingsPage = new SettingsPage({
-    eventBus: bus,
+  container.register('settingsPage', (r) => new SettingsPage({
+    eventBus: r('bus'),
     onClose: () => {
       btnSettings.classList.remove('active')
       tabBar.disabled = false
       focusActiveTerminal()
     }
-  })
+  }))
+  const settingsPage = container.resolve('settingsPage')
   await settingsPage.init()
 
-  const gitPanel = new GitPanel({
+  container.register('gitPanel', (r) => new GitPanel({
     overlayEl: document.getElementById('git-overlay'),
     onClose: () => {
       appStore.set('ui.gitPanelVisible', false)
       statusBar.updateNow()
     },
-  })
+  }))
+  const gitPanel = container.resolve('gitPanel')
 
   const launchAgentInActiveTab = (agentId) => {
     const tab = tabBar.getActive()
@@ -376,7 +390,7 @@ async function init() {
     syncStatusBarTerminalState()
   }
 
-  const statusBar = new StatusBar({
+  container.register('statusBar', (r) => new StatusBar({
     btnEl: document.getElementById('btn-git-diff'),
     cwdEl: document.getElementById('status-cwd'),
     nodeEl: document.getElementById('status-node'),
@@ -386,19 +400,20 @@ async function init() {
     onSelectAgent: selectAgentAsActive,
     agentCommandsPanelEl: document.getElementById('agent-commands-panel'),
     onAgentCommand: (cmd) => {
-      const tab = tabBar.getActive()
+      const tab = container.resolve('tabBar').getActive()
       if (tab) {
         tab.term.focus()
-        window.electronAPI.ptyWrite(tab.pid, `\x1b[200~${cmd + ''}\x1b[201~`)
+        r('api').ptyWrite(tab.pid, `\x1b[200~${cmd + ''}\x1b[201~`)
       }
     },
     proxyToggleEl: document.getElementById('btn-proxy-toggle'),
     onToggleProxy: (enabled) => {
       config.agents.proxyEnabled = enabled
-      window.electronAPI.settingsSave(config)
+      r('api').settingsSave(config)
     },
     quickReplies: config.quickReplies || { items: [] }
-  })
+  }))
+  const statusBar = container.resolve('statusBar')
 
   const agentsStatus = await window.electronAPI.agentsGetStatus().catch(() => ({ agents: [] }))
   applyAgentCommands(agentsStatus)
