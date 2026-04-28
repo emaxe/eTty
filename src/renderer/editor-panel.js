@@ -1,5 +1,6 @@
 import { Icons } from './icons.js'
 import { UI_DIMENSIONS } from './core/config/ui-dimensions.js'
+import { APP_CONFIG } from './core/config/app-config.js'
 import { EditorState, Compartment } from '@codemirror/state'
 import {
   EditorView,
@@ -881,7 +882,7 @@ export class EditorPanel {
     const dy = e.clientY - ds.startY
 
     if (!ds.isDragging) {
-      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return
+      if (Math.abs(dx) < APP_CONFIG.DRAG_START_THRESHOLD_PX && Math.abs(dy) < APP_CONFIG.DRAG_START_THRESHOLD_PX) return
       ds.isDragging = true
       ds.tabEl.classList.add('dragging')
       document.body.style.cursor = 'grabbing'
