@@ -1,6 +1,7 @@
 import { Icons } from './icons.js'
 import { UI_DIMENSIONS } from './core/config/ui-dimensions.js'
 import { APP_CONFIG } from './core/config/app-config.js'
+import { DraggableTabs } from './components/base/tabs/draggable-tabs.js'
 import { EditorState, Compartment } from '@codemirror/state'
 import {
   EditorView,
@@ -73,11 +74,9 @@ export class EditorPanel {
 
     this._contextMenu = new ContextMenu()
 
-    // Drag-and-drop state
-    this._dragState = null
-    this._dropIndicator = null
-    this._onEditorDragMove = this._onEditorDragMove.bind(this)
-    this._onEditorDragEnd = this._onEditorDragEnd.bind(this)
+    this._draggable = new DraggableTabs(this._tabBarEl, {
+      onReorder: (fromIndex, toIndex) => this._handleReorder(fromIndex, toIndex)
+    })
 
     // Compartments for hot-swap
     this._themeCompartment = new Compartment()
@@ -130,6 +129,7 @@ export class EditorPanel {
     })
 
     this._tabBarEl.appendChild(tabEl)
+    this._draggable.observeElement(tabEl)
     this._switchToTab(filePath)
   }
 
@@ -452,13 +452,6 @@ export class EditorPanel {
     tab.addEventListener('contextmenu', (e) => {
       e.preventDefault()
       this._showTabContextMenu(filePath, e.clientX, e.clientY)
-    })
-
-    // Drag-and-drop
-    tab.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return
-      if (e.target.closest('.editor-tab-close')) return
-      this._initEditorDrag(filePath, e)
     })
 
     return tab
@@ -855,83 +848,12 @@ export class EditorPanel {
     }
   }
 
-  // — Drag-and-drop —
-
-  _initEditorDrag(filePath, e) {
-    const tabData = this._tabs.get(filePath)
-    if (!tabData) return
-
-    this._dragState = {
-      filePath,
-      startX: e.clientX,
-      startY: e.clientY,
-      isDragging: false,
-      tabEl: tabData.element,
-      dropTargetIndex: null
-    }
-
-    document.addEventListener('mousemove', this._onEditorDragMove)
-    document.addEventListener('mouseup', this._onEditorDragEnd)
-  }
-
-  _onEditorDragMove(e) {
-    const ds = this._dragState
-    if (!ds) return
-
-    const dx = e.clientX - ds.startX
-    const dy = e.clientY - ds.startY
-
-    if (!ds.isDragging) {
-      if (Math.abs(dx) < APP_CONFIG.DRAG_START_THRESHOLD_PX && Math.abs(dy) < APP_CONFIG.DRAG_START_THRESHOLD_PX) return
-      ds.isDragging = true
-      ds.tabEl.classList.add('dragging')
-      document.body.style.cursor = 'grabbing'
-      this._createEditorDropIndicator()
-    }
-
-    const targetIndex = this._getEditorDropIndex(e.clientX)
-    if (targetIndex !== ds.dropTargetIndex) {
-      ds.dropTargetIndex = targetIndex
-      this._positionEditorDropIndicator(targetIndex)
-    }
-  }
-
-  _onEditorDragEnd() {
-    document.removeEventListener('mousemove', this._onEditorDragMove)
-    document.removeEventListener('mouseup', this._onEditorDragEnd)
-
-    const ds = this._dragState
-    if (!ds) return
-
-    if (ds.isDragging && ds.dropTargetIndex != null) {
-      this._reorderEditorTab(ds.filePath, ds.dropTargetIndex)
-    }
-
-    ds.tabEl.classList.remove('dragging')
-    document.body.style.cursor = ''
-    this._removeEditorDropIndicator()
-    this._dragState = null
-  }
-
-  _getEditorDropIndex(clientX) {
+  _handleReorder(fromIndex, toIndex) {
     const keys = [...this._tabs.keys()]
-    for (let i = 0; i < keys.length; i++) {
-      const tab = this._tabs.get(keys[i])
-      const rect = tab.element.getBoundingClientRect()
-      const midX = rect.left + rect.width / 2
-      if (clientX < midX) return i
-    }
-    return keys.length
-  }
-
-  _reorderEditorTab(fromPath, toIndex) {
-    const keys = [...this._tabs.keys()]
-    const fromIndex = keys.indexOf(fromPath)
-    if (fromIndex < 0 || fromIndex === toIndex || fromIndex + 1 === toIndex) return
+    const fromPath = keys[fromIndex]
 
     keys.splice(fromIndex, 1)
-    const insertAt = toIndex > fromIndex ? toIndex - 1 : toIndex
-    keys.splice(insertAt, 0, fromPath)
+    keys.splice(toIndex, 0, fromPath)
 
     // Rebuild Map in new order
     const newMap = new Map()
@@ -939,45 +861,6 @@ export class EditorPanel {
       newMap.set(key, this._tabs.get(key))
     }
     this._tabs = newMap
-
-    // Move DOM element
-    const tab = this._tabs.get(fromPath)
-    const nextKey = keys[insertAt + 1]
-    if (nextKey) {
-      this._tabBarEl.insertBefore(tab.element, this._tabs.get(nextKey).element)
-    } else {
-      this._tabBarEl.appendChild(tab.element)
-    }
-  }
-
-  _createEditorDropIndicator() {
-    this._dropIndicator = document.createElement('div')
-    this._dropIndicator.className = 'editor-tab-drop-indicator'
-    this._tabBarEl.appendChild(this._dropIndicator)
-  }
-
-  _positionEditorDropIndicator(targetIndex) {
-    if (!this._dropIndicator) return
-    const keys = [...this._tabs.keys()]
-    const barRect = this._tabBarEl.getBoundingClientRect()
-    let left
-    if (targetIndex < keys.length) {
-      const tab = this._tabs.get(keys[targetIndex])
-      const rect = tab.element.getBoundingClientRect()
-      left = rect.left - barRect.left - 1
-    } else {
-      const lastTab = this._tabs.get(keys[keys.length - 1])
-      const lastRect = lastTab.element.getBoundingClientRect()
-      left = lastRect.right - barRect.left - 1
-    }
-    this._dropIndicator.style.left = left + 'px'
-  }
-
-  _removeEditorDropIndicator() {
-    if (this._dropIndicator) {
-      this._dropIndicator.remove()
-      this._dropIndicator = null
-    }
   }
 
   _setupListeners() {

@@ -19,6 +19,8 @@ import { TERMINAL_CONFIG } from './core/config/terminal-config.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 import { TerminalKeyboardHandler } from './features/terminal/terminal-keyboard-handler.js'
 import { TerminalOscHandler } from './features/terminal/terminal-osc-handler.js'
+import { EventBus } from './core/event-bus.js'
+import { StateStore } from './core/state-store.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
@@ -26,41 +28,17 @@ let loadedThemes = THEMES
 let tabBar = null
 /** @type {EditorPanel|null} */
 let editorPanel = null
+/** @type {StateStore|null} */
+let appStore = null
 
 /** Применяет стиль индикатора фокуса через data-атрибут на корневом элементе. */
 function applyFocusIndicator(style) {
-  document.documentElement.dataset.focusStyle = style || 'none'
+  appStore?.set('ui.focusIndicator', style || 'none')
 }
 
 /** Применяет тему: обновляет CSS-переменные, терминалы и редактор. */
 function applyTheme(themeName) {
-  const theme = loadedThemes[themeName]
-  if (!theme) return
-  currentThemeName = themeName
-
-  const root = document.documentElement.style
-  root.setProperty('--bg', theme.ui.bg)
-  root.setProperty('--surface', theme.ui.surface)
-  root.setProperty('--border', theme.ui.border)
-  root.setProperty('--muted', theme.ui.muted)
-  root.setProperty('--text', theme.ui.text)
-  root.setProperty('--subtext', theme.ui.subtext)
-  root.setProperty('--accent', theme.ui.accent)
-  root.setProperty('--green', theme.ui.green)
-  root.setProperty('--red', theme.ui.red)
-  root.setProperty('--hover', theme.ui.hover)
-
-  // Обновить уже открытые терминалы
-  if (tabBar) {
-    for (const tab of tabBar.tabs) {
-      tab.term.options.theme = theme.terminal
-    }
-  }
-
-  // Обновить тему редактора
-  if (editorPanel && theme.editor) {
-    editorPanel.setTheme(theme.editor)
-  }
+  appStore?.set('ui.theme', themeName)
 }
 
 /** Создаёт новую вкладку: Terminal + FitAddon + PTY-сессия. */
@@ -103,6 +81,66 @@ async function init() {
   if (!config.agents) config.agents = {}
   if (typeof config.agents.proxy !== 'string') config.agents.proxy = ''
   if (typeof config.agents.proxyEnabled !== 'boolean') config.agents.proxyEnabled = false
+
+  // Initialize store with current settings
+  appStore = new StateStore({
+    ui: {
+      theme: config.appearance.theme || 'dark',
+      focusIndicator: config.appearance.focusIndicator || 'none',
+      sidebarVisible: true,
+      editorVisible: false,
+      gitPanelVisible: false,
+    },
+    settings: {
+      collapseChildrenOnClose: config.fileTree?.collapseChildrenOnClose ?? true,
+      fileOpenMode: config.fileTree?.fileOpenMode || 'double',
+    }
+  })
+
+  // Expose for debugging (remove before production if desired)
+  window.__appStore = appStore
+
+  // Theme subscriber — applies CSS variables, updates terminals and editor
+  appStore.subscribe((state, path) => {
+    if (path === 'ui.theme') {
+      const themeName = state.ui.theme
+      const theme = loadedThemes[themeName]
+      if (!theme) return
+      currentThemeName = themeName
+
+      const root = document.documentElement.style
+      root.setProperty('--bg', theme.ui.bg)
+      root.setProperty('--surface', theme.ui.surface)
+      root.setProperty('--border', theme.ui.border)
+      root.setProperty('--muted', theme.ui.muted)
+      root.setProperty('--text', theme.ui.text)
+      root.setProperty('--subtext', theme.ui.subtext)
+      root.setProperty('--accent', theme.ui.accent)
+      root.setProperty('--green', theme.ui.green)
+      root.setProperty('--red', theme.ui.red)
+      root.setProperty('--hover', theme.ui.hover)
+
+      // Обновить уже открытые терминалы
+      if (tabBar) {
+        for (const tab of tabBar.tabs) {
+          tab.term.options.theme = theme.terminal
+        }
+      }
+
+      // Обновить тему редактора
+      if (editorPanel && theme.editor) {
+        editorPanel.setTheme(theme.editor)
+      }
+    }
+  })
+
+  // Focus indicator subscriber
+  appStore.subscribe((state, path) => {
+    if (path === 'ui.focusIndicator') {
+      document.documentElement.dataset.focusStyle = state.ui.focusIndicator || 'none'
+    }
+  })
+
   applyTheme(config.appearance.theme)
   applyFocusIndicator(config.appearance.focusIndicator)
 
@@ -299,8 +337,14 @@ async function init() {
     onSettingsChanged: (key, value) => {
       if (key === 'appearance.theme') applyTheme(value)
       if (key === 'appearance.focusIndicator') applyFocusIndicator(value)
-      if (key === 'fileTree.collapseChildrenOnClose') fileTree.setCollapseChildrenOnClose(value)
-      if (key === 'fileTree.fileOpenMode') fileTree.setFileOpenMode(value)
+      if (key === 'fileTree.collapseChildrenOnClose') {
+        appStore.set('settings.collapseChildrenOnClose', value)
+        fileTree.setCollapseChildrenOnClose(value)
+      }
+      if (key === 'fileTree.fileOpenMode') {
+        appStore.set('settings.fileOpenMode', value)
+        fileTree.setFileOpenMode(value)
+      }
       if (key === 'agents.forceDisabled') statusBar.setForceDisabled(value)
       if (key === 'agents.proxy') {
         config.agents.proxy = value

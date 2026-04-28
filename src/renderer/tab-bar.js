@@ -5,6 +5,7 @@
  * Поддерживает drag-and-drop переупорядочивание и disabled-режим (блокировка переключения).
  */
 import { ContextMenu } from './components/base/context-menu/context-menu.js'
+import { DraggableTabs } from './components/base/tabs/draggable-tabs.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 
 export class TabBar {
@@ -24,11 +25,11 @@ export class TabBar {
 
     this._contextMenu = new ContextMenu()
 
-    // Drag-and-drop state
-    this._dragState = null
-    this._dropIndicator = null
-    this._onDragMove = this._onDragMove.bind(this)
-    this._onDragEnd = this._onDragEnd.bind(this)
+    this._draggable = new DraggableTabs(this.tabBarEl, {
+      onReorder: (fromIndex, toIndex) => this._handleReorder(fromIndex, toIndex),
+      dragHandleSelector: '.tab-drag-handle',
+      excludedSelector: '#tab-add'
+    })
   }
 
   addTab({ pid, term, fitAddon, rootPath, tabId }) {
@@ -40,6 +41,7 @@ export class TabBar {
 
     const element = this._createTabEl(folderName, '')
     this.tabBarEl.insertBefore(element, this._addBtn)
+    this._draggable.observeElement(element)
 
     const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '', tabId,
       treeExpandedDirs: new Set(),
@@ -150,17 +152,6 @@ export class TabBar {
       if (i >= 0) this._showTabContextMenu(i, e.clientX, e.clientY)
     })
 
-    // Drag-and-drop
-    el.addEventListener('mousedown', (e) => {
-      if (this.disabled) return
-      if (e.button !== 0) return
-      if (e.target.closest('.tab-close')) return
-      const isOnHandle = !!e.target.closest('.tab-drag-handle')
-      if (!isOnHandle) return
-      const i = this.tabs.findIndex(t => t.element === el)
-      if (i >= 0) this._initDrag(i, e)
-    })
-
     return el
   }
 
@@ -197,116 +188,18 @@ export class TabBar {
     }
   }
 
-  // — Drag-and-drop —
-
-  _initDrag(tabIndex, e) {
-    e.stopPropagation()
-    e.preventDefault()
-
-    this._dragState = {
-      tabIndex,
-      startX: e.clientX,
-      startY: e.clientY,
-      isDragging: false,
-      tabEl: this.tabs[tabIndex].element,
-      dropTargetIndex: null
-    }
-
-    document.addEventListener('mousemove', this._onDragMove)
-    document.addEventListener('mouseup', this._onDragEnd)
-  }
-
-  _onDragMove(e) {
-    const ds = this._dragState
-    if (!ds) return
-
-    const dx = e.clientX - ds.startX
-    const dy = e.clientY - ds.startY
-
-    if (!ds.isDragging) {
-      if (Math.abs(dx) < APP_CONFIG.DRAG_START_THRESHOLD_PX && Math.abs(dy) < APP_CONFIG.DRAG_START_THRESHOLD_PX) return
-      ds.isDragging = true
-      ds.tabEl.classList.add('dragging')
-      document.body.style.cursor = 'grabbing'
-      this._createDropIndicator()
-    }
-
-    const targetIndex = this._getDropIndex(e.clientX)
-    if (targetIndex !== ds.dropTargetIndex) {
-      ds.dropTargetIndex = targetIndex
-      this._positionDropIndicator(targetIndex)
-    }
-  }
-
-  _onDragEnd() {
-    document.removeEventListener('mousemove', this._onDragMove)
-    document.removeEventListener('mouseup', this._onDragEnd)
-
-    const ds = this._dragState
-    if (!ds) return
-
-    if (ds.isDragging && ds.dropTargetIndex != null) {
-      this._reorderTab(ds.tabIndex, ds.dropTargetIndex)
-    }
-
-    ds.tabEl.classList.remove('dragging')
-    document.body.style.cursor = ''
-    this._removeDropIndicator()
-    this._dragState = null
-  }
-
-  _getDropIndex(clientX) {
-    for (let i = 0; i < this.tabs.length; i++) {
-      const rect = this.tabs[i].element.getBoundingClientRect()
-      const midX = rect.left + rect.width / 2
-      if (clientX < midX) return i
-    }
-    return this.tabs.length
-  }
-
-  _reorderTab(fromIndex, toIndex) {
-    if (fromIndex === toIndex || fromIndex + 1 === toIndex) return
-
+  _handleReorder(fromIndex, toIndex) {
     const tab = this.tabs[fromIndex]
     this.tabs.splice(fromIndex, 1)
-    const insertAt = toIndex > fromIndex ? toIndex - 1 : toIndex
-    this.tabs.splice(insertAt, 0, tab)
-
-    // Move DOM
-    if (insertAt >= this.tabs.length - 1) {
-      this.tabBarEl.insertBefore(tab.element, this._addBtn)
-    } else {
-      this.tabBarEl.insertBefore(tab.element, this.tabs[insertAt + 1].element)
-    }
+    this.tabs.splice(toIndex, 0, tab)
 
     // Update activeIndex
-    this.activeIndex = this.tabs.findIndex(t => t.element.classList.contains('active'))
-  }
-
-  _createDropIndicator() {
-    this._dropIndicator = document.createElement('div')
-    this._dropIndicator.className = 'tab-drop-indicator'
-    this.tabBarEl.appendChild(this._dropIndicator)
-  }
-
-  _positionDropIndicator(targetIndex) {
-    if (!this._dropIndicator) return
-    const barRect = this.tabBarEl.getBoundingClientRect()
-    let left
-    if (targetIndex < this.tabs.length) {
-      const rect = this.tabs[targetIndex].element.getBoundingClientRect()
-      left = rect.left - barRect.left - 1
-    } else {
-      const lastRect = this.tabs[this.tabs.length - 1].element.getBoundingClientRect()
-      left = lastRect.right - barRect.left - 1
-    }
-    this._dropIndicator.style.left = left + 'px'
-  }
-
-  _removeDropIndicator() {
-    if (this._dropIndicator) {
-      this._dropIndicator.remove()
-      this._dropIndicator = null
+    if (this.activeIndex === fromIndex) {
+      this.activeIndex = toIndex
+    } else if (fromIndex < this.activeIndex && toIndex >= this.activeIndex) {
+      this.activeIndex--
+    } else if (fromIndex > this.activeIndex && toIndex <= this.activeIndex) {
+      this.activeIndex++
     }
   }
 
