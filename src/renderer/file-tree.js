@@ -1035,13 +1035,6 @@ export class FileTree {
 
   _showMenuRoot(x, y) {
     this._contextMenu.show([
-      { label: 'cd в директорию', disabled: this._isBusy, action: () => {
-          const escaped = this._cwd.replace(/'/g, "'\\''")
-          this._bus.emit('filetree.shellCmd', `cd '${escaped}'\r`)
-          this._bus.emit('terminal.focus')
-        }
-      },
-      { separator: true },
       { label: 'Новый файл', action: () => this._createInline('file', this._cwd, this._rootContainer, 1) },
       { label: 'Новая папка', action: () => this._createInline('dir', this._cwd, this._rootContainer, 1) },
       { separator: true },
