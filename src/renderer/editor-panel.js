@@ -1,4 +1,6 @@
 import { Icons } from './icons.js'
+import { UI_DIMENSIONS } from './core/config/ui-dimensions.js'
+import { APP_CONFIG } from './core/config/app-config.js'
 import { EditorState, Compartment } from '@codemirror/state'
 import {
   EditorView,
@@ -32,7 +34,7 @@ const _fallbackHighlight = syntaxHighlighting(defaultHighlightStyle, { fallback:
 import { buildEditorTheme } from './editor-theme.js'
 import { getLanguageExtension } from './editor-languages.js'
 import { fileLinksExtension, normalizePath } from './editor-file-links.js'
-import { ContextMenu } from './context-menu.js'
+import { ContextMenu } from './components/base/context-menu/context-menu.js'
 
 export class EditorPanel {
   /**
@@ -664,9 +666,9 @@ export class EditorPanel {
     if (!coordsFrom || !coordsTo) { this._hideFloatBtn(); return }
 
     const bodyRect = this._bodyEl.getBoundingClientRect()
-    const btnW = 24
-    const btnH = 24
-    const margin = 6
+    const btnW = UI_DIMENSIONS.FLOAT_BTN.WIDTH
+    const btnH = UI_DIMENSIONS.FLOAT_BTN.HEIGHT
+    const margin = UI_DIMENSIONS.FLOAT_BTN.MARGIN
 
     // Horizontally: to the LEFT of the selection start
     let left = coordsFrom.left - bodyRect.left - btnW - margin
@@ -880,7 +882,7 @@ export class EditorPanel {
     const dy = e.clientY - ds.startY
 
     if (!ds.isDragging) {
-      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return
+      if (Math.abs(dx) < APP_CONFIG.DRAG_START_THRESHOLD_PX && Math.abs(dy) < APP_CONFIG.DRAG_START_THRESHOLD_PX) return
       ds.isDragging = true
       ds.tabEl.classList.add('dragging')
       document.body.style.cursor = 'grabbing'

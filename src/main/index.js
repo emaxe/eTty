@@ -16,6 +16,7 @@ import { loadSettings, saveSettings } from './settings-store'
 import { HistoryManager } from './history-manager'
 import { registerGitHandlers } from './git-service.js'
 import { AgentService } from './agent-service.js'
+import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
 const ptyManager = new PtyManager()
 const fileManager = new FileManager()
@@ -78,7 +79,7 @@ app.whenReady().then(() => {
       if (changed) {
         await saveSettings(config)
         if (_mainWindow && !_mainWindow.isDestroyed()) {
-          _mainWindow.webContents.send('agents:settings-updated', {
+          _mainWindow.webContents.send(IPC_CHANNELS.AGENTS_SETTINGS_UPDATED, {
             forceDisabled: config.agents.forceDisabled
           })
         }
@@ -94,7 +95,7 @@ app.whenReady().then(() => {
   }
 
 
-  ipcMain.handle('pty:create', async (event, options) => {
+  ipcMain.handle(IPC_CHANNELS.PTY_CREATE, async (event, options) => {
     const tabId = options.tabId || crypto.randomUUID()
     await historyManager.ensureHistoryDir()
 
@@ -118,15 +119,15 @@ app.whenReady().then(() => {
     })
   })
 
-  ipcMain.on('pty:write', (_, { pid, data }) => {
+  ipcMain.on(IPC_CHANNELS.PTY_WRITE, (_, { pid, data }) => {
     ptyManager.write(pid, data)
   })
 
-  ipcMain.on('pty:resize', (_, { pid, cols, rows }) => {
+  ipcMain.on(IPC_CHANNELS.PTY_RESIZE, (_, { pid, cols, rows }) => {
     ptyManager.resize(pid, cols, rows)
   })
 
-  ipcMain.handle('pty:kill', async (_, pid) => {
+  ipcMain.handle(IPC_CHANNELS.PTY_KILL, async (_, pid) => {
     const session = ptyManager.getSession(pid)
     if (session?.tabId) {
       // Remove from sessions FIRST to prevent double-merge on app exit
@@ -138,25 +139,25 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('app:homedir', () => os.homedir())
+  ipcMain.handle(IPC_CHANNELS.APP_HOMEDIR, () => os.homedir())
 
-  ipcMain.handle('app:open-external', async (_, filePath) => {
+  ipcMain.handle(IPC_CHANNELS.APP_OPEN_EXTERNAL, async (_, filePath) => {
     const { error } = await shell.openPath(filePath)
     if (error) log.error('app:open-external failed:', error)
     return { success: !error, error }
   })
 
-  ipcMain.handle('window:get-position', (event) => {
+  ipcMain.handle(IPC_CHANNELS.WINDOW_GET_POSITION, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return win.getPosition()
   })
 
-  ipcMain.on('window:move', (event, { x, y }) => {
+  ipcMain.on(IPC_CHANNELS.WINDOW_MOVE, (event, { x, y }) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     win.setPosition(Math.round(x), Math.round(y))
   })
 
-  ipcMain.handle('fs:read-dir', async (_, { dirPath }) => {
+  ipcMain.handle(IPC_CHANNELS.FS_READ_DIR, async (_, { dirPath }) => {
     try {
       return await fileManager.readDir(dirPath)
     } catch (e) {
@@ -164,7 +165,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('fs:create-file', async (_, { filePath }) => {
+  ipcMain.handle(IPC_CHANNELS.FS_CREATE_FILE, async (_, { filePath }) => {
     try {
       return await fileManager.createFile(filePath)
     } catch (e) {
@@ -172,7 +173,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('fs:create-dir', async (_, { dirPath }) => {
+  ipcMain.handle(IPC_CHANNELS.FS_CREATE_DIR, async (_, { dirPath }) => {
     try {
       return await fileManager.createDir(dirPath)
     } catch (e) {
@@ -180,7 +181,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('fs:rename', async (_, { oldPath, newPath }) => {
+  ipcMain.handle(IPC_CHANNELS.FS_RENAME, async (_, { oldPath, newPath }) => {
     try {
       return await fileManager.rename(oldPath, newPath)
     } catch (e) {
@@ -188,7 +189,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('fs:delete', async (_, { targetPath }) => {
+  ipcMain.handle(IPC_CHANNELS.FS_DELETE, async (_, { targetPath }) => {
     try {
       const win = BrowserWindow.getFocusedWindow()
       const { response } = await dialog.showMessageBox(win, {
@@ -206,7 +207,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('fs:copy', async (_, { srcPath, destDir }) => {
+  ipcMain.handle(IPC_CHANNELS.FS_COPY, async (_, { srcPath, destDir }) => {
     try {
       return await fileManager.copy(srcPath, destDir)
     } catch (e) {
@@ -214,7 +215,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('fs:move', async (_, { srcPaths, destDir }) => {
+  ipcMain.handle(IPC_CHANNELS.FS_MOVE, async (_, { srcPaths, destDir }) => {
     try {
       return await fileManager.move(srcPaths, destDir)
     } catch (e) {
@@ -222,7 +223,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('fs:read-file', async (_, { filePath }) => {
+  ipcMain.handle(IPC_CHANNELS.FS_READ_FILE, async (_, { filePath }) => {
     try {
       return await fileManager.readFile(filePath)
     } catch (e) {
@@ -230,7 +231,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('fs:write-file', async (_, { filePath, content }) => {
+  ipcMain.handle(IPC_CHANNELS.FS_WRITE_FILE, async (_, { filePath, content }) => {
     try {
       return await fileManager.writeFile(filePath, content)
     } catch (e) {
@@ -238,45 +239,45 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('fs:get-cwd', () => {
+  ipcMain.handle(IPC_CHANNELS.FS_GET_CWD, () => {
     return fileManager.getCwd()
   })
 
-  ipcMain.handle('fs:set-root', (_, { dirPath }) => {
+  ipcMain.handle(IPC_CHANNELS.FS_SET_ROOT, (_, { dirPath }) => {
     fileManager.setRoot(dirPath)
     return { success: true }
   })
 
-  ipcMain.handle('fs:watch-dir', (event, { dirPath }) => {
+  ipcMain.handle(IPC_CHANNELS.FS_WATCH_DIR, (event, { dirPath }) => {
     console.log('[Main] fs:watch-dir called:', dirPath)
     const result = fileManager.watchDir(dirPath, event.sender)
     console.log('[Main] fs:watch-dir result:', dirPath, result)
     return result
   })
 
-  ipcMain.handle('fs:unwatch-dir', (_, { dirPath }) => {
+  ipcMain.handle(IPC_CHANNELS.FS_UNWATCH_DIR, (_, { dirPath }) => {
     fileManager.unwatchDir(dirPath)
   })
 
-  ipcMain.handle('settings:load', () => loadSettings())
-  ipcMain.handle('settings:save', (_, settings) => saveSettings(settings))
-  ipcMain.handle('agents:get-status', async () => agentService.getStatus())
-  ipcMain.handle('agents:refresh', async () => agentService.refresh())
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_LOAD, () => loadSettings())
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SAVE, (_, settings) => saveSettings(settings))
+  ipcMain.handle(IPC_CHANNELS.AGENTS_GET_STATUS, async () => agentService.getStatus())
+  ipcMain.handle(IPC_CHANNELS.AGENTS_REFRESH, async () => agentService.refresh())
 
   registerGitHandlers(ipcMain)
 
-  ipcMain.handle('history:cleanup', async (_, activeTabIds) => {
+  ipcMain.handle(IPC_CHANNELS.HISTORY_CLEANUP, async (_, activeTabIds) => {
     await historyManager.cleanupOrphanedHistories(activeTabIds || [])
   })
 
   // --- Tab state: restore dialog ---
-  ipcMain.handle('tabs:export-state', (event, tabs) => {
+  ipcMain.handle(IPC_CHANNELS.TABS_EXPORT_STATE, (event, tabs) => {
     return saveTabState(tabs)
   })
 
-  ipcMain.handle('tabs:has-saved-state', () => hasTabState())
+  ipcMain.handle(IPC_CHANNELS.TABS_HAS_SAVED_STATE, () => hasTabState())
 
-  ipcMain.handle('tabs:load-saved-state', async () => {
+  ipcMain.handle(IPC_CHANNELS.TABS_LOAD_SAVED_STATE, async () => {
     const state = await loadTabState()
     if (!state) return null
     const homedir = os.homedir()
@@ -296,9 +297,9 @@ app.whenReady().then(() => {
     return validated
   })
 
-  ipcMain.handle('tabs:delete-saved-state', () => deleteTabState())
+  ipcMain.handle(IPC_CHANNELS.TABS_DELETE_SAVED_STATE, () => deleteTabState())
 
-  ipcMain.handle('tabs:show-restore-dialog', async (event, tabCount) => {
+  ipcMain.handle(IPC_CHANNELS.TABS_SHOW_RESTORE_DIALOG, async (event, tabCount) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const { response } = await dialog.showMessageBox(win, {
       type: 'question',
@@ -316,10 +317,10 @@ app.whenReady().then(() => {
   const mainWindow = _mainWindow
 
   mainWindow.on('enter-full-screen', () => {
-    mainWindow.webContents.send('window:fullscreen-change', true)
+    mainWindow.webContents.send(IPC_CHANNELS.WINDOW_FULLSCREEN_CHANGE, true)
   })
   mainWindow.on('leave-full-screen', () => {
-    mainWindow.webContents.send('window:fullscreen-change', false)
+    mainWindow.webContents.send(IPC_CHANNELS.WINDOW_FULLSCREEN_CHANGE, false)
   })
 
   // Save tab state when window is closing (before webContents is destroyed)
@@ -367,7 +368,7 @@ app.whenReady().then(() => {
             label: 'Восстановить вкладки',
             enabled: hasSaved,
             click: () => {
-              mainWindow.webContents.send('tabs:trigger-restore')
+              mainWindow.webContents.send(IPC_CHANNELS.TABS_TRIGGER_RESTORE)
             }
           }
         ]
@@ -393,7 +394,7 @@ app.whenReady().then(() => {
 
   buildMenu()
 
-  ipcMain.on('tabs:state-changed', () => buildMenu())
+  ipcMain.on(IPC_CHANNELS.TABS_STATE_CHANGED, () => buildMenu())
 })
 
 app.on('window-all-closed', () => {

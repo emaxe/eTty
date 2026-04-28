@@ -1,4 +1,5 @@
 import { Icons } from './icons.js'
+import { APP_CONFIG } from './core/config/app-config.js'
 
 /**
  * Статус-бар. Показывает текущую директорию, версию Node.js и Git-статистику.
@@ -44,7 +45,7 @@ export class StatusBar {
 
       button.addEventListener('click', () => {
         const now = Date.now()
-        const isDoubleClick = now - lastClickTime < 500
+        const isDoubleClick = now - lastClickTime < APP_CONFIG.DOUBLE_CLICK_THRESHOLD_MS
         lastClickTime = now
 
         // Double-click: если терминал занят и нет активного агента — назначаем
@@ -85,7 +86,7 @@ export class StatusBar {
   start(getRootPath) {
     this._getRootPath = getRootPath
     this._poll()
-    this._intervalId = setInterval(() => this._poll(), 5000)
+    this._intervalId = setInterval(() => this._poll(), APP_CONFIG.STATUS_POLL_INTERVAL_MS)
   }
 
   stop() {

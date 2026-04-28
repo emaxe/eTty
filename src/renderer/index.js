@@ -5,6 +5,8 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { SearchAddon } from '@xterm/addon-search'
 import '@xterm/xterm/css/xterm.css'
 import './styles.css'
+import './components/base/context-menu/context-menu.css'
+import './components/base/button/button.css'
 import { FileTree } from './file-tree.js'
 import { TabBar } from './tab-bar.js'
 import { THEMES } from './themes.js'
@@ -13,6 +15,10 @@ import { StatusBar } from './status-bar.js'
 import { GitPanel } from './git-panel.js'
 import { EditorPanel } from './editor-panel.js'
 import { Icons } from './icons.js'
+import { TERMINAL_CONFIG } from './core/config/terminal-config.js'
+import { APP_CONFIG } from './core/config/app-config.js'
+import { TerminalKeyboardHandler } from './features/terminal/terminal-keyboard-handler.js'
+import { TerminalOscHandler } from './features/terminal/terminal-osc-handler.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
@@ -60,12 +66,12 @@ function applyTheme(themeName) {
 /** Создаёт новую вкладку: Terminal + FitAddon + PTY-сессия. */
 async function createTab(cwd, tabId) {
   const term = new Terminal({
-    cursorBlink: true,
-    fontSize: 14,
-    fontFamily: 'Menlo, "SF Mono", Consolas, "Courier New", monospace',
-    scrollback: 10000,
-    allowProposedApi: true,
-    theme: loadedThemes[currentThemeName].terminal
+    cursorBlink: TERMINAL_CONFIG.CURSOR_BLINK,
+    fontSize: TERMINAL_CONFIG.FONT_SIZE,
+    fontFamily: TERMINAL_CONFIG.FONT_FAMILY,
+    scrollback: TERMINAL_CONFIG.SCROLLBACK,
+    allowProposedApi: TERMINAL_CONFIG.ALLOW_PROPOSED_API,
+    theme: loadedThemes[currentThemeName].terminal,
   })
 
   const fitAddon = new FitAddon()
@@ -76,7 +82,13 @@ async function createTab(cwd, tabId) {
   tabId = tabId || crypto.randomUUID()
   const { config } = await window.electronAPI.settingsLoad()
   const promptStyle = config.terminal?.promptStyle || 'default'
-  const { pid } = await window.electronAPI.ptyCreate({ cols: 80, rows: 24, cwd, tabId, promptStyle })
+  const { pid } = await window.electronAPI.ptyCreate({
+    cols: TERMINAL_CONFIG.DEFAULT_COLS,
+    rows: TERMINAL_CONFIG.DEFAULT_ROWS,
+    cwd,
+    tabId,
+    promptStyle,
+  })
 
   return { term, fitAddon, pid, rootPath: cwd, tabId }
 }
@@ -223,6 +235,13 @@ async function init() {
       // Очищаем все watchers перед сменой вкладки
       fileTree.unwatchAll()
       if (prevTab) {
+        // Destroy previously suspended editor views to prevent memory leaks
+        // when rapidly switching between tabs.
+        if (prevTab.editorState?._detachedTabs) {
+          for (const [, etab] of prevTab.editorState._detachedTabs) {
+            etab.view.destroy()
+          }
+        }
         prevTab.treeExpandedDirs = fileTree.getExpandedDirs()
         prevTab.treeScrollTop = fileTree.getScrollTop()
         prevTab.editorState = editorPanel.suspendState()
@@ -392,95 +411,60 @@ async function init() {
     if (index >= 0) tabBar.removeTab(index)
   })
 
-  /**
-   * Настраивает обработчики для вкладки:
-   * - Kitty keyboard protocol (modifier+Enter)
-   * - Non-ASCII символы (кириллица) — ручная отправка в PTY
-   * - Terminal → PTY data/resize/title
-   * - OSC 7 (cwd sync) и OSC 133 (busy tracking)
-   * - WebGL addon
-   */
   function setupTabHandlers(tab) {
-    // Kitty keyboard protocol: перехватываем modifier+Enter до xterm.js
-    tab.term.attachCustomKeyEventHandler((event) => {
-      if (event.key === 'Enter') {
-        if (event.shiftKey && !event.ctrlKey) {
-          if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, '\x1b[13;2u')
-          return false
-        }
-        if (event.ctrlKey && !event.shiftKey) {
-          if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, '\x1b[13;5u')
-          return false
-        }
-        if (event.ctrlKey && event.shiftKey) {
-          if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, '\x1b[13;6u')
-          return false
-        }
-      }
-      // Не-ASCII печатаемые символы (кириллица, акцентированные буквы и т.д.):
-      // xterm.js не устанавливает _keyDownHandled корректно в non-screenReader режиме,
-      // из-за чего _keyPress повторно обрабатывает событие с неверным charCode на macOS.
-      // Отправляем символ вручную и блокируем xterm.js-обработку.
-      if (event.key.length === 1 && event.key.charCodeAt(0) > 127 &&
-          !event.ctrlKey && !event.altKey && !event.metaKey) {
-        if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, event.key)
-        return false
-      }
-      return true
+    // Keyboard handling
+    const keyboardHandler = new TerminalKeyboardHandler({
+      write: (pid, data) => window.electronAPI.ptyWrite(pid, data),
     })
+    keyboardHandler.attach(tab.term, tab.pid)
 
-    // Ввод: терминал → PTY
+    // Terminal → PTY data
     tab.term.onData((data) => {
       window.electronAPI.ptyWrite(tab.pid, data)
     })
 
-    // Resize: терминал → PTY
+    // Terminal → PTY resize
     tab.term.onResize(({ cols, rows }) => {
       window.electronAPI.ptyResize(tab.pid, cols, rows)
     })
 
-    // Заголовок окна — только для активного таба
+    // Title change — only for active tab
     tab.term.onTitleChange((title) => {
       if (tabBar.getActive()?.pid === tab.pid) {
         document.title = title || 'eTty'
       }
     })
 
-    // OSC 7 — синхронизация директории
-    tab.term.parser.registerOscHandler(7, (data) => {
-      const match = data.match(/^file:\/\/[^/]*(.+)$/)
-      if (match) {
-        const newPath = match[1].replace(/\/$/, '') || '/'
-        const index = tabBar.tabs.findIndex(t => t.pid === tab.pid)
+    // OSC handlers
+    const oscHandler = new TerminalOscHandler({
+      onCwdChange: (newPath, pid) => {
+        const index = tabBar.tabs.findIndex(t => t.pid === pid)
         if (index >= 0) tabBar.updateRootPath(index, newPath)
 
-        if (tabBar.getActive()?.pid === tab.pid) {
+        if (tabBar.getActive()?.pid === pid) {
           if (newPath !== fileTree.getCwd()) {
             fileTree.setRoot(newPath)
             window.electronAPI.fsSetRoot(newPath)
           }
           updateNavButtons()
         }
-      }
-      return false
-    })
+      },
+      onBusyChange: (isBusy, pid, wasBusy) => {
+        const targetTab = tabBar.tabs.find(t => t.pid === pid)
+        if (!targetTab) return
 
-    // OSC 133 — отслеживание занятости терминала
-    tab.term.parser.registerOscHandler(133, (data) => {
-      const wasBusy = tab.isBusy
-      if (data.startsWith('C')) tab.isBusy = true
-      else if (data.startsWith('A')) {
-        tab.isBusy = false
-        tab.activeAgentId = null
-      }
-      if (wasBusy !== tab.isBusy && tabBar.getActive()?.pid === tab.pid) {
-        updateNavButtons()
-        syncStatusBarTerminalState()
-      }
-      return false
-    })
+        targetTab.isBusy = isBusy
+        if (!isBusy) targetTab.activeAgentId = null
 
-    // WebGL — загружается после term.open()
+        if (wasBusy !== isBusy && tabBar.getActive()?.pid === pid) {
+          updateNavButtons()
+          syncStatusBarTerminalState()
+        }
+      },
+    })
+    oscHandler.attach(tab.term, tab.pid)
+
+    // WebGL addon
     try {
       tab.term.loadAddon(new WebglAddon())
     } catch (e) {
@@ -711,7 +695,7 @@ async function init() {
     if (!dragState) return
     const dx = e.screenX - dragState.startScreenX
     const dy = e.screenY - dragState.startScreenY
-    if (!titlebarDidDrag && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+    if (!titlebarDidDrag && (Math.abs(dx) > APP_CONFIG.TITLEBAR_DRAG_THRESHOLD_PX || Math.abs(dy) > APP_CONFIG.TITLEBAR_DRAG_THRESHOLD_PX)) {
       titlebarDidDrag = true
     }
     if (titlebarDidDrag) {
@@ -738,7 +722,10 @@ async function init() {
     const startX = e.clientX
     const startWidth = sidebar.offsetWidth
     const onMove = (e) => {
-      const newWidth = Math.max(150, Math.min(600, startWidth + e.clientX - startX))
+      const newWidth = Math.max(
+        APP_CONFIG.SIDEBAR_MIN_WIDTH,
+        Math.min(APP_CONFIG.SIDEBAR_MAX_WIDTH, startWidth + e.clientX - startX)
+      )
       sidebar.style.width = newWidth + 'px'
       tabBar.getActive()?.fitAddon.fit()
     }
@@ -760,7 +747,10 @@ async function init() {
     const startWidth = editorPanel._panelEl.offsetWidth
     const onMove = (e) => {
       // Перетаскиваем влево — редактор расширяется
-      const newWidth = Math.max(250, Math.min(window.innerWidth * 0.8, startWidth - (e.clientX - startX)))
+      const newWidth = Math.max(
+        APP_CONFIG.EDITOR_MIN_WIDTH,
+        Math.min(window.innerWidth * APP_CONFIG.EDITOR_MAX_WIDTH_RATIO, startWidth - (e.clientX - startX))
+      )
       editorPanel._panelEl.style.width = newWidth + 'px'
       tabBar.getActive()?.fitAddon.fit()
     }
@@ -774,7 +764,16 @@ async function init() {
   })
 
   // ResizeObserver — подгонка активного терминала при изменении размера
-  new ResizeObserver(() => tabBar.getActive()?.fitAddon.fit()).observe(terminalContainerEl)
+  // Debounced: fitAddon.resize → pty:resize цепочка не должна молотить при
+  // анимациях или быстрых resize-событиях (sidebar drag, fullscreen toggle).
+  function debounce(fn, ms) {
+    let timer
+    return (...args) => {
+      clearTimeout(timer)
+      timer = setTimeout(() => fn(...args), ms)
+    }
+  }
+  new ResizeObserver(debounce(() => tabBar.getActive()?.fitAddon.fit(), APP_CONFIG.RESIZE_OBSERVER_DEBOUNCE_MS)).observe(terminalContainerEl)
 }
 
 init()

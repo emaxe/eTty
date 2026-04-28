@@ -2,6 +2,7 @@ import { spawn } from 'node-pty'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
 const SHELL_PATH = '/bin/zsh'
 
@@ -95,15 +96,34 @@ export class PtyManager {
 
     this.sessions.set(ptyProcess.pid, { pty: ptyProcess, webContents, tabId, historyFile, initialHistSize: initialHistSize || 0 })
 
+    // Batch PTY output: accumulate chunks and flush every ~8 ms.
+    // This prevents IPC flooding when TUI apps (Copilot CLI, etc.)
+    // redraw the screen at high frequency.
+    let dataChunks = []
+    let flushTimer = null
+
+    const flushData = () => {
+      if (dataChunks.length > 0 && !webContents.isDestroyed()) {
+        webContents.send(IPC_CHANNELS.PTY_DATA, { pid: ptyProcess.pid, data: dataChunks.join('') })
+        dataChunks = []
+      }
+      flushTimer = null
+    }
+
     ptyProcess.onData((data) => {
-      if (!webContents.isDestroyed()) {
-        webContents.send('pty:data', { pid: ptyProcess.pid, data })
+      dataChunks.push(data)
+      if (!flushTimer) {
+        flushTimer = setTimeout(flushData, 8)
       }
     })
 
     ptyProcess.onExit(({ exitCode, signal }) => {
+      if (flushTimer) {
+        clearTimeout(flushTimer)
+        flushData()
+      }
       if (!webContents.isDestroyed()) {
-        webContents.send('pty:exit', { pid: ptyProcess.pid, exitCode, signal })
+        webContents.send(IPC_CHANNELS.PTY_EXIT, { pid: ptyProcess.pid, exitCode, signal })
       }
       this.sessions.delete(ptyProcess.pid)
     })

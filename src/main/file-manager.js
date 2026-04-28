@@ -2,6 +2,7 @@ import fs from 'fs/promises'
 import { watch } from 'fs'
 import path from 'path'
 import os from 'os'
+import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
 /**
  * Файловые операции с защитой от path traversal.
@@ -194,20 +195,14 @@ export class FileManager {
     }
 
     let timer
-    console.log('[FileManager] Creating watcher for:', dirPath, 'webContents id:', webContents.id)
     try {
       const watcher = watch(dirPath, { persistent: false }, (eventType, filename) => {
-        console.log('[FileManager] Raw watch event:', eventType, filename, 'for:', dirPath)
         clearTimeout(timer)
         timer = setTimeout(() => {
-          console.log('[FileManager] Sending event, webContents destroyed:', webContents.isDestroyed(), 'id:', webContents.id)
           if (!webContents.isDestroyed()) {
-            webContents.send('fs:dir-changed', { dirPath, eventType, filename })
-            console.log('[FileManager] Event sent to webContents', webContents.id)
-          } else {
-            console.log('[FileManager] webContents destroyed, cannot send event')
+            webContents.send(IPC_CHANNELS.FS_DIR_CHANGED, { dirPath, eventType, filename })
           }
-        }, 300)
+        }, 500)
       })
 
       watcher.on('error', (err) => {
@@ -253,10 +248,8 @@ export class FileManager {
       }
     }
     for (const dirPath of toUnwatch) {
-      console.log(`[FileManager] Pruning watcher: ${dirPath}`)
       this.unwatchDir(dirPath)
     }
-    console.warn(`[FileManager] Pruned ${toUnwatch.length} watchers. Only root watcher remains.`)
   }
 
   unwatchDir(dirPath) {
