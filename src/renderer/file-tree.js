@@ -1190,15 +1190,49 @@ export class FileTree {
     // Save expanded dirs and selection before replacing
     const existingUl = container.querySelector(':scope > ul')
     const expandedDirs = new Set()
+    /** @type {Map<string, HTMLElement>} */
+    const existingMap = new Map()
     if (existingUl) {
       const openItems = existingUl.querySelectorAll('li[data-path] .tree-children.open')
       for (const childrenEl of openItems) {
         const li = childrenEl.closest('li[data-path]')
         if (li) expandedDirs.add(li.dataset.path)
       }
+      for (const li of existingUl.querySelectorAll(':scope > li[data-path]')) {
+        existingMap.set(li.dataset.path, li)
+      }
     }
 
-    const newUl = this._buildList(entries, dirPath, depth)
+    const newUl = document.createElement('ul')
+    newUl.style.listStyle = 'none'
+    newUl.style.padding = '0'
+    newUl.style.margin = '0'
+
+    for (const entry of entries) {
+      const existingLi = existingMap.get(entry.path)
+      if (existingLi) {
+        // Reuse existing DOM node — update only what may have changed
+        existingLi.dataset.isDir = entry.isDirectory ? '1' : '0'
+        existingLi.dataset.depth = String(depth)
+
+        const row = existingLi.querySelector('.tree-node-row')
+        if (row) {
+          row.style.paddingLeft = `${depth * 16 + 8}px`
+          const nameEl = row.querySelector('.tree-name')
+          if (nameEl) nameEl.textContent = entry.name
+
+          const iconEl = row.querySelector('.tree-icon')
+          if (iconEl) iconEl.innerHTML = entry.isDirectory ? Icons.folder : Icons.file
+
+          const arrowEl = row.querySelector('.tree-arrow')
+          if (arrowEl) arrowEl.innerHTML = entry.isDirectory ? Icons.chevronRight : ''
+        }
+        newUl.appendChild(existingLi)
+      } else {
+        newUl.appendChild(this._buildNode(entry, depth))
+      }
+    }
+
     if (existingUl) {
       existingUl.replaceWith(newUl)
     } else {
@@ -1207,7 +1241,7 @@ export class FileTree {
 
     this._restoreSelection()
 
-    // Restore expanded directories
+    // Restore expanded directories (only newly created nodes need this)
     if (expandedDirs.size > 0) {
       await this.restoreExpandedDirs(expandedDirs)
     }
