@@ -17,6 +17,8 @@ import { EditorPanel } from './editor-panel.js'
 import { Icons } from './icons.js'
 import { TERMINAL_CONFIG } from './core/config/terminal-config.js'
 import { APP_CONFIG } from './core/config/app-config.js'
+import { TerminalKeyboardHandler } from './features/terminal/terminal-keyboard-handler.js'
+import { TerminalOscHandler } from './features/terminal/terminal-osc-handler.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
@@ -409,95 +411,60 @@ async function init() {
     if (index >= 0) tabBar.removeTab(index)
   })
 
-  /**
-   * Настраивает обработчики для вкладки:
-   * - Kitty keyboard protocol (modifier+Enter)
-   * - Non-ASCII символы (кириллица) — ручная отправка в PTY
-   * - Terminal → PTY data/resize/title
-   * - OSC 7 (cwd sync) и OSC 133 (busy tracking)
-   * - WebGL addon
-   */
   function setupTabHandlers(tab) {
-    // Kitty keyboard protocol: перехватываем modifier+Enter до xterm.js
-    tab.term.attachCustomKeyEventHandler((event) => {
-      if (event.key === 'Enter') {
-        if (event.shiftKey && !event.ctrlKey) {
-          if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, '\x1b[13;2u')
-          return false
-        }
-        if (event.ctrlKey && !event.shiftKey) {
-          if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, '\x1b[13;5u')
-          return false
-        }
-        if (event.ctrlKey && event.shiftKey) {
-          if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, '\x1b[13;6u')
-          return false
-        }
-      }
-      // Не-ASCII печатаемые символы (кириллица, акцентированные буквы и т.д.):
-      // xterm.js не устанавливает _keyDownHandled корректно в non-screenReader режиме,
-      // из-за чего _keyPress повторно обрабатывает событие с неверным charCode на macOS.
-      // Отправляем символ вручную и блокируем xterm.js-обработку.
-      if (event.key.length === 1 && event.key.charCodeAt(0) > 127 &&
-          !event.ctrlKey && !event.altKey && !event.metaKey) {
-        if (event.type === 'keydown') window.electronAPI.ptyWrite(tab.pid, event.key)
-        return false
-      }
-      return true
+    // Keyboard handling
+    const keyboardHandler = new TerminalKeyboardHandler({
+      write: (pid, data) => window.electronAPI.ptyWrite(pid, data),
     })
+    keyboardHandler.attach(tab.term, tab.pid)
 
-    // Ввод: терминал → PTY
+    // Terminal → PTY data
     tab.term.onData((data) => {
       window.electronAPI.ptyWrite(tab.pid, data)
     })
 
-    // Resize: терминал → PTY
+    // Terminal → PTY resize
     tab.term.onResize(({ cols, rows }) => {
       window.electronAPI.ptyResize(tab.pid, cols, rows)
     })
 
-    // Заголовок окна — только для активного таба
+    // Title change — only for active tab
     tab.term.onTitleChange((title) => {
       if (tabBar.getActive()?.pid === tab.pid) {
         document.title = title || 'eTty'
       }
     })
 
-    // OSC 7 — синхронизация директории
-    tab.term.parser.registerOscHandler(7, (data) => {
-      const match = data.match(/^file:\/\/[^/]*(.+)$/)
-      if (match) {
-        const newPath = match[1].replace(/\/$/, '') || '/'
-        const index = tabBar.tabs.findIndex(t => t.pid === tab.pid)
+    // OSC handlers
+    const oscHandler = new TerminalOscHandler({
+      onCwdChange: (newPath, pid) => {
+        const index = tabBar.tabs.findIndex(t => t.pid === pid)
         if (index >= 0) tabBar.updateRootPath(index, newPath)
 
-        if (tabBar.getActive()?.pid === tab.pid) {
+        if (tabBar.getActive()?.pid === pid) {
           if (newPath !== fileTree.getCwd()) {
             fileTree.setRoot(newPath)
             window.electronAPI.fsSetRoot(newPath)
           }
           updateNavButtons()
         }
-      }
-      return false
-    })
+      },
+      onBusyChange: (isBusy, pid, wasBusy) => {
+        const targetTab = tabBar.tabs.find(t => t.pid === pid)
+        if (!targetTab) return
 
-    // OSC 133 — отслеживание занятости терминала
-    tab.term.parser.registerOscHandler(133, (data) => {
-      const wasBusy = tab.isBusy
-      if (data.startsWith('C')) tab.isBusy = true
-      else if (data.startsWith('A')) {
-        tab.isBusy = false
-        tab.activeAgentId = null
-      }
-      if (wasBusy !== tab.isBusy && tabBar.getActive()?.pid === tab.pid) {
-        updateNavButtons()
-        syncStatusBarTerminalState()
-      }
-      return false
-    })
+        targetTab.isBusy = isBusy
+        if (!isBusy) targetTab.activeAgentId = null
 
-    // WebGL — загружается после term.open()
+        if (wasBusy !== isBusy && tabBar.getActive()?.pid === pid) {
+          updateNavButtons()
+          syncStatusBarTerminalState()
+        }
+      },
+    })
+    oscHandler.attach(tab.term, tab.pid)
+
+    // WebGL addon
     try {
       tab.term.loadAddon(new WebglAddon())
     } catch (e) {
