@@ -12,5 +12,5 @@ release/
 .cursor/
 .github/
 .codex/
-.agents/
+.agents/*
 !.agents/rules/
