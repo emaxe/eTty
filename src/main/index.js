@@ -21,6 +21,10 @@ import { registerPtyHandlers } from './ipc-handlers/pty-handlers.js'
 import { registerFsHandlers } from './ipc-handlers/fs-handlers.js'
 import { registerWindowHandlers } from './ipc-handlers/window-handlers.js'
 import { registerAppHandlers } from './ipc-handlers/app-handlers.js'
+import { registerTabsHandlers } from './ipc-handlers/tabs-handlers.js'
+import { registerHistoryHandlers } from './ipc-handlers/history-handlers.js'
+import { registerSettingsHandlers } from './ipc-handlers/settings-handlers.js'
+import { registerAgentsHandlers } from './ipc-handlers/agents-handlers.js'
 
 const ptyManager = new PtyManager()
 const fileManager = new FileManager()
@@ -103,60 +107,12 @@ app.whenReady().then(() => {
   registerFsHandlers(ipcMain, { fileManager })
   registerWindowHandlers(ipcMain)
   registerAppHandlers(ipcMain)
-
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_LOAD, () => loadSettings())
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_SAVE, (_, settings) => saveSettings(settings))
-  ipcMain.handle(IPC_CHANNELS.AGENTS_GET_STATUS, async () => agentService.getStatus())
-  ipcMain.handle(IPC_CHANNELS.AGENTS_REFRESH, async () => agentService.refresh())
+  registerTabsHandlers(ipcMain, { saveTabState, loadTabState, deleteTabState, hasTabState, validatePath })
+  registerHistoryHandlers(ipcMain, { historyManager })
+  registerSettingsHandlers(ipcMain, { loadSettings, saveSettings })
+  registerAgentsHandlers(ipcMain, { agentService })
 
   registerGitHandlers(ipcMain)
-
-  ipcMain.handle(IPC_CHANNELS.HISTORY_CLEANUP, async (_, activeTabIds) => {
-    await historyManager.cleanupOrphanedHistories(activeTabIds || [])
-  })
-
-  // --- Tab state: restore dialog ---
-  ipcMain.handle(IPC_CHANNELS.TABS_EXPORT_STATE, (event, tabs) => {
-    return saveTabState(tabs)
-  })
-
-  ipcMain.handle(IPC_CHANNELS.TABS_HAS_SAVED_STATE, () => hasTabState())
-
-  ipcMain.handle(IPC_CHANNELS.TABS_LOAD_SAVED_STATE, async () => {
-    const state = await loadTabState()
-    if (!state) return null
-    const homedir = os.homedir()
-    const validated = []
-    for (const tab of state.tabs) {
-      const valid = await validatePath(tab.rootPath)
-      if (!valid) {
-        log.warn('tab-state: path not found, using homedir:', tab.rootPath)
-      }
-      validated.push({
-        rootPath: valid ? tab.rootPath : homedir,
-        isActive: tab.isActive,
-        tabId: tab.tabId,
-        editorState: tab.editorState || null
-      })
-    }
-    return validated
-  })
-
-  ipcMain.handle(IPC_CHANNELS.TABS_DELETE_SAVED_STATE, () => deleteTabState())
-
-  ipcMain.handle(IPC_CHANNELS.TABS_SHOW_RESTORE_DIALOG, async (event, tabCount) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const { response } = await dialog.showMessageBox(win, {
-      type: 'question',
-      buttons: ['Восстановить', 'Не восстанавливать'],
-      defaultId: 1,
-      cancelId: 1,
-      title: 'Восстановление вкладок',
-      message: `Восстановить ${tabCount} вкладок?`,
-      detail: 'Вкладки из предыдущей сессии можно восстановить.'
-    })
-    return response === 0 // true = restore
-  })
 
   _mainWindow = createWindow()
   const mainWindow = _mainWindow
