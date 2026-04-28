@@ -517,6 +517,16 @@ html, body {
   display: block;
 }
 
+.tree-empty-placeholder {
+  height: 22px;
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-style: italic;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 /* Root folder node */
 .tree-root-node-row {
   display: flex;

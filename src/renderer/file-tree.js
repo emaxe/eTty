@@ -481,6 +481,16 @@ export class FileTree {
     ul.style.listStyle = 'none'
     ul.style.padding = '0'
     ul.style.margin = '0'
+
+    if (entries.length === 0) {
+      const placeholder = document.createElement('li')
+      placeholder.className = 'tree-empty-placeholder'
+      placeholder.style.paddingLeft = `${depth * 16 + 8}px`
+      placeholder.textContent = '(empty)'
+      ul.appendChild(placeholder)
+      return ul
+    }
+
     for (const entry of entries) {
       ul.appendChild(this._buildNode(entry, depth))
     }
@@ -1226,6 +1236,14 @@ export class FileTree {
       } else {
         newUl.appendChild(this._buildNode(entry, depth))
       }
+    }
+
+    if (entries.length === 0) {
+      const placeholder = document.createElement('li')
+      placeholder.className = 'tree-empty-placeholder'
+      placeholder.style.paddingLeft = `${depth * 16 + 8}px`
+      placeholder.textContent = '(empty)'
+      newUl.appendChild(placeholder)
     }
 
     if (existingUl) {
