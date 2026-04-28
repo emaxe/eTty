@@ -38,7 +38,7 @@ export class AppService {
       frame: false,
       titleBarStyle: 'hiddenInset',
       webPreferences: {
-        preload: join(__dirname, '../../preload/index.js'),
+        preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,
         nodeIntegration: false
       }
@@ -47,7 +47,7 @@ export class AppService {
     if (process.env.ELECTRON_RENDERER_URL) {
       mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
     } else {
-      mainWindow.loadFile(join(__dirname, '../../renderer/index.html'))
+      mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
     }
 
     this._mainWindow = mainWindow
