@@ -286,7 +286,10 @@ async function init() {
         prevTab.gitPanelVisible = gitPanel.isVisible()
       }
       // Скрыть git-панель без side-effects перед переключением
-      if (gitPanel.isVisible()) gitPanel.hideQuiet()
+      if (gitPanel.isVisible()) {
+        gitPanel.hideQuiet()
+        appStore.set('ui.gitPanelVisible', false)
+      }
       if (tab.rootPath !== fileTree.getCwd()) {
         await fileTree.setRoot(tab.rootPath)
         window.electronAPI.fsSetRoot(tab.rootPath)
@@ -301,6 +304,7 @@ async function init() {
       // Восстановить git-панель если она была открыта на этой вкладке
       if (tab.gitPanelVisible) {
         gitPanel.show(tab.rootPath)
+        appStore.set('ui.gitPanelVisible', true)
       }
       document.title = tab.termTitle || 'eTty'
       updateNavButtons()
@@ -366,7 +370,10 @@ async function init() {
 
   const gitPanel = new GitPanel({
     overlayEl: document.getElementById('git-overlay'),
-    onClose: () => statusBar.updateNow(),
+    onClose: () => {
+      appStore.set('ui.gitPanelVisible', false)
+      statusBar.updateNow()
+    },
   })
 
   const launchAgentInActiveTab = (agentId) => {
@@ -400,7 +407,7 @@ async function init() {
     btnEl: document.getElementById('btn-git-diff'),
     cwdEl: document.getElementById('status-cwd'),
     nodeEl: document.getElementById('status-node'),
-    onOpen: () => gitPanel.show(tabBar.getActive()?.rootPath),
+    onOpen: () => appStore.set('ui.gitPanelVisible', true),
     agentButtons: [...document.querySelectorAll('.status-agent-btn')],
     onLaunchAgent: launchAgentInActiveTab,
     onSelectAgent: selectAgentAsActive,
@@ -427,6 +434,40 @@ async function init() {
   statusBar.setProxyConfig({ proxy: config.agents.proxy || '', enabled: config.agents.proxyEnabled })
 
   statusBar.start(() => tabBar.getActive()?.rootPath)
+
+  // — Visibility subscribers (must be after component creation) —
+  appStore.subscribe((state, path) => {
+    if (path === 'ui.sidebarVisible') {
+      const visible = state.ui.sidebarVisible
+      sidebar.style.display = visible ? '' : 'none'
+      resizeHandle.style.display = visible ? '' : 'none'
+      btnToggleSidebar.classList.toggle('active', visible)
+      tabBar.getActive()?.fitAddon.fit()
+    }
+  })
+
+  appStore.subscribe((state, path) => {
+    if (path === 'ui.editorVisible') {
+      const visible = state.ui.editorVisible
+      if (visible) {
+        editorPanel.show()
+      } else {
+        editorPanel.hide()
+      }
+      btnToggleEditor.classList.toggle('active', visible)
+    }
+  })
+
+  appStore.subscribe((state, path) => {
+    if (path === 'ui.gitPanelVisible') {
+      const visible = state.ui.gitPanelVisible
+      if (visible) {
+        gitPanel.show(tabBar.getActive()?.rootPath)
+      } else {
+        gitPanel.hide()
+      }
+    }
+  })
 
   btnSettings.addEventListener('click', () => {
     if (settingsPage.isVisible()) {
@@ -683,21 +724,15 @@ async function init() {
   btnUp.addEventListener('click', () => shellCmdToPtyActive('cd ..\n'))
   btnHome.addEventListener('click', () => shellCmdToPtyActive('cd ~\n'))
 
-  let sidebarVisible = true
   btnToggleSidebar.classList.add('active')
   btnToggleSidebar.addEventListener('click', () => {
     if (settingsPage.isVisible() || gitPanel.isVisible()) return
-    sidebarVisible = !sidebarVisible
-    sidebar.style.display = sidebarVisible ? '' : 'none'
-    resizeHandle.style.display = sidebarVisible ? '' : 'none'
-    btnToggleSidebar.classList.toggle('active', sidebarVisible)
-    tabBar.getActive()?.fitAddon.fit()
+    appStore.set('ui.sidebarVisible', !appStore.get('ui.sidebarVisible'))
   })
 
   btnToggleEditor.addEventListener('click', () => {
     if (settingsPage.isVisible() || gitPanel.isVisible()) return
-    editorPanel.toggle()
-    btnToggleEditor.classList.toggle('active', editorPanel.isVisible())
+    appStore.set('ui.editorVisible', !appStore.get('ui.editorVisible'))
   })
 
   // Горячая клавиша Cmd+E / Ctrl+E — toggle панели редактора
@@ -707,8 +742,7 @@ async function init() {
       if (document.activeElement?.closest('#editor-body')) return
       if (settingsPage.isVisible() || gitPanel.isVisible()) return
       e.preventDefault()
-      editorPanel.toggle()
-      btnToggleEditor.classList.toggle('active', editorPanel.isVisible())
+      appStore.set('ui.editorVisible', !appStore.get('ui.editorVisible'))
     }
   })
 
