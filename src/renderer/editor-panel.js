@@ -270,10 +270,11 @@ export class EditorPanel {
    * @param {object|null} state — return value of suspendState(), or null for fresh state
    */
   restoreState(state) {
-    // Clean up any current editor tabs
+    // Clean up any current editor tabs — destroy CodeMirror views to prevent leaks
     for (const [, tab] of this._tabs) {
       if (this._bodyEl.contains(tab.view.dom)) tab.view.dom.remove()
       tab.element.remove()
+      tab.view.destroy()
     }
     this._tabs = new Map()
     this._activeFilePath = null
@@ -487,7 +488,7 @@ export class EditorPanel {
     this._activeFilePath = filePath
     this._syncStore()
     tab.element.classList.add('active')
-    tab.element.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
+    tab.element.scrollIntoView({ behavior: 'auto', inline: 'nearest', block: 'nearest' })
 
     if (!this._bodyEl.contains(tab.view.dom)) {
       this._bodyEl.appendChild(tab.view.dom)

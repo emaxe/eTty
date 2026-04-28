@@ -278,8 +278,12 @@ async function init() {
 
   tabBar = container.resolve('tabBar')
 
+  let _isSwitchingTab = false
   bus.on('tab.switch', async ({ tab, prevTab }) => {
+    if (_isSwitchingTab) return
     if (settingsPage.isVisible()) return
+    _isSwitchingTab = true
+    try {
     // Очищаем все watchers перед сменой вкладки
     fileTree.unwatchAll()
     if (prevTab) {
@@ -320,6 +324,9 @@ async function init() {
     updateNavButtons()
     syncStatusBarTerminalState()
     statusBar.updateNow()
+    } finally {
+      _isSwitchingTab = false
+    }
   })
 
   bus.on('tab.add', async () => {
