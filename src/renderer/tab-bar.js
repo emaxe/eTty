@@ -9,19 +9,17 @@ import { DraggableTabs } from './components/base/tabs/draggable-tabs.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 
 export class TabBar {
-  constructor({ tabBarEl, terminalContainerEl, onSwitch, onAddTab, onCloseTab }) {
+  constructor({ tabBarEl, terminalContainerEl, eventBus }) {
     this.tabBarEl = tabBarEl
     this.terminalContainerEl = terminalContainerEl
-    this.onSwitch = onSwitch
-    this.onAddTab = onAddTab
-    this.onCloseTab = onCloseTab
+    this._bus = eventBus
 
     this.tabs = []
     this.activeIndex = -1
     this.disabled = false
 
     this._addBtn = tabBarEl.querySelector('#tab-add')
-    this._addBtn.addEventListener('click', () => this.onAddTab())
+    this._addBtn.addEventListener('click', () => this._bus.emit('tab.add'))
 
     this._contextMenu = new ContextMenu()
 
@@ -90,7 +88,7 @@ export class TabBar {
     tab.fitAddon.fit()
     tab.term.focus()
 
-    this.onSwitch(tab, prevTab)
+    this._bus.emit('tab.switch', { tab, prevTab })
   }
 
   getActive() {
@@ -141,7 +139,7 @@ export class TabBar {
       if (this.disabled) return
       e.stopPropagation()
       const i = this.tabs.findIndex(t => t.element === el)
-      if (i >= 0) this.onCloseTab(i)
+      if (i >= 0) this._bus.emit('tab.close', { index: i, tab: this.tabs[i] })
     })
 
     // Context menu
@@ -170,7 +168,7 @@ export class TabBar {
 
   _closeAll() {
     for (let i = this.tabs.length - 1; i >= 0; i--) {
-      this.onCloseTab(i)
+      this._bus.emit('tab.close', { index: i, tab: this.tabs[i] })
     }
   }
 
@@ -178,13 +176,13 @@ export class TabBar {
     const keepTab = this.tabs[keepIndex]
     for (let i = this.tabs.length - 1; i >= 0; i--) {
       if (this.tabs[i] === keepTab) continue
-      this.onCloseTab(i)
+      this._bus.emit('tab.close', { index: i, tab: this.tabs[i] })
     }
   }
 
   _closeRange(from, to) {
     for (let i = to - 1; i >= from; i--) {
-      this.onCloseTab(i)
+      this._bus.emit('tab.close', { index: i, tab: this.tabs[i] })
     }
   }
 

@@ -100,6 +100,9 @@ async function init() {
   // Expose for debugging (remove before production if desired)
   window.__appStore = appStore
 
+  const bus = new EventBus()
+  window.__eventBus = bus
+
   // Theme subscriber — applies CSS variables, updates terminals and editor
   appStore.subscribe((state, path) => {
     if (path === 'ui.theme') {
@@ -268,72 +271,76 @@ async function init() {
   tabBar = new TabBar({
     tabBarEl,
     terminalContainerEl,
-    onSwitch: async (tab, prevTab) => {
-      if (settingsPage.isVisible()) return
-      // Очищаем все watchers перед сменой вкладки
-      fileTree.unwatchAll()
-      if (prevTab) {
-        // Destroy previously suspended editor views to prevent memory leaks
-        // when rapidly switching between tabs.
-        if (prevTab.editorState?._detachedTabs) {
-          for (const [, etab] of prevTab.editorState._detachedTabs) {
-            etab.view.destroy()
-          }
-        }
-        prevTab.treeExpandedDirs = fileTree.getExpandedDirs()
-        prevTab.treeScrollTop = fileTree.getScrollTop()
-        prevTab.editorState = editorPanel.suspendState()
-        prevTab.gitPanelVisible = gitPanel.isVisible()
-      }
-      // Скрыть git-панель без side-effects перед переключением
-      if (gitPanel.isVisible()) {
-        gitPanel.hideQuiet()
-        appStore.set('ui.gitPanelVisible', false)
-      }
-      if (tab.rootPath !== fileTree.getCwd()) {
-        await fileTree.setRoot(tab.rootPath)
-        window.electronAPI.fsSetRoot(tab.rootPath)
-      } else {
-        fileTree.collapseAll()
-      }
-      if (tab.treeExpandedDirs && tab.treeExpandedDirs.size > 0) {
-        await fileTree.restoreExpandedDirs(tab.treeExpandedDirs)
-      }
-      fileTree.setScrollTop(tab.treeScrollTop || 0)
-      editorPanel.restoreState(tab.editorState || null)
-      // Восстановить git-панель если она была открыта на этой вкладке
-      if (tab.gitPanelVisible) {
-        gitPanel.show(tab.rootPath)
-        appStore.set('ui.gitPanelVisible', true)
-      }
-      document.title = tab.termTitle || 'eTty'
-      updateNavButtons()
-      syncStatusBarTerminalState()
-      statusBar.updateNow()
-    },
-    onAddTab: async () => {
-      if (settingsPage.isVisible()) return
-      const active = tabBar.getActive()
-      const cwd = active ? active.rootPath : startCwd
-      const tabData = await createTab(cwd)
-      const tab = tabBar.addTab(tabData)
-      tab.isBusy = false
-      tab.activeAgentId = null
-      setupTabHandlers(tab)
-      tab.fitAddon.fit()
-    },
-    onCloseTab: (index) => {
-      if (settingsPage.isVisible()) return
-      const tab = tabBar.tabs[index]
-      // Destroy suspended editor views to prevent memory leaks
-      if (tab.editorState?._detachedTabs) {
-        for (const [, etab] of tab.editorState._detachedTabs) {
+    eventBus: bus,
+  })
+
+  bus.on('tab.switch', async ({ tab, prevTab }) => {
+    if (settingsPage.isVisible()) return
+    // Очищаем все watchers перед сменой вкладки
+    fileTree.unwatchAll()
+    if (prevTab) {
+      // Destroy previously suspended editor views to prevent memory leaks
+      // when rapidly switching between tabs.
+      if (prevTab.editorState?._detachedTabs) {
+        for (const [, etab] of prevTab.editorState._detachedTabs) {
           etab.view.destroy()
         }
       }
-      tabBar.removeTab(index)
-      window.electronAPI.ptyKill(tab.pid)
+      prevTab.treeExpandedDirs = fileTree.getExpandedDirs()
+      prevTab.treeScrollTop = fileTree.getScrollTop()
+      prevTab.editorState = editorPanel.suspendState()
+      prevTab.gitPanelVisible = gitPanel.isVisible()
     }
+    // Скрыть git-панель без side-effects перед переключением
+    if (gitPanel.isVisible()) {
+      gitPanel.hideQuiet()
+      appStore.set('ui.gitPanelVisible', false)
+    }
+    if (tab.rootPath !== fileTree.getCwd()) {
+      await fileTree.setRoot(tab.rootPath)
+      window.electronAPI.fsSetRoot(tab.rootPath)
+    } else {
+      fileTree.collapseAll()
+    }
+    if (tab.treeExpandedDirs && tab.treeExpandedDirs.size > 0) {
+      await fileTree.restoreExpandedDirs(tab.treeExpandedDirs)
+    }
+    fileTree.setScrollTop(tab.treeScrollTop || 0)
+    editorPanel.restoreState(tab.editorState || null)
+    // Восстановить git-панель если она была открыта на этой вкладке
+    if (tab.gitPanelVisible) {
+      gitPanel.show(tab.rootPath)
+      appStore.set('ui.gitPanelVisible', true)
+    }
+    document.title = tab.termTitle || 'eTty'
+    updateNavButtons()
+    syncStatusBarTerminalState()
+    statusBar.updateNow()
+  })
+
+  bus.on('tab.add', async () => {
+    if (settingsPage.isVisible()) return
+    const active = tabBar.getActive()
+    const cwd = active ? active.rootPath : startCwd
+    const tabData = await createTab(cwd)
+    const tab = tabBar.addTab(tabData)
+    tab.isBusy = false
+    tab.activeAgentId = null
+    setupTabHandlers(tab)
+    tab.fitAddon.fit()
+  })
+
+  bus.on('tab.close', ({ index }) => {
+    if (settingsPage.isVisible()) return
+    const tab = tabBar.tabs[index]
+    // Destroy suspended editor views to prevent memory leaks
+    if (tab.editorState?._detachedTabs) {
+      for (const [, etab] of tab.editorState._detachedTabs) {
+        etab.view.destroy()
+      }
+    }
+    tabBar.removeTab(index)
+    window.electronAPI.ptyKill(tab.pid)
   })
 
   // Страница настроек
