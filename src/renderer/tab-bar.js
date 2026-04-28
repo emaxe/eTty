@@ -5,6 +5,7 @@
  * Поддерживает drag-and-drop переупорядочивание и disabled-режим (блокировка переключения).
  */
 import { ContextMenu } from './components/base/context-menu/context-menu.js'
+import { APP_CONFIG } from './core/config/app-config.js'
 
 export class TabBar {
   constructor({ tabBarEl, terminalContainerEl, onSwitch, onAddTab, onCloseTab }) {
@@ -223,7 +224,7 @@ export class TabBar {
     const dy = e.clientY - ds.startY
 
     if (!ds.isDragging) {
-      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return
+      if (Math.abs(dx) < APP_CONFIG.DRAG_START_THRESHOLD_PX && Math.abs(dy) < APP_CONFIG.DRAG_START_THRESHOLD_PX) return
       ds.isDragging = true
       ds.tabEl.classList.add('dragging')
       document.body.style.cursor = 'grabbing'
