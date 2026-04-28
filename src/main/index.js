@@ -14,17 +14,19 @@ import { FileManager } from './file-manager'
 import { saveTabState, loadTabState, deleteTabState, hasTabState, validatePath } from './tab-state'
 import { loadSettings, saveSettings } from './settings-store'
 import { HistoryManager } from './history-manager'
-import { registerGitHandlers } from './ipc-handlers/git-handlers.js'
 import { AgentService } from './agent-service.js'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
-import { registerPtyHandlers } from './ipc-handlers/pty-handlers.js'
-import { registerFsHandlers } from './ipc-handlers/fs-handlers.js'
-import { registerWindowHandlers } from './ipc-handlers/window-handlers.js'
-import { registerAppHandlers } from './ipc-handlers/app-handlers.js'
-import { registerTabsHandlers } from './ipc-handlers/tabs-handlers.js'
-import { registerHistoryHandlers } from './ipc-handlers/history-handlers.js'
-import { registerSettingsHandlers } from './ipc-handlers/settings-handlers.js'
-import { registerAgentsHandlers } from './ipc-handlers/agents-handlers.js'
+import {
+  registerPtyHandlers,
+  registerFsHandlers,
+  registerWindowHandlers,
+  registerAppHandlers,
+  registerTabsHandlers,
+  registerHistoryHandlers,
+  registerSettingsHandlers,
+  registerAgentsHandlers,
+  registerGitHandlers,
+} from './ipc-handlers/index.js'
 
 const ptyManager = new PtyManager()
 const fileManager = new FileManager()
