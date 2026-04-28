@@ -284,3 +284,37 @@ electron-builder делает это автоматически через `"npm
 | settings.json | `~/.config/eTty/` | Настройки |
 | global.zsh_history | `~/.config/eTty/history/` | Глобальная история команд |
 | `<tabId>.zsh_history` | `~/.config/eTty/history/tabs/` | Per-tab история |
+
+## Архитектурные инварианты
+
+Обязательны при **любом** изменении кода. Нарушение = замечание на code review.
+
+| Инвариант | Правило | Где проверить |
+|-----------|---------|---------------|
+| DI | Зависимости через constructor, не через глобалы | `core/container.js` |
+| EventBus | Коммуникация между компонентами — через события | `core/event-bus.js` |
+| StateStore | Shared state — в сторе, не в приватных полях | `core/state-store.js` |
+| IPC_CHANNELS | Все имена каналов — из `shared/ipc-channels.js` | `shared/ipc-channels.js` |
+| Config | Константы (числа, интервалы) — в `core/config/` | `core/config/*.js` |
+| Cleanup | Каждый компонент с подписками имеет `destroy()` | — |
+| Адаптер | Нет прямых `window.electronAPI` — через `core/adapters/electron-api.js` | `core/adapters/` |
+
+## Чеклисты
+
+При создании нового кода — следуй чеклисту соответствующего типа:
+
+| Тип изменения | Чеклист |
+|---------------|---------|
+| Новый UI-компонент | [new-component.md](checklists/new-component.md) |
+| Новый IPC-обработчик | [new-ipc-handler.md](checklists/new-ipc-handler.md) |
+| Новая фича (общий) | [new-feature.md](checklists/new-feature.md) |
+| Проверка качества | [code-quality.md](checklists/code-quality.md) |
+
+## Скиллы проекта
+
+| Скилл | Команда | Когда использовать |
+|-------|---------|--------------------|
+| Feature Planning | `/feature-planning` | Планирование новой фичи: от идеи до промпта |
+| Feature Accept | `/feature-accept` | Принятие готовой фичи: merge, cleanup, документация |
+| Code Review | `/code-review` | Проверка кода на соответствие архитектуре перед коммитом |
+| Bugfix | `/bugfix` | Диагностика и исправление бага (без feature-planning) |
