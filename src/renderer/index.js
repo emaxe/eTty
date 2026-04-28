@@ -249,10 +249,13 @@ async function init() {
     })
   }
 
+  appStore.set('tabs', { items: [], activeIndex: -1 })
+
   tabBar = new TabBar({
     tabBarEl,
     terminalContainerEl,
     eventBus: bus,
+    store: appStore,
   })
 
   bus.on('tab.switch', async ({ tab, prevTab }) => {
