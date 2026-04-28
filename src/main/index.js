@@ -19,6 +19,8 @@ import { AgentService } from './agent-service.js'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 import { registerPtyHandlers } from './ipc-handlers/pty-handlers.js'
 import { registerFsHandlers } from './ipc-handlers/fs-handlers.js'
+import { registerWindowHandlers } from './ipc-handlers/window-handlers.js'
+import { registerAppHandlers } from './ipc-handlers/app-handlers.js'
 
 const ptyManager = new PtyManager()
 const fileManager = new FileManager()
@@ -99,24 +101,8 @@ app.whenReady().then(() => {
 
   registerPtyHandlers(ipcMain, { ptyManager, historyManager })
   registerFsHandlers(ipcMain, { fileManager })
-
-  ipcMain.handle(IPC_CHANNELS.APP_HOMEDIR, () => os.homedir())
-
-  ipcMain.handle(IPC_CHANNELS.APP_OPEN_EXTERNAL, async (_, filePath) => {
-    const { error } = await shell.openPath(filePath)
-    if (error) log.error('app:open-external failed:', error)
-    return { success: !error, error }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.WINDOW_GET_POSITION, (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    return win.getPosition()
-  })
-
-  ipcMain.on(IPC_CHANNELS.WINDOW_MOVE, (event, { x, y }) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    win.setPosition(Math.round(x), Math.round(y))
-  })
+  registerWindowHandlers(ipcMain)
+  registerAppHandlers(ipcMain)
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_LOAD, () => loadSettings())
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SAVE, (_, settings) => saveSettings(settings))
