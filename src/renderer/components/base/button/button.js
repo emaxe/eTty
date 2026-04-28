@@ -57,9 +57,10 @@ export class Button {
     this.setDisabled(disabled)
 
     if (onClick) {
-      this.element.addEventListener('click', (e) => {
+      this._clickHandler = (e) => {
         if (!this.element.disabled) onClick(e)
-      })
+      }
+      this.element.addEventListener('click', this._clickHandler)
     }
   }
 
@@ -79,6 +80,9 @@ export class Button {
   }
 
   destroy() {
+    if (this._clickHandler) {
+      this.element.removeEventListener('click', this._clickHandler)
+    }
     this.element.remove()
   }
 }
