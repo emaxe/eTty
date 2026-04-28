@@ -5,7 +5,8 @@
  */
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { WebglAddon } from '@xterm/addon-webgl'
+// NOTE: WebGL disabled — causes GPU texture leaks and FPS drops with high-throughput PTY data (AI agents)
+// import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { SearchAddon } from '@xterm/addon-search'
 import '@xterm/xterm/css/xterm.css'
@@ -28,6 +29,7 @@ import { EventBus } from './core/event-bus.js'
 import { StateStore } from './core/state-store.js'
 import { ElectronApiAdapter } from './core/adapters/electron-api.js'
 import { AppContainer } from './core/container.js'
+import { diagnostics } from './core/diagnostics.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
@@ -277,6 +279,7 @@ async function init() {
   }))
 
   tabBar = container.resolve('tabBar')
+  window.__tabBar = tabBar
 
   let _isSwitchingTab = false
   bus.on('tab.switch', async ({ tab, prevTab }) => {
@@ -561,8 +564,16 @@ async function init() {
 
   // Глобальные IPC обработчики — маршрутизируют по pid
   window.electronAPI.onPtyData((pid, data) => {
+    diagnostics.recordPtyData(pid, data.length)
     const tab = tabBar.tabs.find(t => t.pid === pid)
-    if (tab) tab.term.write(data)
+    if (tab) {
+      tab.term.write(data)
+      // Track xterm.js buffer state for diagnostics
+      try {
+        const buffer = tab.term.buffer?.active
+        diagnostics.recordXtermState(pid, buffer?.length || 0, buffer?.cursorY || 0, false)
+      } catch (e) { /* ignore */ }
+    }
   })
 
   window.electronAPI.onPtyExit(({ pid }) => {
@@ -622,13 +633,8 @@ async function init() {
       },
     })
     oscHandler.attach(tab.term, tab.pid)
-
-    // WebGL addon
-    try {
-      tab.term.loadAddon(new WebglAddon())
-    } catch (e) {
-      console.warn('WebGL addon failed, using canvas renderer:', e)
-    }
+    // WebGL addon disabled — canvas renderer only (WebGL causes GPU texture leaks
+    // and FPS drops to ~5 with high-throughput PTY data from AI agents)
   }
 
   // Expose tab state export for main process (before-quit)
@@ -926,6 +932,13 @@ async function init() {
     }
   }
   new ResizeObserver(debounce(() => tabBar.getActive()?.fitAddon.fit(), APP_CONFIG.RESIZE_OBSERVER_DEBOUNCE_MS)).observe(terminalContainerEl)
+
+  // Start performance diagnostics in dev mode
+  if (process.env.NODE_ENV === 'development' || location.port) {
+    diagnostics.start(3000)
+    console.info('[Diagnostics] Press window.__diagnostics.dump() in console for full snapshot')
+    console.info('[Diagnostics] window.__diagnostics.exportJSON() to get JSON for file export')
+  }
 }
 
 init()

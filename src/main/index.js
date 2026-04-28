@@ -4,6 +4,7 @@
  * All application lifecycle logic lives in AppService (window, menu, updater, state save).
  */
 import { app, ipcMain } from 'electron'
+import log from 'electron-log'
 import { PtyManager } from './pty-manager'
 import { FileManager } from './file-manager'
 import { HistoryManager } from './history-manager'
@@ -58,6 +59,17 @@ app.whenReady().then(() => {
   ipcMain.on(IPC_CHANNELS.TABS_STATE_CHANGED, () => appService.rebuildMenu())
 
   appService.createWindow()
+
+  // Periodic main-process diagnostics (every 10s)
+  setInterval(() => {
+    const mem = process.memoryUsage()
+    log.info(
+      `[MainDiagnostics] Watchers=${fileManager.getWatcherCount()} ` +
+      `PTYs=${ptyManager.sessions.size} ` +
+      `HeapMB=${(mem.heapUsed / 1024 / 1024).toFixed(1)} ` +
+      `RSSMB=${(mem.rss / 1024 / 1024).toFixed(1)}`
+    )
+  }, 10000)
 })
 
 app.on('window-all-closed', () => appService.quit())

@@ -157,4 +157,17 @@ export class PtyManager {
     }
     this.sessions.clear()
   }
+
+  getDiagnostics() {
+    const result = {}
+    for (const [pid, session] of this.sessions) {
+      result[pid] = {
+        tabId: session.tabId,
+        historyFile: session.historyFile,
+        rows: session.pty.rows,
+        cols: session.pty.cols,
+      }
+    }
+    return result
+  }
 }
