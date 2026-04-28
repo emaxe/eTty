@@ -21,6 +21,7 @@ import { TerminalKeyboardHandler } from './features/terminal/terminal-keyboard-h
 import { TerminalOscHandler } from './features/terminal/terminal-osc-handler.js'
 import { EventBus } from './core/event-bus.js'
 import { StateStore } from './core/state-store.js'
+import { ElectronApiAdapter } from './core/adapters/electron-api.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
@@ -219,14 +220,8 @@ async function init() {
   editorPanel = new EditorPanel({
     panelEl: document.getElementById('editor-panel'),
     resizeHandleEl: document.getElementById('resize-handle-right'),
-    onResize: () => tabBar.getActive()?.fitAddon.fit(),
-    onShow: () => btnToggleEditor.classList.add('active'),
-    onHide: () => {
-      btnToggleEditor.classList.remove('active')
-      tabBar.getActive()?.term.focus()
-    },
-    writeToPty: writeToPtyActive,
-    shellCmdToPty: shellCmdToPtyActive,
+    eventBus: bus,
+    electronAPI: new ElectronApiAdapter(),
     getActiveCwd: () => tabBar.getActive()?.rootPath || startCwd,
   })
   // Apply current theme immediately (applyTheme ran before editorPanel was created)
@@ -473,6 +468,27 @@ async function init() {
       } else {
         gitPanel.hide()
       }
+    }
+  })
+
+  // — Editor EventBus subscribers —
+  bus.on('editor.resize', () => tabBar.getActive()?.fitAddon.fit())
+  bus.on('editor.show', () => btnToggleEditor.classList.add('active'))
+  bus.on('editor.hide', () => {
+    btnToggleEditor.classList.remove('active')
+    tabBar.getActive()?.term.focus()
+  })
+  bus.on('editor.sendToTerminal', (lineRef) => {
+    const tab = tabBar.getActive()
+    if (tab) {
+      window.electronAPI.ptyWrite(tab.pid, '\x1b[200~' + lineRef + '\x1b[201~')
+    }
+  })
+  bus.on('editor.openExternal', (cmd) => {
+    const tab = tabBar.getActive()
+    if (tab) {
+      window.electronAPI.ptyWrite(tab.pid, '\x15' + cmd)
+      tab.term.focus()
     }
   })
 

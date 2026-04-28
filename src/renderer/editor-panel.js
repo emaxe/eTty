@@ -49,14 +49,11 @@ export class EditorPanel {
    * @param {Function}   opts.shellCmdToPty  — (data: string) => void, clears line + writes for shell commands
    * @param {Function}   opts.getActiveCwd   — () => string, active terminal cwd
    */
-  constructor({ panelEl, resizeHandleEl, onResize, onShow, onHide, writeToPty, shellCmdToPty, getActiveCwd }) {
+  constructor({ panelEl, resizeHandleEl, eventBus, electronAPI, getActiveCwd }) {
     this._panelEl = panelEl
     this._resizeHandleEl = resizeHandleEl
-    this._onResize = onResize
-    this._onShow = onShow
-    this._onHide = onHide
-    this._writeToPty = writeToPty
-    this._shellCmdToPty = shellCmdToPty
+    this._bus = eventBus
+    this._api = electronAPI
     this._getActiveCwd = getActiveCwd
 
     this._tabBarEl = panelEl.querySelector('#editor-tab-bar')
@@ -100,7 +97,7 @@ export class EditorPanel {
     this.show()
     this._showPlaceholder('Загрузка…')
 
-    const result = await window.electronAPI.fsReadFile(filePath)
+    const result = await this._api.fsReadFile(filePath)
     if (!result.success) {
       this._showPlaceholder(`Не удалось открыть файл:\n${result.error}`)
       return
@@ -148,16 +145,16 @@ export class EditorPanel {
     if (this.isVisible()) return
     this._panelEl.classList.remove('hidden')
     this._resizeHandleEl.classList.remove('hidden')
-    this._onResize?.()
-    this._onShow?.()
+    this._bus.emit('editor.resize')
+    this._bus.emit('editor.show')
   }
 
   hide() {
     if (!this.isVisible()) return
     this._panelEl.classList.add('hidden')
     this._resizeHandleEl.classList.add('hidden')
-    this._onResize?.()
-    this._onHide?.()
+    this._bus.emit('editor.resize')
+    this._bus.emit('editor.hide')
   }
 
   toggle() {
@@ -198,7 +195,7 @@ export class EditorPanel {
     if (!tab) return
 
     const content = tab.view.state.doc.toString()
-    const result = await window.electronAPI.fsWriteFile(filePath, content)
+    const result = await this._api.fsWriteFile(filePath, content)
     if (result.success) {
       tab.originalContent = content
       this._setModified(filePath, false)
@@ -712,7 +709,7 @@ export class EditorPanel {
 
     // Use bracketed paste mode so TUI apps (Copilot, Claude Code, etc.)
     // correctly receive the text as pasted input
-    this._writeToPty?.('\x1b[200~' + lineRef + '\x1b[201~')
+    this._bus.emit('editor.sendToTerminal', lineRef)
   }
 
   _openExternal() {
@@ -720,7 +717,7 @@ export class EditorPanel {
     if (!filePath) return
     // Use shell 'open' command — works on macOS, Linux uses 'xdg-open'
     const escaped = filePath.replace(/'/g, "'\\''")
-    this._shellCmdToPty?.(`open '${escaped}'\r`)
+    this._bus.emit('editor.openExternal', `open '${escaped}'\r`)
   }
 
   async _handleFileLinkClick(pathText) {
@@ -738,7 +735,7 @@ export class EditorPanel {
     }
 
     // Pre-check: try reading the file before switching tabs
-    const result = await window.electronAPI.fsReadFile(resolved)
+    const result = await this._api.fsReadFile(resolved)
     if (!result.success) {
       this._showLinkError(resolved, result.error)
       return
