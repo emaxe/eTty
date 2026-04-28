@@ -9,19 +9,18 @@ import { DraggableTabs } from './components/base/tabs/draggable-tabs.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 
 export class TabBar {
-  constructor({ tabBarEl, terminalContainerEl, onSwitch, onAddTab, onCloseTab }) {
+  constructor({ tabBarEl, terminalContainerEl, eventBus, store }) {
     this.tabBarEl = tabBarEl
     this.terminalContainerEl = terminalContainerEl
-    this.onSwitch = onSwitch
-    this.onAddTab = onAddTab
-    this.onCloseTab = onCloseTab
+    this._bus = eventBus
+    this._store = store
 
     this.tabs = []
     this.activeIndex = -1
     this.disabled = false
 
     this._addBtn = tabBarEl.querySelector('#tab-add')
-    this._addBtn.addEventListener('click', () => this.onAddTab())
+    this._addBtn.addEventListener('click', () => this._bus.emit('tab.add'))
 
     this._contextMenu = new ContextMenu()
 
@@ -30,6 +29,17 @@ export class TabBar {
       dragHandleSelector: '.tab-drag-handle',
       excludedSelector: '#tab-add'
     })
+  }
+
+  _syncStore() {
+    this._store.set('tabs.items', this.tabs.map(t => ({
+      pid: t.pid,
+      rootPath: t.rootPath,
+      tabId: t.tabId,
+      folderName: t.folderName,
+      termTitle: t.termTitle
+    })))
+    this._store.set('tabs.activeIndex', this.activeIndex)
   }
 
   addTab({ pid, term, fitAddon, rootPath, tabId }) {
@@ -48,6 +58,7 @@ export class TabBar {
       treeScrollTop: 0
     }
     this.tabs.push(tab)
+    this._syncStore()
 
     term.onTitleChange((title) => {
       tab.termTitle = title
@@ -64,6 +75,7 @@ export class TabBar {
     tab.container.remove()
     tab.element.remove()
     this.tabs.splice(index, 1)
+    this._syncStore()
 
     if (this.tabs.length === 0) {
       window.close()
@@ -83,6 +95,8 @@ export class TabBar {
     }
 
     this.activeIndex = index
+    this._syncStore()
+
     const tab = this.tabs[index]
     tab.container.classList.add('active')
     tab.element.classList.add('active')
@@ -90,7 +104,7 @@ export class TabBar {
     tab.fitAddon.fit()
     tab.term.focus()
 
-    this.onSwitch(tab, prevTab)
+    this._bus.emit('tab.switch', { tab, prevTab })
   }
 
   getActive() {
@@ -141,7 +155,7 @@ export class TabBar {
       if (this.disabled) return
       e.stopPropagation()
       const i = this.tabs.findIndex(t => t.element === el)
-      if (i >= 0) this.onCloseTab(i)
+      if (i >= 0) this._bus.emit('tab.close', { index: i, tab: this.tabs[i] })
     })
 
     // Context menu
@@ -170,7 +184,7 @@ export class TabBar {
 
   _closeAll() {
     for (let i = this.tabs.length - 1; i >= 0; i--) {
-      this.onCloseTab(i)
+      this._bus.emit('tab.close', { index: i, tab: this.tabs[i] })
     }
   }
 
@@ -178,13 +192,13 @@ export class TabBar {
     const keepTab = this.tabs[keepIndex]
     for (let i = this.tabs.length - 1; i >= 0; i--) {
       if (this.tabs[i] === keepTab) continue
-      this.onCloseTab(i)
+      this._bus.emit('tab.close', { index: i, tab: this.tabs[i] })
     }
   }
 
   _closeRange(from, to) {
     for (let i = to - 1; i >= from; i--) {
-      this.onCloseTab(i)
+      this._bus.emit('tab.close', { index: i, tab: this.tabs[i] })
     }
   }
 
@@ -201,6 +215,7 @@ export class TabBar {
     } else if (fromIndex > this.activeIndex && toIndex <= this.activeIndex) {
       this.activeIndex++
     }
+    this._syncStore()
   }
 
   exportState() {

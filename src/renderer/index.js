@@ -21,6 +21,8 @@ import { TerminalKeyboardHandler } from './features/terminal/terminal-keyboard-h
 import { TerminalOscHandler } from './features/terminal/terminal-osc-handler.js'
 import { EventBus } from './core/event-bus.js'
 import { StateStore } from './core/state-store.js'
+import { ElectronApiAdapter } from './core/adapters/electron-api.js'
+import { AppContainer } from './core/container.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
@@ -100,6 +102,9 @@ async function init() {
   // Expose for debugging (remove before production if desired)
   window.__appStore = appStore
 
+  const bus = new EventBus()
+  window.__eventBus = bus
+
   // Theme subscriber — applies CSS variables, updates terminals and editor
   appStore.subscribe((state, path) => {
     if (path === 'ui.theme') {
@@ -155,6 +160,12 @@ async function init() {
   const btnToggleEditor = document.getElementById('btn-toggle-editor')
   const sidebar = document.getElementById('sidebar')
   const resizeHandle = document.getElementById('resize-handle')
+
+  // — DI Container —
+  const container = new AppContainer()
+  container.register('store', () => appStore)
+  container.register('bus', () => bus)
+  container.register('api', () => new ElectronApiAdapter())
 
   const { cwd: startCwd } = await window.electronAPI.getCwd()
   const agentCommands = {
@@ -213,38 +224,26 @@ async function init() {
     }
   }
 
-  editorPanel = new EditorPanel({
+  appStore.set('editor', { files: [], activePath: null })
+  appStore.set('tabs', { items: [], activeIndex: -1 })
+
+  // Register components in DI container
+  container.register('editorPanel', (r) => new EditorPanel({
     panelEl: document.getElementById('editor-panel'),
     resizeHandleEl: document.getElementById('resize-handle-right'),
-    onResize: () => tabBar.getActive()?.fitAddon.fit(),
-    onShow: () => btnToggleEditor.classList.add('active'),
-    onHide: () => {
-      btnToggleEditor.classList.remove('active')
-      tabBar.getActive()?.term.focus()
-    },
-    writeToPty: writeToPtyActive,
-    shellCmdToPty: shellCmdToPtyActive,
-    getActiveCwd: () => tabBar.getActive()?.rootPath || startCwd,
-  })
+    eventBus: r('bus'),
+    electronAPI: r('api'),
+    getActiveCwd: () => container.resolve('tabBar').getActive()?.rootPath || startCwd,
+    store: r('store'),
+  }))
+  container.register('fileTree', (r) => new FileTree(fileTreeContainerEl, { eventBus: r('bus') }))
+
+  editorPanel = container.resolve('editorPanel')
   // Apply current theme immediately (applyTheme ran before editorPanel was created)
   const _initialTheme = loadedThemes[currentThemeName]
   if (_initialTheme?.editor) editorPanel.setTheme(_initialTheme.editor)
 
-  const fileTree = new FileTree(fileTreeContainerEl, {
-    writeToPty: shellCmdToPtyActive,
-    injectToPty: writeToPtyActive,
-    focusTerminal: focusActiveTerminal,
-    onFileOpen: (filePath) => editorPanel.openFile(filePath),
-    runInNewTab: async (filePath) => {
-      const tabData = await createTab(tabBar.getActive()?.rootPath || startCwd)
-      const tab = tabBar.addTab(tabData)
-      tab.isBusy = false
-      tab.activeAgentId = null
-      setupTabHandlers(tab)
-      tab.fitAddon.fit()
-      window.electronAPI.ptyWrite(tab.pid, filePath + '\n')
-    },
-  })
+  const fileTree = container.resolve('fileTree')
   await fileTree.init(startCwd)
   fileTree.setCollapseChildrenOnClose(config.fileTree.collapseChildrenOnClose)
   fileTree.setFileOpenMode(config.fileTree.fileOpenMode || 'double')
@@ -265,109 +264,104 @@ async function init() {
     })
   }
 
-  tabBar = new TabBar({
+  container.register('tabBar', (r) => new TabBar({
     tabBarEl,
     terminalContainerEl,
-    onSwitch: async (tab, prevTab) => {
-      if (settingsPage.isVisible()) return
-      // Очищаем все watchers перед сменой вкладки
-      fileTree.unwatchAll()
-      if (prevTab) {
-        // Destroy previously suspended editor views to prevent memory leaks
-        // when rapidly switching between tabs.
-        if (prevTab.editorState?._detachedTabs) {
-          for (const [, etab] of prevTab.editorState._detachedTabs) {
-            etab.view.destroy()
-          }
-        }
-        prevTab.treeExpandedDirs = fileTree.getExpandedDirs()
-        prevTab.treeScrollTop = fileTree.getScrollTop()
-        prevTab.editorState = editorPanel.suspendState()
-        prevTab.gitPanelVisible = gitPanel.isVisible()
-      }
-      // Скрыть git-панель без side-effects перед переключением
-      if (gitPanel.isVisible()) gitPanel.hideQuiet()
-      if (tab.rootPath !== fileTree.getCwd()) {
-        await fileTree.setRoot(tab.rootPath)
-        window.electronAPI.fsSetRoot(tab.rootPath)
-      } else {
-        fileTree.collapseAll()
-      }
-      if (tab.treeExpandedDirs && tab.treeExpandedDirs.size > 0) {
-        await fileTree.restoreExpandedDirs(tab.treeExpandedDirs)
-      }
-      fileTree.setScrollTop(tab.treeScrollTop || 0)
-      editorPanel.restoreState(tab.editorState || null)
-      // Восстановить git-панель если она была открыта на этой вкладке
-      if (tab.gitPanelVisible) {
-        gitPanel.show(tab.rootPath)
-      }
-      document.title = tab.termTitle || 'eTty'
-      updateNavButtons()
-      syncStatusBarTerminalState()
-      statusBar.updateNow()
-    },
-    onAddTab: async () => {
-      if (settingsPage.isVisible()) return
-      const active = tabBar.getActive()
-      const cwd = active ? active.rootPath : startCwd
-      const tabData = await createTab(cwd)
-      const tab = tabBar.addTab(tabData)
-      tab.isBusy = false
-      tab.activeAgentId = null
-      setupTabHandlers(tab)
-      tab.fitAddon.fit()
-    },
-    onCloseTab: (index) => {
-      if (settingsPage.isVisible()) return
-      const tab = tabBar.tabs[index]
-      // Destroy suspended editor views to prevent memory leaks
-      if (tab.editorState?._detachedTabs) {
-        for (const [, etab] of tab.editorState._detachedTabs) {
+    eventBus: r('bus'),
+    store: r('store'),
+  }))
+
+  tabBar = container.resolve('tabBar')
+
+  bus.on('tab.switch', async ({ tab, prevTab }) => {
+    if (settingsPage.isVisible()) return
+    // Очищаем все watchers перед сменой вкладки
+    fileTree.unwatchAll()
+    if (prevTab) {
+      // Destroy previously suspended editor views to prevent memory leaks
+      // when rapidly switching between tabs.
+      if (prevTab.editorState?._detachedTabs) {
+        for (const [, etab] of prevTab.editorState._detachedTabs) {
           etab.view.destroy()
         }
       }
-      tabBar.removeTab(index)
-      window.electronAPI.ptyKill(tab.pid)
+      prevTab.treeExpandedDirs = fileTree.getExpandedDirs()
+      prevTab.treeScrollTop = fileTree.getScrollTop()
+      prevTab.editorState = editorPanel.suspendState()
+      prevTab.gitPanelVisible = gitPanel.isVisible()
     }
+    // Скрыть git-панель без side-effects перед переключением
+    if (gitPanel.isVisible()) {
+      gitPanel.hideQuiet()
+      appStore.set('ui.gitPanelVisible', false)
+    }
+    if (tab.rootPath !== fileTree.getCwd()) {
+      await fileTree.setRoot(tab.rootPath)
+      window.electronAPI.fsSetRoot(tab.rootPath)
+    } else {
+      fileTree.collapseAll()
+    }
+    if (tab.treeExpandedDirs && tab.treeExpandedDirs.size > 0) {
+      await fileTree.restoreExpandedDirs(tab.treeExpandedDirs)
+    }
+    fileTree.setScrollTop(tab.treeScrollTop || 0)
+    editorPanel.restoreState(tab.editorState || null)
+    // Восстановить git-панель если она была открыта на этой вкладке
+    if (tab.gitPanelVisible) {
+      gitPanel.show(tab.rootPath)
+      appStore.set('ui.gitPanelVisible', true)
+    }
+    document.title = tab.termTitle || 'eTty'
+    updateNavButtons()
+    syncStatusBarTerminalState()
+    statusBar.updateNow()
+  })
+
+  bus.on('tab.add', async () => {
+    if (settingsPage.isVisible()) return
+    const active = tabBar.getActive()
+    const cwd = active ? active.rootPath : startCwd
+    const tabData = await createTab(cwd)
+    const tab = tabBar.addTab(tabData)
+    tab.isBusy = false
+    tab.activeAgentId = null
+    setupTabHandlers(tab)
+    tab.fitAddon.fit()
+  })
+
+  bus.on('tab.close', ({ index }) => {
+    if (settingsPage.isVisible()) return
+    const tab = tabBar.tabs[index]
+    // Destroy suspended editor views to prevent memory leaks
+    if (tab.editorState?._detachedTabs) {
+      for (const [, etab] of tab.editorState._detachedTabs) {
+        etab.view.destroy()
+      }
+    }
+    tabBar.removeTab(index)
+    window.electronAPI.ptyKill(tab.pid)
   })
 
   // Страница настроек
-  const settingsPage = new SettingsPage({
-    onSettingsChanged: (key, value) => {
-      if (key === 'appearance.theme') applyTheme(value)
-      if (key === 'appearance.focusIndicator') applyFocusIndicator(value)
-      if (key === 'fileTree.collapseChildrenOnClose') {
-        appStore.set('settings.collapseChildrenOnClose', value)
-        fileTree.setCollapseChildrenOnClose(value)
-      }
-      if (key === 'fileTree.fileOpenMode') {
-        appStore.set('settings.fileOpenMode', value)
-        fileTree.setFileOpenMode(value)
-      }
-      if (key === 'agents.forceDisabled') statusBar.setForceDisabled(value)
-      if (key === 'agents.proxy') {
-        config.agents.proxy = value
-        statusBar.setProxyConfig({ proxy: config.agents.proxy, enabled: config.agents.proxyEnabled })
-      }
-      if (key === 'quickReplies.items') {
-        if (!config.quickReplies) config.quickReplies = { items: [] }
-        config.quickReplies.items = value
-        statusBar.setQuickReplies({ items: value })
-      }
-    },
+  container.register('settingsPage', (r) => new SettingsPage({
+    eventBus: r('bus'),
     onClose: () => {
       btnSettings.classList.remove('active')
       tabBar.disabled = false
       focusActiveTerminal()
     }
-  })
+  }))
+  const settingsPage = container.resolve('settingsPage')
   await settingsPage.init()
 
-  const gitPanel = new GitPanel({
+  container.register('gitPanel', (r) => new GitPanel({
     overlayEl: document.getElementById('git-overlay'),
-    onClose: () => statusBar.updateNow(),
-  })
+    onClose: () => {
+      appStore.set('ui.gitPanelVisible', false)
+      statusBar.updateNow()
+    },
+  }))
+  const gitPanel = container.resolve('gitPanel')
 
   const launchAgentInActiveTab = (agentId) => {
     const tab = tabBar.getActive()
@@ -396,29 +390,30 @@ async function init() {
     syncStatusBarTerminalState()
   }
 
-  const statusBar = new StatusBar({
+  container.register('statusBar', (r) => new StatusBar({
     btnEl: document.getElementById('btn-git-diff'),
     cwdEl: document.getElementById('status-cwd'),
     nodeEl: document.getElementById('status-node'),
-    onOpen: () => gitPanel.show(tabBar.getActive()?.rootPath),
+    onOpen: () => appStore.set('ui.gitPanelVisible', true),
     agentButtons: [...document.querySelectorAll('.status-agent-btn')],
     onLaunchAgent: launchAgentInActiveTab,
     onSelectAgent: selectAgentAsActive,
     agentCommandsPanelEl: document.getElementById('agent-commands-panel'),
     onAgentCommand: (cmd) => {
-      const tab = tabBar.getActive()
+      const tab = container.resolve('tabBar').getActive()
       if (tab) {
         tab.term.focus()
-        window.electronAPI.ptyWrite(tab.pid, `\x1b[200~${cmd + ''}\x1b[201~`)
+        r('api').ptyWrite(tab.pid, `\x1b[200~${cmd + ''}\x1b[201~`)
       }
     },
     proxyToggleEl: document.getElementById('btn-proxy-toggle'),
     onToggleProxy: (enabled) => {
       config.agents.proxyEnabled = enabled
-      window.electronAPI.settingsSave(config)
+      r('api').settingsSave(config)
     },
     quickReplies: config.quickReplies || { items: [] }
-  })
+  }))
+  const statusBar = container.resolve('statusBar')
 
   const agentsStatus = await window.electronAPI.agentsGetStatus().catch(() => ({ agents: [] }))
   applyAgentCommands(agentsStatus)
@@ -427,6 +422,114 @@ async function init() {
   statusBar.setProxyConfig({ proxy: config.agents.proxy || '', enabled: config.agents.proxyEnabled })
 
   statusBar.start(() => tabBar.getActive()?.rootPath)
+
+  // — Visibility subscribers (must be after component creation) —
+  appStore.subscribe((state, path) => {
+    if (path === 'ui.sidebarVisible') {
+      const visible = state.ui.sidebarVisible
+      sidebar.style.display = visible ? '' : 'none'
+      resizeHandle.style.display = visible ? '' : 'none'
+      btnToggleSidebar.classList.toggle('active', visible)
+      tabBar.getActive()?.fitAddon.fit()
+    }
+  })
+
+  appStore.subscribe((state, path) => {
+    if (path === 'ui.editorVisible') {
+      const visible = state.ui.editorVisible
+      if (visible) {
+        editorPanel.show()
+      } else {
+        editorPanel.hide()
+      }
+      btnToggleEditor.classList.toggle('active', visible)
+    }
+  })
+
+  appStore.subscribe((state, path) => {
+    if (path === 'ui.gitPanelVisible') {
+      const visible = state.ui.gitPanelVisible
+      if (visible) {
+        gitPanel.show(tabBar.getActive()?.rootPath)
+      } else {
+        gitPanel.hide()
+      }
+    }
+  })
+
+  // — Editor EventBus subscribers —
+  bus.on('editor.resize', () => tabBar.getActive()?.fitAddon.fit())
+  bus.on('editor.show', () => btnToggleEditor.classList.add('active'))
+  bus.on('editor.hide', () => {
+    btnToggleEditor.classList.remove('active')
+    tabBar.getActive()?.term.focus()
+  })
+  bus.on('editor.sendToTerminal', (lineRef) => {
+    const tab = tabBar.getActive()
+    if (tab) {
+      window.electronAPI.ptyWrite(tab.pid, '\x1b[200~' + lineRef + '\x1b[201~')
+    }
+  })
+  bus.on('editor.openExternal', (cmd) => {
+    const tab = tabBar.getActive()
+    if (tab) {
+      window.electronAPI.ptyWrite(tab.pid, '\x15' + cmd)
+      tab.term.focus()
+    }
+  })
+
+  // — FileTree EventBus subscribers —
+  bus.on('filetree.shellCmd', (cmd) => {
+    const tab = tabBar.getActive()
+    if (tab) {
+      window.electronAPI.ptyWrite(tab.pid, '\x15' + cmd)
+      tab.term.focus()
+    }
+  })
+  bus.on('filetree.inject', (path) => {
+    const tab = tabBar.getActive()
+    if (tab) {
+      window.electronAPI.ptyWrite(tab.pid, '\x1b[200~' + path + '\x1b[201~')
+      tab.term.focus()
+    }
+  })
+  bus.on('terminal.focus', () => {
+    tabBar.getActive()?.term.focus()
+  })
+  bus.on('filetree.openFile', (path) => editorPanel.openFile(path))
+  bus.on('filetree.runInNewTab', async (path) => {
+    const tabData = await createTab(tabBar.getActive()?.rootPath || startCwd)
+    const tab = tabBar.addTab(tabData)
+    tab.isBusy = false
+    tab.activeAgentId = null
+    setupTabHandlers(tab)
+    tab.fitAddon.fit()
+    window.electronAPI.ptyWrite(tab.pid, path + '\n')
+  })
+
+  // — Settings EventBus subscriber —
+  bus.on('settings.changed', ({ key, value }) => {
+    if (key === 'appearance.theme') applyTheme(value)
+    if (key === 'appearance.focusIndicator') applyFocusIndicator(value)
+    if (key === 'fileTree.collapseChildrenOnClose') {
+      appStore.set('settings.collapseChildrenOnClose', value)
+      fileTree.setCollapseChildrenOnClose(value)
+    }
+    if (key === 'fileTree.fileOpenMode') {
+      appStore.set('settings.fileOpenMode', value)
+      fileTree.setFileOpenMode(value)
+    }
+    if (key === 'agents.forceDisabled') statusBar.setForceDisabled(value)
+    if (key === 'agents.proxy') {
+      config.agents.proxy = value
+      statusBar.setProxyConfig({ proxy: config.agents.proxy, enabled: config.agents.proxyEnabled })
+    }
+    if (key === 'quickReplies.items') {
+      if (!config.quickReplies) config.quickReplies = { items: [] }
+      config.quickReplies.items = value
+      statusBar.setQuickReplies({ items: value })
+    }
+  })
 
   btnSettings.addEventListener('click', () => {
     if (settingsPage.isVisible()) {
@@ -683,21 +786,15 @@ async function init() {
   btnUp.addEventListener('click', () => shellCmdToPtyActive('cd ..\n'))
   btnHome.addEventListener('click', () => shellCmdToPtyActive('cd ~\n'))
 
-  let sidebarVisible = true
   btnToggleSidebar.classList.add('active')
   btnToggleSidebar.addEventListener('click', () => {
     if (settingsPage.isVisible() || gitPanel.isVisible()) return
-    sidebarVisible = !sidebarVisible
-    sidebar.style.display = sidebarVisible ? '' : 'none'
-    resizeHandle.style.display = sidebarVisible ? '' : 'none'
-    btnToggleSidebar.classList.toggle('active', sidebarVisible)
-    tabBar.getActive()?.fitAddon.fit()
+    appStore.set('ui.sidebarVisible', !appStore.get('ui.sidebarVisible'))
   })
 
   btnToggleEditor.addEventListener('click', () => {
     if (settingsPage.isVisible() || gitPanel.isVisible()) return
-    editorPanel.toggle()
-    btnToggleEditor.classList.toggle('active', editorPanel.isVisible())
+    appStore.set('ui.editorVisible', !appStore.get('ui.editorVisible'))
   })
 
   // Горячая клавиша Cmd+E / Ctrl+E — toggle панели редактора
@@ -707,8 +804,7 @@ async function init() {
       if (document.activeElement?.closest('#editor-body')) return
       if (settingsPage.isVisible() || gitPanel.isVisible()) return
       e.preventDefault()
-      editorPanel.toggle()
-      btnToggleEditor.classList.toggle('active', editorPanel.isVisible())
+      appStore.set('ui.editorVisible', !appStore.get('ui.editorVisible'))
     }
   })
 
