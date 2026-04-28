@@ -566,14 +566,24 @@ async function init() {
   window.electronAPI.onPtyData((pid, data) => {
     diagnostics.recordPtyData(pid, data.length)
     const tab = tabBar.tabs.find(t => t.pid === pid)
-    if (tab) {
+    if (!tab) return
+    if (tab._isActive) {
       tab.term.write(data)
-      // Track xterm.js buffer state for diagnostics
-      try {
-        const buffer = tab.term.buffer?.active
-        diagnostics.recordXtermState(pid, buffer?.length || 0, buffer?.cursorY || 0, false)
-      } catch (e) { /* ignore */ }
+    } else {
+      // Buffer data for inactive tabs to avoid xterm.js rendering cost
+      tab._pendingData.push(data)
+      // Limit buffer size to prevent unbounded growth (max ~1MB)
+      const total = tab._pendingData.reduce((s, d) => s + d.length, 0)
+      if (total > 1024 * 1024) {
+        tab._pendingData.splice(0, tab._pendingData.length - 1)
+        tab._pendingData[0] = '…[truncated]\n'
+      }
     }
+    // Track xterm.js buffer state for diagnostics
+    try {
+      const buffer = tab.term.buffer?.active
+      diagnostics.recordXtermState(pid, buffer?.length || 0, buffer?.cursorY || 0, false)
+    } catch (e) { /* ignore */ }
   })
 
   window.electronAPI.onPtyExit(({ pid }) => {

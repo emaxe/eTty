@@ -55,7 +55,9 @@ export class TabBar {
 
     const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '', tabId,
       treeExpandedDirs: new Set(),
-      treeScrollTop: 0
+      treeScrollTop: 0,
+      _pendingData: [],
+      _isActive: false,
     }
     this.tabs.push(tab)
     this._syncStore()
@@ -92,6 +94,7 @@ export class TabBar {
     if (prevTab) {
       prevTab.container.classList.remove('active')
       prevTab.element.classList.remove('active')
+      prevTab._isActive = false
     }
 
     this.activeIndex = index
@@ -100,6 +103,14 @@ export class TabBar {
     const tab = this.tabs[index]
     tab.container.classList.add('active')
     tab.element.classList.add('active')
+    tab._isActive = true
+
+    // Flush buffered PTY data for the now-active tab
+    if (tab._pendingData.length > 0) {
+      const data = tab._pendingData.join('')
+      tab._pendingData = []
+      tab.term.write(data)
+    }
 
     tab.fitAddon.fit()
     tab.term.focus()
