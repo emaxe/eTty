@@ -12,6 +12,7 @@ export class TerminalOscHandler {
   constructor({ onCwdChange, onBusyChange }) {
     this._onCwdChange = onCwdChange
     this._onBusyChange = onBusyChange
+    this._wasBusy = false
   }
 
   /**
@@ -37,10 +38,12 @@ export class TerminalOscHandler {
     const isBusy = data.startsWith('C')
     const isDone = data.startsWith('A')
 
-    if (isBusy) {
-      this._onBusyChange?.(true, pid, false)
-    } else if (isDone) {
-      this._onBusyChange?.(false, pid, true)
+    if (isBusy || isDone) {
+      const newBusy = isBusy
+      if (this._wasBusy !== newBusy) {
+        this._onBusyChange?.(newBusy, pid, this._wasBusy)
+        this._wasBusy = newBusy
+      }
     }
 
     return false
