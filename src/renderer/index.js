@@ -367,7 +367,8 @@ async function init() {
       btnSettings.classList.remove('active')
       tabBar.disabled = false
       focusActiveTerminal()
-    }
+    },
+    api: r('api')
   }))
   const settingsPage = container.resolve('settingsPage')
   await settingsPage.init()

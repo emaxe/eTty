@@ -10,9 +10,10 @@ const SUPPORTED_AGENTS = [
  * Страница настроек (overlay). Категории: оформление, дерево файлов, терминал, ИИ-агенты.
  */
 export class SettingsPage {
-  constructor({ eventBus, onClose }) {
+  constructor({ eventBus, onClose, api }) {
     this._bus = eventBus
     this._onClose = onClose
+    this._api = api
     this._config = null
     this._themes = null
     this._overlay = null
@@ -23,7 +24,7 @@ export class SettingsPage {
   }
 
   async init() {
-    const { config, themes, warnings } = await window.electronAPI.settingsLoad()
+    const { config, themes, warnings } = await this._api.settingsLoad()
     this._config = config
     this._themes = themes
     if (warnings && warnings.length > 0) {
@@ -50,7 +51,7 @@ export class SettingsPage {
 
   async _loadAgentStatus() {
     try {
-      const result = await window.electronAPI.agentsGetStatus()
+      const result = await this._api.agentsRefresh()
       this._agentStatusById = new Map((result?.agents || []).map(agent => [agent.id, agent]))
     } catch {
       this._agentStatusById = new Map()
@@ -662,7 +663,7 @@ export class SettingsPage {
   _scheduleSave() {
     clearTimeout(this._saveTimer)
     this._saveTimer = setTimeout(() => {
-      window.electronAPI.settingsSave(this._config)
+      this._api.settingsSave(this._config)
     }, 300)
   }
 }

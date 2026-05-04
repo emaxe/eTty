@@ -9,6 +9,7 @@ import { PtyManager } from './pty-manager'
 import { FileManager } from './file-manager'
 import { HistoryManager } from './history-manager'
 import { AgentService } from './agent-service.js'
+import { ShellPathResolver } from './shell-path-resolver.js'
 import {
   saveTabState, loadTabState, deleteTabState, hasTabState, validatePath
 } from './tab-state'
@@ -27,10 +28,12 @@ import {
 } from './ipc-handlers/index.js'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
-const ptyManager = new PtyManager()
+const shellPathResolver = new ShellPathResolver()
+
+const ptyManager = new PtyManager({ shellPathResolver })
 const fileManager = new FileManager()
 const historyManager = new HistoryManager()
-const agentService = new AgentService()
+const agentService = new AgentService({ shellPathResolver })
 
 const appService = new AppService({
   ptyManager,
@@ -42,7 +45,9 @@ const appService = new AppService({
   saveSettings,
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await shellPathResolver.resolve()
+
   appService.startAgentAutoRefresh()
   appService.startAutoUpdater()
 

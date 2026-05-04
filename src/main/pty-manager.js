@@ -17,9 +17,10 @@ const PROMPT_MAP = {
  * Каждая вкладка получает изолированную zsh-сессию с собственными ZDOTDIR и HISTFILE.
  */
 export class PtyManager {
-  constructor() {
+  constructor({ shellPathResolver }) {
     /** @type {Map<number, {pty, webContents, tabId: string, historyFile: string, initialHistSize: number}>} */
     this.sessions = new Map()
+    this._shellPathResolver = shellPathResolver
   }
 
   /**
@@ -88,9 +89,9 @@ export class PtyManager {
         ZDOTDIR: zdotdir,
         LANG: process.env.LANG || 'en_US.UTF-8',
         LC_CTYPE: process.env.LC_CTYPE || 'en_US.UTF-8',
-        PATH: process.env.PATH
-          ? `/usr/local/bin:${process.env.PATH}`
-          : '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+        PATH: this._shellPathResolver.getResolvedPath()
+          || process.env.PATH
+          || '/usr/bin:/bin:/usr/sbin:/sbin'
       }
     })
 

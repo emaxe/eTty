@@ -1,6 +1,6 @@
 /**
  * Сервис авто-детекта CLI ИИ-агентов.
- * Проверяет наличие команд claude, codex, gh copilot, agent, opencode в $PATH.
+ * Проверяет наличие команд claude, codex, gh copilot, agent, opencode в resolved PATH.
  * Результат кэшируется; обновляется при открытии настроек.
  */
 import { execFile } from 'child_process'
@@ -45,73 +45,74 @@ export const SUPPORTED_AGENTS = [
   }
 ]
 
-function getShellEnv() {
-  const home = process.env.HOME || '/Users/' + process.env.USER;
-  const extraPaths = [
-    '/usr/local/bin',
-    home + '/.local/bin',
-    '/opt/homebrew/bin',
-    home + '/.cargo/bin'
-  ];
-  const basePath = process.env.PATH || '/usr/bin:/bin:/usr/sbin:/sbin';
-  const path = [...new Set([...extraPaths, ...basePath.split(':')])].join(':');
-  return {
-    ...process.env,
-    PATH: path,
-    HOME: home,
-    USER: process.env.USER || 'unknown'
-  };
-}
-
-async function runShell(cmd, timeout = 2500) {
-  const env = getShellEnv()
+async function commandExists(command, resolvedPath) {
   try {
-    await execFileAsync('/bin/zsh', ['-l', '-c', cmd], { timeout, env })
-    return { ok: true }
+    await execFileAsync('sh', ['-c', `command -v ${command} >/dev/null 2>&1`], {
+      timeout: 2500,
+      env: { ...process.env, PATH: resolvedPath }
+    })
+    return true
   } catch {
-    return { ok: false }
+    return false
   }
 }
 
-async function commandExists(command) {
-  const result = await runShell(`command -v ${command} >/dev/null 2>&1`, 2500)
-  return result.ok
+async function probeCommand(cmd, resolvedPath) {
+  try {
+    await execFileAsync('sh', ['-c', cmd], {
+      timeout: 3000,
+      env: { ...process.env, PATH: resolvedPath }
+    })
+    return true
+  } catch {
+    return false
+  }
 }
 
-async function probeCommand(cmd) {
-  const result = await runShell(cmd, 3000)
-  return result.ok
-}
-
-async function resolveCopilotLaunchCommand() {
-  if (await commandExists('copilot')) {
+async function resolveCopilotLaunchCommand(resolvedPath) {
+  if (await commandExists('copilot', resolvedPath)) {
     return 'copilot'
   }
 
-  if (await probeCommand('gh copilot --help >/dev/null 2>&1')) {
+  if (await probeCommand('gh copilot --help >/dev/null 2>&1', resolvedPath)) {
     return 'gh copilot'
   }
 
   return null
 }
 
-async function detectAgent(agent) {
+async function detectAgent(agent, resolvedPath) {
   if (agent.checkType === 'copilot') {
-    const launchCommand = await resolveCopilotLaunchCommand()
+    const launchCommand = await resolveCopilotLaunchCommand(resolvedPath)
     return {
       detected: !!launchCommand,
       launchCommand: launchCommand || agent.launchCommand
     }
   }
 
-  return {
-    detected: await commandExists(agent.command),
-    launchCommand: agent.launchCommand
+  let detected = await commandExists(agent.command, resolvedPath)
+  let launchCommand = agent.launchCommand
+
+  // Fallback для Codex: если глобальный codex не найден — пробуем через npx
+  if (agent.id === 'codex' && !detected) {
+    if (await commandExists('npx', resolvedPath)) {
+      const npxOk = await probeCommand(
+        'npx --no-install @openai/codex --version >/dev/null 2>&1',
+        resolvedPath
+      )
+      if (npxOk) {
+        detected = true
+        launchCommand = 'npx @openai/codex'
+      }
+    }
   }
+
+  return { detected, launchCommand }
 }
 
 export class AgentService {
-  constructor() {
+  constructor({ shellPathResolver }) {
+    this._shellPathResolver = shellPathResolver
     this._cache = null
   }
 
@@ -124,9 +125,13 @@ export class AgentService {
   }
 
   async refresh() {
+    // Инвалидируем кэш PATH, чтобы подхватить свежие установки
+    this._shellPathResolver.invalidate()
+    const resolvedPath = await this._shellPathResolver.resolve()
+
     const agents = await Promise.all(
       SUPPORTED_AGENTS.map(async (agent) => {
-        const result = await detectAgent(agent)
+        const result = await detectAgent(agent, resolvedPath)
         return {
           id: agent.id,
           label: agent.label,
