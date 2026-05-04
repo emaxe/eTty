@@ -551,6 +551,58 @@ html, body {
 
 .tree-root-label {
   margin-left: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-root-actions {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding-left: 4px;
+}
+
+.tree-root-node-row:hover .tree-root-actions,
+.tree-root-node-row.hovered .tree-root-actions {
+  display: flex;
+}
+
+.tree-root-action {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 2px;
+  color: var(--text);
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.tree-root-action:hover {
+  background: var(--hover);
+  transform: scale(1.15) translateY(-1px);
+}
+
+.tree-root-action.success {
+  color: var(--green);
+}
+
+.tree-root-action.spinning svg {
+  animation: tree-root-spin 0.5s linear infinite;
+}
+
+@keyframes tree-root-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .tree-root-children {

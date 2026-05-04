@@ -72,6 +72,7 @@ export class ElectronApiAdapter {
   // — App —
   getCwd() { return this._api.getCwd() }
   getHomedir() { return this._api.getHomedir() }
+  openExternal(path) { return this._api.appOpenExternal(path) }
 
   _on(channel, fn) {
     const unsub = this._api[`on${channel.charAt(0).toUpperCase() + channel.slice(1)}`]?.(fn)

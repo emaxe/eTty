@@ -12,9 +12,10 @@ import { Icons } from './icons.js'
  * - Undo: Ctrl+Z для отката move-операций
  */
 export class FileTree {
-  constructor(container, { eventBus } = {}) {
+  constructor(container, { eventBus, api } = {}) {
     this._container = container
     this._bus = eventBus
+    this._api = api
     this._cwd = null
     this._modKeys = { shift: false, meta: false, ctrl: false }
     this._contextMenu = new ContextMenu()
@@ -436,6 +437,56 @@ export class FileTree {
 
     row.appendChild(arrow)
     row.appendChild(label)
+
+    // Root action buttons (copy path + refresh)
+    const actions = document.createElement('div')
+    actions.className = 'tree-root-actions'
+
+    const refreshBtn = document.createElement('button')
+    refreshBtn.className = 'tree-root-action'
+    refreshBtn.title = 'Обновить'
+    refreshBtn.innerHTML = Icons.refresh
+    actions.appendChild(refreshBtn)
+
+    const copyBtn = document.createElement('button')
+    copyBtn.className = 'tree-root-action'
+    copyBtn.title = 'Копировать путь'
+    copyBtn.innerHTML = Icons.copy
+    actions.appendChild(copyBtn)
+
+    let _copyRevertTimer = null
+    copyBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      e.preventDefault()
+      await navigator.clipboard.writeText(this._cwd)
+      this._bus.emit('terminal.focus')
+      copyBtn.innerHTML = Icons.ok
+      copyBtn.classList.add('success')
+      clearTimeout(_copyRevertTimer)
+      _copyRevertTimer = setTimeout(() => {
+        copyBtn.innerHTML = Icons.copy
+        copyBtn.classList.remove('success')
+      }, 1500)
+    })
+
+    refreshBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      e.preventDefault()
+      refreshBtn.classList.add('spinning')
+      const startTime = Date.now()
+      try {
+        await this._refreshList(this._rootContainer, this._cwd, 1)
+      } finally {
+        const elapsed = Date.now() - startTime
+        const minSpin = 1200 // minimum spin time in ms
+        const remaining = Math.max(0, minSpin - elapsed)
+        setTimeout(() => {
+          refreshBtn.classList.remove('spinning')
+        }, remaining)
+      }
+    })
+
+    row.appendChild(actions)
 
     const children = document.createElement('div')
     children.className = 'tree-root-children open'
@@ -1011,6 +1062,11 @@ export class FileTree {
           this._bus.emit('terminal.focus')
         }
       },
+      { label: 'Открыть в системном эксплорере', action: () => {
+          const dirPath = this._parentDir(entry.path)
+          this._api.openExternal(dirPath)
+        }
+      },
       { separator: true },
       { label: 'Копировать', action: () => { this._clipboard = { path: entry.path } } },
       { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(entry.path); this._bus.emit('terminal.focus') } },
@@ -1027,6 +1083,10 @@ export class FileTree {
           const escaped = entry.path.replace(/'/g, "'\\''")
           this._bus.emit('filetree.shellCmd', `cd '${escaped}'\r`)
           this._bus.emit('terminal.focus')
+        }
+      },
+      { label: 'Открыть в системном эксплорере', action: () => {
+          this._api.openExternal(entry.path)
         }
       },
       { separator: true },
@@ -1048,6 +1108,11 @@ export class FileTree {
       { label: 'Новый файл', action: () => this._createInline('file', this._cwd, this._rootContainer, 1) },
       { label: 'Новая папка', action: () => this._createInline('dir', this._cwd, this._rootContainer, 1) },
       { separator: true },
+      { label: 'Открыть в системном эксплорере', action: () => {
+          this._api.openExternal(this._cwd)
+        }
+      },
+      { separator: true },
       { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(this._cwd); this._bus.emit('terminal.focus') } }
     ], x, y)
   }
@@ -1055,7 +1120,12 @@ export class FileTree {
   _showMenuEmpty(x, y, dirPath, container, depth = 0) {
     const items = [
       { label: 'Новый файл', action: () => this._createInline('file', dirPath, container, depth) },
-      { label: 'Новая папка', action: () => this._createInline('dir', dirPath, container, depth) }
+      { label: 'Новая папка', action: () => this._createInline('dir', dirPath, container, depth) },
+      { separator: true },
+      { label: 'Открыть в системном эксплорере', action: () => {
+          this._api.openExternal(dirPath)
+        }
+      }
     ]
     if (this._clipboard) {
       items.push({ separator: true })
