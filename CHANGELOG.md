@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **App quit cleanup** — graceful shutdown sequence for main and renderer processes
+  - `beforeQuit` handler saves tab state, kills all PTY sessions, and unwatches all file system watchers before app exits
+  - Main-process diagnostics interval now properly cleared on `window-all-closed`
+  - Temporary `zdotdir` folders created for PTY sessions cleaned up on process exit, kill, and bulk `killAll`
+- **Renderer cleanup** — global event listeners and observers properly disposed on window unload
+  - `ResizeObserver` disconnected and debounce timer cleared
+  - Global `focusin`, `mousedown`, `blur`, `keydown`, `mousemove`, `mouseup` listeners removed
+  - Terminal container `destroy()` called to prevent memory leaks
+
 ## [0.1.2]
 
 ### Added
