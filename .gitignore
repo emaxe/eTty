@@ -10,7 +10,6 @@ release/
 # AI agent directories (skill-hub)
 .claude/
 .cursor/
-.github/
 .codex/
 .agents/*
 !.agents/rules/

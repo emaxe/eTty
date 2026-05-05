@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v0.1.2)'
+        required: true
+        type: string
+      notes:
+        description: 'Optional release notes override'
+        required: false
+        type: string
+
+jobs:
+  build-mac-arm64:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx electron-vite build
+      - run: npx electron-builder --mac --arm64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-mac-arm64
+          path: dist/*.dmg
+
+  build-mac-x64:
+    runs-on: macos-13
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx electron-vite build
+      - run: npx electron-builder --mac --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-mac-x64
+          path: dist/*.dmg
+
+  release:
+    needs: [build-mac-arm64, build-mac-x64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-mac-arm64
+          path: dist/mac-arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-mac-x64
+          path: dist/mac-x64
+
+      - id: changelog
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          VER="${VERSION#v}"
+          BODY=$(awk "/^## \[$VER\]/ {flag=1; next} /^## \[/ {flag=0} flag" CHANGELOG.md)
+          BODY=$(echo "$BODY" | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba')
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: eTty ${{ github.event.inputs.version }}
+          body: ${{ github.event.inputs.notes || steps.changelog.outputs.body }}
+          generate_release_notes: true
+          files: |
+            dist/mac-arm64/*
+            dist/mac-x64/*

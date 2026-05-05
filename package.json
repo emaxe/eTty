@@ -1,6 +1,6 @@
 {
   "name": "etty",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Terminal wrapper application",
   "main": "./out/main/index.js",
   "scripts": {
@@ -49,6 +49,7 @@
   "build": {
     "appId": "com.etty.app",
     "productName": "eTty",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "directories": {
       "output": "dist"
     },
@@ -60,15 +61,7 @@
     "mac": {
       "icon": "build/icon.icns",
       "category": "public.app-category.developer-tools",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
-      ],
+      "target": "dmg",
       "hardenedRuntime": true,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
