@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Status bar size setting** — three selectable sizes (compact / standard / large) in Settings → Appearance
+  - Compact: 22px height, 11px font (current default)
+  - Standard: 28px height, 13px font
+  - Large: 34px height, 15px font
+  - Applied instantly via `data-size` attribute on the status bar element
+
 ### Fixed
 
 - **App quit cleanup** — graceful shutdown sequence for main and renderer processes

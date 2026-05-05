@@ -146,6 +146,23 @@ export class SettingsPage {
             this._scheduleSave()
           }
         )
+      },
+      {
+        label: 'Размер статусбара',
+        control: this._createSelect(
+          [
+            { key: 'compact', name: 'Компакт' },
+            { key: 'standard', name: 'Стандарт' },
+            { key: 'large', name: 'Крупный' }
+          ],
+          this._config.appearance?.statusBarSize || 'compact',
+          (val) => {
+            if (!this._config.appearance) this._config.appearance = {}
+            this._config.appearance.statusBarSize = val
+            this._bus.emit('settings.changed', { key: 'appearance.statusBarSize', value: val })
+            this._scheduleSave()
+          }
+        )
       }
     ]))
 

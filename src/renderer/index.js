@@ -47,6 +47,11 @@ function applyFocusIndicator(style) {
   appStore?.set('ui.focusIndicator', style || 'none')
 }
 
+/** Применяет размер статусбара через data-атрибут. */
+function applyStatusBarSize(size) {
+  appStore?.set('ui.statusBarSize', size || 'compact')
+}
+
 /** Применяет тему: обновляет CSS-переменные, терминалы и редактор. */
 function applyTheme(themeName) {
   appStore?.set('ui.theme', themeName)
@@ -98,6 +103,7 @@ async function init() {
     ui: {
       theme: config.appearance.theme || 'dark',
       focusIndicator: config.appearance.focusIndicator || 'none',
+      statusBarSize: config.appearance.statusBarSize || 'compact',
       sidebarVisible: true,
       editorVisible: false,
       gitPanelVisible: false,
@@ -155,14 +161,26 @@ async function init() {
     }
   })
 
+  // Status bar size subscriber
+  appStore.subscribe((state, path) => {
+    if (path === 'ui.statusBarSize') {
+      const statusBar = document.getElementById('status-bar')
+      if (statusBar) {
+        statusBar.dataset.size = state.ui.statusBarSize || 'compact'
+      }
+    }
+  })
+
   applyTheme(config.appearance.theme)
   applyFocusIndicator(config.appearance.focusIndicator)
+  applyStatusBarSize(config.appearance.statusBarSize)
 
   const terminalContainerEl = document.getElementById('terminal-container')
   const tabBarEl = document.getElementById('tab-bar')
   const fileTreeContainerEl = document.getElementById('file-tree-container')
   const btnUp = document.getElementById('btn-up')
   const btnHome = document.getElementById('btn-home')
+  const btnRefreshTree = document.getElementById('btn-refresh-tree')
   const btnToggleHidden = document.getElementById('btn-toggle-hidden')
   const btnToggleSidebar = document.getElementById('btn-toggle-sidebar')
   const btnSettings = document.getElementById('btn-settings')
@@ -533,6 +551,7 @@ async function init() {
   bus.on('settings.changed', ({ key, value }) => {
     if (key === 'appearance.theme') applyTheme(value)
     if (key === 'appearance.focusIndicator') applyFocusIndicator(value)
+    if (key === 'appearance.statusBarSize') applyStatusBarSize(value)
     if (key === 'fileTree.collapseChildrenOnClose') {
       appStore.set('settings.collapseChildrenOnClose', value)
       fileTree.setCollapseChildrenOnClose(value)
@@ -878,6 +897,23 @@ async function init() {
     }
   }
   document.addEventListener('keydown', onKeyDown)
+
+  btnRefreshTree.innerHTML = Icons.refresh
+
+  btnRefreshTree.addEventListener('click', async () => {
+    btnRefreshTree.classList.add('spinning')
+    const startTime = Date.now()
+    try {
+      await fileTree.refresh()
+    } finally {
+      const elapsed = Date.now() - startTime
+      const minSpin = 1200
+      const remaining = Math.max(0, minSpin - elapsed)
+      setTimeout(() => {
+        btnRefreshTree.classList.remove('spinning')
+      }, remaining)
+    }
+  })
 
   btnToggleHidden.innerHTML = Icons.eyeOff
 

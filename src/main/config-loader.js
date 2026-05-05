@@ -16,7 +16,8 @@ export function getConfigDefaults() {
     },
     appearance: {
       theme: 'dark',
-      focusIndicator: 'glow'
+      focusIndicator: 'glow',
+      statusBarSize: 'compact'
     },
     terminal: {
       promptStyle: 'default'

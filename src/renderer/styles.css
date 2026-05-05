@@ -270,8 +270,11 @@ html, body {
   cursor: default;
 }
 
-#btn-toggle-hidden {
+#btn-refresh-tree {
   margin-left: auto;
+}
+
+#btn-toggle-hidden {
   transition: color 0.15s;
 }
 
@@ -596,7 +599,7 @@ html, body {
   color: var(--green);
 }
 
-.tree-root-action.spinning svg {
+#btn-refresh-tree.spinning svg {
   animation: tree-root-spin 0.5s linear infinite;
 }
 
@@ -929,6 +932,22 @@ html, body {
   transition: background 150ms, border-color 150ms, box-shadow 150ms;
 }
 .status-bar-btn:hover { background: var(--border); }
+
+/* Status bar size variants */
+#status-bar[data-size="standard"] {
+  height: 28px;
+}
+#status-bar[data-size="large"] {
+  height: 34px;
+}
+#status-bar[data-size="standard"] .status-item,
+#status-bar[data-size="standard"] .status-bar-btn {
+  font-size: 13px;
+}
+#status-bar[data-size="large"] .status-item,
+#status-bar[data-size="large"] .status-bar-btn {
+  font-size: 15px;
+}
 
 .status-proxy-btn {
   color: var(--muted);

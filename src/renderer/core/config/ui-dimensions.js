@@ -8,4 +8,9 @@ export const UI_DIMENSIONS = Object.freeze({
     HEIGHT: 24,
     MARGIN: 6,
   }),
+  STATUS_BAR: Object.freeze({
+    COMPACT: Object.freeze({ HEIGHT: 22, FONT_SIZE: 11 }),
+    STANDARD: Object.freeze({ HEIGHT: 28, FONT_SIZE: 13 }),
+    LARGE: Object.freeze({ HEIGHT: 34, FONT_SIZE: 15 }),
+  }),
 })
