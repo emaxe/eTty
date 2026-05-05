@@ -49,6 +49,7 @@
   "build": {
     "appId": "com.etty.app",
     "productName": "eTty",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "directories": {
       "output": "dist"
     },

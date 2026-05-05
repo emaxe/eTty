@@ -1,0 +1,114 @@
+name: Release macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v0.1.2)'
+        required: true
+        type: string
+      notes:
+        description: 'Optional release notes override'
+        required: false
+        type: string
+
+jobs:
+  build-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npx electron-vite build
+
+      - name: Package (arm64)
+        run: npx electron-builder --mac --arm64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: etty-mac-arm64
+          path: dist/*.dmg
+
+  build-x64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npx electron-vite build
+
+      - name: Package (x64)
+        run: npx electron-builder --mac --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: etty-mac-x64
+          path: dist/*.dmg
+
+  release:
+    needs: [build-arm64, build-x64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: etty-mac-arm64
+          path: dist/arm64
+
+      - name: Download x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: etty-mac-x64
+          path: dist/x64
+
+      - name: Parse CHANGELOG
+        id: changelog
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          VER="${VERSION#v}"
+          BODY=$(awk "/^## \[$VER\]/ {flag=1; next} /^## \[/ {flag=0} flag" CHANGELOG.md)
+          # Trim leading/trailing blank lines
+          BODY=$(echo "$BODY" | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba')
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "Found changelog section for [$VER]"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: eTty ${{ github.event.inputs.version }}
+          body: ${{ github.event.inputs.notes || steps.changelog.outputs.body }}
+          generate_release_notes: true
+          files: |
+            dist/arm64/*.dmg
+            dist/x64/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
