@@ -36,6 +36,9 @@ Electron-терминал с файловым деревом, редакторо
 ### Тип: новая фича
 Прочитай [.agents/rules/checklists/new-feature.md](.agents/rules/checklists/new-feature.md) и следуй каждому пункту.
 
+### Тип: релиз
+Прочитай [.agents/rules/release-process.md](.agents/rules/release-process.md) и следуй процедуре обновления CHANGELOG.
+
 ### Архитектурные инварианты (всегда)
 
 - **DI:** зависимости — через DI Container (constructor injection), не через глобалы
