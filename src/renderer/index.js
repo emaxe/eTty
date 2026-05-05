@@ -38,6 +38,9 @@ let tabBar = null
 let editorPanel = null
 /** @type {StateStore|null} */
 let appStore = null
+/** @type {ResizeObserver|null} */
+let resizeObserver = null
+let resizeDebounceTimer = null
 
 /** Применяет стиль индикатора фокуса через data-атрибут на корневом элементе. */
 function applyFocusIndicator(style) {
@@ -838,12 +841,15 @@ async function init() {
     terminalContainerEl.classList.toggle('panel-focused', inTerminal)
     editorPanelEl.classList.toggle('panel-focused', inEditor)
   }
-  document.addEventListener('focusin', (e) => updateFocusIndicator(e.target))
-  document.addEventListener('mousedown', (e) => updateFocusIndicator(e.target))
-  window.addEventListener('blur', () => {
+  function onFocusIn(e) { updateFocusIndicator(e.target) }
+  function onMouseDown(e) { updateFocusIndicator(e.target) }
+  function onWindowBlur() {
     terminalContainerEl.classList.remove('panel-focused')
     editorPanelEl.classList.remove('panel-focused')
-  })
+  }
+  document.addEventListener('focusin', onFocusIn)
+  document.addEventListener('mousedown', onMouseDown)
+  window.addEventListener('blur', onWindowBlur)
 
   // Кнопки навигации сайдбара
   btnUp.disabled = startCwd === '/'
@@ -862,7 +868,7 @@ async function init() {
   })
 
   // Горячая клавиша Cmd+E / Ctrl+E — toggle панели редактора
-  document.addEventListener('keydown', (e) => {
+  function onKeyDown(e) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'e' && !e.shiftKey && !e.altKey) {
       // Не перехватываем, если фокус в CodeMirror (он сам обработает)
       if (document.activeElement?.closest('#editor-body')) return
@@ -870,7 +876,8 @@ async function init() {
       e.preventDefault()
       appStore.set('ui.editorVisible', !appStore.get('ui.editorVisible'))
     }
-  })
+  }
+  document.addEventListener('keydown', onKeyDown)
 
   btnToggleHidden.innerHTML = Icons.eyeOff
 
@@ -895,7 +902,7 @@ async function init() {
     dragState = { startScreenX: e.screenX, startScreenY: e.screenY, startWinX: winX, startWinY: winY }
   })
 
-  document.addEventListener('mousemove', (e) => {
+  function onMouseMove(e) {
     if (!dragState) return
     const dx = e.screenX - dragState.startScreenX
     const dy = e.screenY - dragState.startScreenY
@@ -905,9 +912,12 @@ async function init() {
     if (titlebarDidDrag) {
       window.electronAPI.windowMove(dragState.startWinX + dx, dragState.startWinY + dy)
     }
-  })
+  }
 
-  document.addEventListener('mouseup', () => { dragState = null })
+  function onMouseUp() { dragState = null }
+
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
 
   // Отменяем click по тайтлбару если был drag, но не блокируем клики по вкладкам и кнопкам tab-bar
   titlebarEl.addEventListener('click', (e) => {
@@ -971,13 +981,32 @@ async function init() {
   // Debounced: fitAddon.resize → pty:resize цепочка не должна молотить при
   // анимациях или быстрых resize-событиях (sidebar drag, fullscreen toggle).
   function debounce(fn, ms) {
-    let timer
     return (...args) => {
-      clearTimeout(timer)
-      timer = setTimeout(() => fn(...args), ms)
+      clearTimeout(resizeDebounceTimer)
+      resizeDebounceTimer = setTimeout(() => fn(...args), ms)
     }
   }
-  new ResizeObserver(debounce(() => tabBar.getActive()?.fitAddon.fit(), APP_CONFIG.RESIZE_OBSERVER_DEBOUNCE_MS)).observe(terminalContainerEl)
+  resizeObserver = new ResizeObserver(debounce(() => tabBar.getActive()?.fitAddon.fit(), APP_CONFIG.RESIZE_OBSERVER_DEBOUNCE_MS))
+  resizeObserver.observe(terminalContainerEl)
+
+  // Cleanup function: disconnect observer, clear timer, remove global listeners, destroy container
+  function cleanupRenderer() {
+    clearTimeout(resizeDebounceTimer)
+    resizeDebounceTimer = null
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+      resizeObserver = null
+    }
+    document.removeEventListener('focusin', onFocusIn)
+    document.removeEventListener('mousedown', onMouseDown)
+    window.removeEventListener('blur', onWindowBlur)
+    document.removeEventListener('keydown', onKeyDown)
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+    container.destroy()
+  }
+
+  window.addEventListener('beforeunload', cleanupRenderer)
 
   // Performance diagnostics — disabled by default, enable via window.__diagnostics.start()
   // (querySelectorAll('*') every 3s can cause style recalculation and UI stutter)

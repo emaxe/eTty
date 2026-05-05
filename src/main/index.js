@@ -45,6 +45,9 @@ const appService = new AppService({
   saveSettings,
 })
 
+let diagnosticsInterval = null
+let isQuitting = false
+
 app.whenReady().then(async () => {
   await shellPathResolver.resolve()
 
@@ -66,7 +69,7 @@ app.whenReady().then(async () => {
   appService.createWindow()
 
   // Periodic main-process diagnostics (every 10s)
-  const diagnosticsInterval = setInterval(() => {
+  diagnosticsInterval = setInterval(() => {
     const mem = process.memoryUsage()
     log.info(
       `[MainDiagnostics] Watchers=${fileManager.getWatcherCount()} ` +
@@ -77,4 +80,18 @@ app.whenReady().then(async () => {
   }, 10000)
 })
 
-app.on('window-all-closed', () => appService.quit())
+app.on('window-all-closed', () => {
+  if (diagnosticsInterval) {
+    clearInterval(diagnosticsInterval)
+    diagnosticsInterval = null
+  }
+  appService.quit()
+})
+
+app.on('before-quit', async (e) => {
+  if (isQuitting) return
+  isQuitting = true
+  e.preventDefault()
+  await appService.beforeQuit()
+  app.quit()
+})

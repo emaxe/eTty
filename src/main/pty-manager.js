@@ -2,6 +2,7 @@ import { spawn } from 'node-pty'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import log from 'electron-log'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
 const SHELL_PATH = '/bin/zsh'
@@ -95,7 +96,7 @@ export class PtyManager {
       }
     })
 
-    this.sessions.set(ptyProcess.pid, { pty: ptyProcess, webContents, tabId, historyFile, initialHistSize: initialHistSize || 0 })
+    this.sessions.set(ptyProcess.pid, { pty: ptyProcess, webContents, tabId, historyFile, initialHistSize: initialHistSize || 0, zdotdir })
 
     // Batch PTY output: accumulate chunks and flush every ~8 ms.
     // This prevents IPC flooding when TUI apps (Copilot CLI, etc.)
@@ -127,6 +128,14 @@ export class PtyManager {
         webContents.send(IPC_CHANNELS.PTY_EXIT, { pid: ptyProcess.pid, exitCode, signal })
       }
       this.sessions.delete(ptyProcess.pid)
+      // Cleanup zdotdir
+      if (zdotdir) {
+        try {
+          fs.rmSync(zdotdir, { recursive: true, force: true })
+        } catch (err) {
+          log.warn('pty-manager: failed to cleanup zdotdir on exit', zdotdir, err.message)
+        }
+      }
     })
 
     return { pid: ptyProcess.pid }
@@ -149,14 +158,30 @@ export class PtyManager {
     if (session) {
       session.pty.kill()
       this.sessions.delete(pid)
+      if (session.zdotdir) {
+        try {
+          fs.rmSync(session.zdotdir, { recursive: true, force: true })
+        } catch (err) {
+          log.warn('pty-manager: failed to cleanup zdotdir', session.zdotdir, err.message)
+        }
+      }
     }
   }
 
   killAll() {
+    const zdotdirs = []
     for (const [, session] of this.sessions) {
+      if (session.zdotdir) zdotdirs.push(session.zdotdir)
       session.pty.kill()
     }
     this.sessions.clear()
+    for (const zdotdir of zdotdirs) {
+      try {
+        fs.rmSync(zdotdir, { recursive: true, force: true })
+      } catch (err) {
+        log.warn('pty-manager: failed to cleanup zdotdir on killAll', zdotdir, err.message)
+      }
+    }
   }
 
   getDiagnostics() {

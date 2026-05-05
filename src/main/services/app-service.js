@@ -180,6 +180,25 @@ export class AppService {
     this._buildMenu()
   }
 
+  async beforeQuit() {
+    // Сохранить табы, если окно ещё открыто и не сохранено
+    if (this._mainWindow && !this._mainWindow.isDestroyed() && !this._mainWindow._tabStateSaved) {
+      try {
+        await this._historyManager.mergeAllTabsToGlobal(this._ptyManager)
+        const tabs = await this._mainWindow.webContents.executeJavaScript(
+          'window.__exportTabState ? window.__exportTabState() : []'
+        )
+        if (tabs.length > 0) {
+          await this._tabState.saveTabState(tabs)
+        }
+      } catch (err) {
+        log.error('tab-state: failed to save on before-quit', err.message)
+      }
+    }
+    this._ptyManager.killAll()
+    this._fileManager.unwatchAll()
+  }
+
   quit() {
     this._ptyManager.killAll()
     this._fileManager.unwatchAll()
