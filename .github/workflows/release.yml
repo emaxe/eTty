@@ -51,46 +51,8 @@ jobs:
           name: app-mac-x64
           path: dist/*.dmg
 
-  build-win:
-    runs-on: windows-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-      - run: npx electron-vite build
-      - run: npx electron-builder --win --x64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app-win
-          path: dist/*.(exe|msi|zip)
-
-  build-linux:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-      - run: npx electron-vite build
-      - run: npx electron-builder --linux --x64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app-linux
-          path: dist/*.(AppImage|deb|snap|rpm|tar.gz)
-
   release:
-    needs: [build-mac-arm64, build-mac-x64, build-win, build-linux]
+    needs: [build-mac-arm64, build-mac-x64]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -103,14 +65,6 @@ jobs:
         with:
           name: app-mac-x64
           path: dist/mac-x64
-      - uses: actions/download-artifact@v4
-        with:
-          name: app-win
-          path: dist/win
-      - uses: actions/download-artifact@v4
-        with:
-          name: app-linux
-          path: dist/linux
 
       - id: changelog
         run: |
@@ -131,5 +85,3 @@ jobs:
           files: |
             dist/mac-arm64/*
             dist/mac-x64/*
-            dist/win/*
-            dist/linux/*
