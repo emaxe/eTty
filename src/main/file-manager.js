@@ -22,15 +22,28 @@ export class FileManager {
   }
 
   /**
-   * Проверяет, что путь не выходит за пределы CWD (path traversal защита).
-   * @throws {Error} если путь за пределами CWD
+   * Проверяет, что путь не выходит за пределы CWD (path traversal + symlink защита).
+   *
+   * Использует `fs.realpath()` для разрешения символических ссылок перед проверкой.
+   *
+   * Ограничения:
+   * - Не защищает от race condition (TOCTOU): symlink может быть создан
+   *   между проверкой и фактической операцией
+   * - Не защищает от hard links (fs.realpath() не различает их)
+   * - Требует, чтобы CWD и targetPath существовали на момент проверки
+   *
+   * @param {string} targetPath
+   * @returns {Promise<string>} resolved real path
+   * @throws {Error} если путь (после разрешения symlinks) за пределами CWD
    */
-  validatePath(targetPath) {
-    const resolved = path.resolve(targetPath)
-    if (!resolved.startsWith(this.cwd)) {
+  async validatePath(targetPath) {
+    const real = await fs.realpath(targetPath)
+    // Нормализуем CWD: добавляем trailing slash для точной проверки
+    const cwdNormalized = this.cwd.endsWith(path.sep) ? this.cwd : this.cwd + path.sep
+    if (!real.startsWith(cwdNormalized) && real !== this.cwd) {
       throw new Error('Path traversal denied: path is outside CWD')
     }
-    return resolved
+    return real
   }
 
   setRoot(newPath) {
@@ -48,33 +61,33 @@ export class FileManager {
   }
 
   async createFile(filePath) {
-    const resolved = this.validatePath(filePath)
+    const resolved = await this.validatePath(filePath)
     await fs.writeFile(resolved, '', { flag: 'wx' })
     return { success: true }
   }
 
   async createDir(dirPath) {
-    const resolved = this.validatePath(dirPath)
+    const resolved = await this.validatePath(dirPath)
     await fs.mkdir(resolved, { recursive: true })
     return { success: true }
   }
 
   async rename(oldPath, newPath) {
-    const resolvedOld = this.validatePath(oldPath)
-    const resolvedNew = this.validatePath(newPath)
+    const resolvedOld = await this.validatePath(oldPath)
+    const resolvedNew = await this.validatePath(newPath)
     await fs.rename(resolvedOld, resolvedNew)
     return { success: true }
   }
 
   async delete(targetPath) {
-    const resolved = this.validatePath(targetPath)
+    const resolved = await this.validatePath(targetPath)
     await fs.rm(resolved, { recursive: true, force: true })
     return { success: true }
   }
 
   async copy(srcPath, destDir) {
-    const resolvedSrc = this.validatePath(srcPath)
-    const resolvedDestDir = this.validatePath(destDir)
+    const resolvedSrc = await this.validatePath(srcPath)
+    const resolvedDestDir = await this.validatePath(destDir)
     const baseName = path.basename(resolvedSrc)
     let destPath = path.join(resolvedDestDir, baseName)
 
@@ -87,17 +100,17 @@ export class FileManager {
       // dest doesn't exist, use original name
     }
 
-    this.validatePath(destPath)
+    await this.validatePath(destPath)
     await fs.cp(resolvedSrc, destPath, { recursive: true })
     return { newPath: destPath }
   }
 
   async move(srcPaths, destDir) {
-    const resolvedDestDir = this.validatePath(destDir)
+    const resolvedDestDir = await this.validatePath(destDir)
     const results = []
 
     for (const srcPath of srcPaths) {
-      const resolvedSrc = this.validatePath(srcPath)
+      const resolvedSrc = await this.validatePath(srcPath)
       const baseName = path.basename(resolvedSrc)
       let destPath = path.join(resolvedDestDir, baseName)
 
@@ -115,7 +128,7 @@ export class FileManager {
         // dest doesn't exist, use original name
       }
 
-      this.validatePath(destPath)
+      await this.validatePath(destPath)
       try {
         await fs.rename(resolvedSrc, destPath)
       } catch (err) {

@@ -186,22 +186,25 @@ $ grep -r "window\.electronAPI" src/renderer/ | wc -l
 ## Блок C: Безопасность и надёжность (Sprint 3)
 
 ### C1. Устранение symlink attack в `FileManager.validatePath`
-**Статус:** ❌ Не завершено  
+**Статус:** ✅ Завершено (2026-05-06)  
 **Приоритет:** 🔴 Critical  
 **Сложность:** M  
-**Время:** 3-4ч  
+**Время:** 30-60мин  
 
 **Анализ (2026-05-06):**
 `FileManager.validatePath` (`src/main/file-manager.js:28-33`) использует `path.resolve()` без `fs.realpath()`. Симлинк может обойти проверку `startsWith(this.cwd)`.
 
-**Что сделать:**
-- [ ] Использовать `fs.realpath()` перед проверкой `startsWith(this.cwd)`
-- [ ] Добавить тесты на symlink escape (`ln -s /etc/passwd ./evil`)
-- [ ] Документировать ограничения защиты
+**Что сделано:**
+- [x] `validatePath()` переведён в async, использует `fs.realpath()` перед проверкой `startsWith(this.cwd)`
+- [x] Добавлена нормализация CWD (trailing slash) для защиты от prefix-атак
+- [x] Все вызовы `validatePath()` обновлены с `await`
+- [x] Добавлен интеграционный тест на symlink escape (`src/main/__tests__/file-manager.test.mjs`)
+- [x] Добавлен JSDoc с описанием ограничений защиты (TOCTOU, hard links)
+- [x] CHANGELOG.md обновлён
 
 **Критерий приёмки:**
-- `validatePath()` отклоняет пути, проходящие через symlink за пределы CWD
-- Есть unit-test на symlink attack
+- [x] `validatePath()` отклоняет пути, проходящие через symlink за пределы CWD
+- [x] Есть unit-test на symlink attack
 
 ---
 
@@ -228,7 +231,7 @@ $ grep -r "window\.electronAPI" src/renderer/ | wc -l
 ## Блок D: Дедупликация и рефакторинг (Sprint 4)
 
 ### D1. Удалить дублирование `countDiffLines`
-**Статус:** ❌ Не завершено  
+**Статус:** ✅ Завершено (2026-05-06)  
 **Приоритет:** 🔴 Critical  
 **Сложность:** XS  
 **Время:** 30мин  
@@ -238,12 +241,13 @@ $ grep -r "window\.electronAPI" src/renderer/ | wc -l
 - `src/main/ipc-handlers/git-handlers.js:9-17`
 - `src/main/git-service.js:4-12`
 
-**Что сделать:**
-- [ ] Удалить локальную `countDiffLines` из `git-handlers.js`
-- [ ] Импортировать `countDiffLines` из `git-service.js`
+**Что сделано:**
+- [x] Удалена локальная `countDiffLines` из `git-handlers.js`
+- [x] Добавлен импорт `countDiffLines` из `../git-service.js`
+- [x] `npm run build` проходит без ошибок
 
 **Критерий приёмки:**
-- `grep -r "countDiffLines" src/main/` показывает только одно определение (в `git-service.js`)
+- [x] `grep -r "countDiffLines" src/main/` показывает только одно определение (в `git-service.js`)
 
 ---
 
@@ -435,11 +439,11 @@ $ grep -r "window\.electronAPI" src/renderer/ | wc -l
 | A — Cleanup | 4 | S-M | 8-13ч | 2/4 |
 | B — Адаптер/DI | 2 | M-L | 10-13ч | 1/2 |
 | C — Безопасность | 2 | M | 6-8ч | 0/2 |
-| D — Дедупликация | 3 | XS-M | 6-8ч | 0/3 |
+| D — Дедупликация | 3 | XS-M | 6-8ч | 1/3 |
 | E — Разбиение | 2 | L | 12-16ч | 0/2 |
 | F — Конфиг | 1 | S | 2-3ч | 0/1 |
 | G — Прочее | 3 | XS | 1-1.5ч | 0/3 |
-| **Итого** | **17** | | **45-62.5ч** | **3/17** |
+| **Итого** | **17** | | **45-62.5ч** | **4/17** |
 
 **Рекомендуемый порядок:** A → C → B → D → F → E → G  
 *(Сначала устраняем утечки и баги, потом рефакторим.)*

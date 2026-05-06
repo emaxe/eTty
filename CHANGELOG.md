@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **Fixed symlink attack vulnerability in `FileManager.validatePath()`** — `path.resolve()` was replaced with `fs.realpath()` to properly resolve symbolic links before checking path boundaries. This prevents attackers from bypassing path traversal protection via symlinks pointing outside the CWD.
+
 ### Added
 
 - **Status bar size setting** — three selectable sizes (compact / standard / large) in Settings → Appearance

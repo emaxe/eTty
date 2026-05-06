@@ -2,19 +2,7 @@ import simpleGit from 'simple-git'
 import fs from 'fs/promises'
 import path from 'path'
 import { IPC_CHANNELS } from '../../shared/ipc-channels.js'
-
-/**
- * Считает строки additions (+) и deletions (-) в unified diff, игнорируя заголовки +++ и ---.
- */
-function countDiffLines(diff) {
-  let additions = 0
-  let deletions = 0
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('+') && !line.startsWith('+++')) additions++
-    else if (line.startsWith('-') && !line.startsWith('---')) deletions++
-  }
-  return { additions, deletions }
-}
+import { countDiffLines } from '../git-service.js'
 
 /**
  * @param {Electron.IpcMain} ipcMain
