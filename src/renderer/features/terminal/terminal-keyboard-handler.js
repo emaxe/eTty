@@ -1,6 +1,9 @@
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform)
+
 /**
  * Handles custom keyboard events for a terminal:
  * - Kitty keyboard protocol (modifier+Enter)
+ * - macOS Cmd+ArrowLeft / Cmd+ArrowRight → Home / End
  * - Non-ASCII printable characters (Cyrillic, accented, etc.)
  */
 export class TerminalKeyboardHandler {
@@ -45,6 +48,24 @@ export class TerminalKeyboardHandler {
       }
       if (event.ctrlKey && event.shiftKey) {
         if (event.type === 'keydown') this._ptyApi.write(pid, '\x1b[13;6u')
+        return false
+      }
+    }
+
+    // macOS: Cmd+ArrowLeft / Cmd+ArrowRight → Home / End
+    if (
+      IS_MAC &&
+      event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.shiftKey
+    ) {
+      if (event.key === 'ArrowLeft') {
+        if (event.type === 'keydown') this._ptyApi.write(pid, '\x1b[H')
+        return false
+      }
+      if (event.key === 'ArrowRight') {
+        if (event.type === 'keydown') this._ptyApi.write(pid, '\x1b[F')
         return false
       }
     }
