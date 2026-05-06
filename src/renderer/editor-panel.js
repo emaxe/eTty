@@ -210,6 +210,21 @@ export class EditorPanel {
     if (!tab) return
 
     const content = tab.view.state.doc.toString()
+
+    // Check if file changed on disk since last open/save
+    const stat = await this._api.fsStatFile(filePath)
+    if (stat.success && stat.mtimeMs > (tab.originalMtime || 0)) {
+      this._showSaveConflictDialog(filePath, stat.mtimeMs, content)
+      return
+    }
+
+    await this._doSaveFile(filePath, content)
+  }
+
+  async _doSaveFile(filePath, content) {
+    const tab = this._tabs.get(filePath)
+    if (!tab) return
+
     const result = await this._api.fsWriteFile(filePath, content)
     if (result.success) {
       tab.originalContent = content
@@ -1069,6 +1084,158 @@ export class EditorPanel {
     })
 
     actions.append(btnKeep, btnReload)
+    dialog.append(header, diffContainer, actions)
+  }
+
+  _showSaveConflictDialog(filePath, diskMtime, pendingContent) {
+    this._closeConflictOverlay()
+
+    const fileName = filePath.split('/').pop()
+
+    const overlay = document.createElement('div')
+    overlay.className = 'conflict-dialog-overlay'
+
+    const dialog = document.createElement('div')
+    dialog.className = 'conflict-dialog'
+
+    const header = document.createElement('div')
+    header.className = 'conflict-dialog-header'
+    header.textContent = `Файл изменён на диске: ${fileName}`
+
+    const body = document.createElement('div')
+    body.className = 'conflict-dialog-body'
+    body.textContent = 'Файл был изменён внешним процессом после последнего открытия. Сохранить ваши изменения поверх внешних?'
+
+    const actions = document.createElement('div')
+    actions.className = 'conflict-dialog-actions'
+
+    const btnOverwrite = document.createElement('button')
+    btnOverwrite.className = 'conflict-dialog-btn danger'
+    btnOverwrite.textContent = 'Перезаписать'
+
+    const btnCancel = document.createElement('button')
+    btnCancel.className = 'conflict-dialog-btn'
+    btnCancel.textContent = 'Отменить'
+
+    const btnDiff = document.createElement('button')
+    btnDiff.className = 'conflict-dialog-btn primary'
+    btnDiff.textContent = 'Показать diff'
+
+    const close = () => {
+      this._closeConflictOverlay()
+    }
+
+    btnCancel.addEventListener('click', close)
+
+    btnOverwrite.addEventListener('click', async () => {
+      await this._doSaveFile(filePath, pendingContent)
+      close()
+    })
+
+    btnDiff.addEventListener('click', () => {
+      this._showSaveConflictDiff(filePath, diskMtime, pendingContent, overlay, dialog)
+    })
+
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
+
+    actions.append(btnCancel, btnOverwrite, btnDiff)
+    dialog.append(header, body, actions)
+    overlay.appendChild(dialog)
+    document.body.appendChild(overlay)
+    overlay._diffEditors = []
+    this._conflictOverlay = overlay
+    btnCancel.focus()
+  }
+
+  async _showSaveConflictDiff(filePath, diskMtime, pendingContent, overlay, dialog) {
+    const read = await this._api.fsReadFile(filePath)
+    if (!read.success) return
+
+    const langExts = await getLanguageExtension(filePath)
+
+    dialog.innerHTML = ''
+    dialog.classList.add('diff-mode')
+
+    const header = document.createElement('div')
+    header.className = 'conflict-dialog-header'
+    header.textContent = 'Сравнение: ваши изменения vs версия на диске'
+
+    const diffContainer = document.createElement('div')
+    diffContainer.className = 'conflict-diff-container'
+
+    const pair = document.createElement('div')
+    pair.className = 'conflict-diff-pair'
+
+    const readOnlyExt = EditorView.editable.of(false)
+    const themeExt = this._themeCompartment.of(this._currentThemeExts)
+
+    const currentPanel = document.createElement('div')
+    currentPanel.className = 'conflict-diff-panel'
+    const currentLabel = document.createElement('div')
+    currentLabel.className = 'conflict-diff-label'
+    currentLabel.textContent = 'Ваши изменения (редактор)'
+    const currentEditor = new EditorView({
+      state: EditorState.create({
+        doc: pendingContent,
+        extensions: [
+          themeExt, readOnlyExt,
+          lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(),
+          drawSelection(), bracketMatching(), foldGutter(),
+          ...langExts
+        ]
+      })
+    })
+    currentPanel.append(currentLabel, currentEditor.dom)
+
+    const diskPanel = document.createElement('div')
+    diskPanel.className = 'conflict-diff-panel'
+    const diskLabel = document.createElement('div')
+    diskLabel.className = 'conflict-diff-label'
+    diskLabel.textContent = 'Версия на диске'
+    const diskEditor = new EditorView({
+      state: EditorState.create({
+        doc: read.content,
+        extensions: [
+          themeExt, readOnlyExt,
+          lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(),
+          drawSelection(), bracketMatching(), foldGutter(),
+          ...langExts
+        ]
+      })
+    })
+    diskPanel.append(diskLabel, diskEditor.dom)
+
+    pair.append(currentPanel, diskPanel)
+    diffContainer.appendChild(pair)
+
+    this._syncDiffScroll(currentEditor, diskEditor)
+    overlay._diffEditors.push(currentEditor, diskEditor)
+
+    const actions = document.createElement('div')
+    actions.className = 'conflict-dialog-actions'
+
+    const btnCancel = document.createElement('button')
+    btnCancel.className = 'conflict-dialog-btn'
+    btnCancel.textContent = 'Отменить'
+
+    const btnOverwrite = document.createElement('button')
+    btnOverwrite.className = 'conflict-dialog-btn danger'
+    btnOverwrite.textContent = 'Перезаписать'
+
+    const close = () => {
+      currentEditor.destroy()
+      diskEditor.destroy()
+      overlay._diffEditors = []
+      this._closeConflictOverlay()
+    }
+
+    btnCancel.addEventListener('click', close)
+    btnOverwrite.addEventListener('click', async () => {
+      await this._doSaveFile(filePath, pendingContent)
+      close()
+    })
+
+    actions.append(btnCancel, btnOverwrite)
     dialog.append(header, diffContainer, actions)
   }
 
