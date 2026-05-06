@@ -90,13 +90,22 @@ html, body {
   flex: 1;
   display: flex;
   align-items: center;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+#tab-list {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
   overflow-x: auto;
   overflow-y: hidden;
   height: 100%;
-  position: relative;
+  min-width: 0;
 }
 
-#tab-bar::-webkit-scrollbar {
+#tab-list::-webkit-scrollbar {
   height: 0;
 }
 
@@ -202,19 +211,22 @@ html, body {
 
 #tab-add {
   flex-shrink: 0;
-  margin: 0 6px;
-  background: none;
+  height: 100%;
+  margin: 0;
+  background: var(--surface);
   border: none;
   color: var(--muted);
   cursor: pointer;
-  padding: 0 6px;
+  padding: 0 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  z-index: 5;
 }
 
 #tab-add:hover {
   color: var(--text);
+  background: var(--border);
 }
 
 #workspace {

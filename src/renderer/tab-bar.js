@@ -19,15 +19,15 @@ export class TabBar {
     this.activeIndex = -1
     this.disabled = false
 
+    this._tabListEl = tabBarEl.querySelector('#tab-list')
     this._addBtn = tabBarEl.querySelector('#tab-add')
     this._addBtn.addEventListener('click', () => this._bus.emit('tab.add'))
 
     this._contextMenu = new ContextMenu()
 
-    this._draggable = new DraggableTabs(this.tabBarEl, {
+    this._draggable = new DraggableTabs(this._tabListEl, {
       onReorder: (fromIndex, toIndex) => this._handleReorder(fromIndex, toIndex),
-      dragHandleSelector: '.tab-drag-handle',
-      excludedSelector: '#tab-add'
+      dragHandleSelector: '.tab-drag-handle'
     })
   }
 
@@ -50,7 +50,7 @@ export class TabBar {
     term.open(container)
 
     const element = this._createTabEl(folderName, '')
-    this.tabBarEl.insertBefore(element, this._addBtn)
+    this._tabListEl.appendChild(element)
     this._draggable.observeElement(element)
 
     const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '', tabId,

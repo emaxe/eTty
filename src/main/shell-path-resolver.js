@@ -67,7 +67,11 @@ export class ShellPathResolver {
   }
 
   async _doResolve() {
-    const script = `printf "%s" "${DELIMITER}$PATH${DELIMITER}"`
+    // Уникальный маркер, чтобы избежать коллизий, если PATH уже содержит старый DELIMITER
+    const delimiter = `${DELIMITER}_${Date.now()}_${Math.random().toString(36).slice(2)}_`
+    // Разделяем маркер и $PATH отдельными аргументами, иначе zsh склеивает
+    // $PATH и маркер в одно имя переменной (например $PATH_SHELL_PATH_DELIMITER_...)
+    const script = `printf '%s%s%s' '${delimiter}' "\${PATH}" '${delimiter}'`
 
     try {
       const { stdout } = await execFileAsync(
@@ -76,13 +80,14 @@ export class ShellPathResolver {
         { timeout: TIMEOUT_MS, env: process.env }
       )
 
-      const raw = stdout || ''
-      const start = raw.indexOf(DELIMITER)
-      const end = raw.indexOf(DELIMITER, start + DELIMITER.length)
+      // macOS zsh -l -i может выводить OSC-sequences (например, \033]7;…\007) перед командой.
+      const raw = (stdout || '').replace(/\x1b\][0-9]*;[^\x07]*\x07/g, '')
+      const start = raw.indexOf(delimiter)
+      const end = raw.indexOf(delimiter, start + delimiter.length)
 
       let resolved
       if (start !== -1 && end !== -1 && end > start) {
-        resolved = raw.slice(start + DELIMITER.length, end)
+        resolved = raw.slice(start + delimiter.length, end)
       } else {
         // Если маркеры не найдены — берём весь stdout, очищаем
         resolved = raw.trim()
@@ -107,7 +112,9 @@ export class ShellPathResolver {
    */
   _mergeWithSystemPath(resolved) {
     const system = (process.env.PATH || '/usr/bin:/bin:/usr/sbin:/sbin').split(':').filter(Boolean)
-    const user = (resolved || '').split(':').filter(Boolean)
+    // Очищаем старые маркеры, которые могли остаться в process.env.PATH от предыдущих запусков
+    const cleaned = (resolved || '').replace(new RegExp(`_?${DELIMITER}[^:]*`, 'g'), '')
+    const user = cleaned.split(':').filter(Boolean)
     const merged = [...new Set([...user, ...system])]
     return merged.join(':')
   }

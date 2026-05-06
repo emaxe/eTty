@@ -215,6 +215,10 @@ export class FileTree {
     this._refreshList(this._rootContainer, this._cwd, 1)
   }
 
+  refresh() {
+    return this._refreshList(this._rootContainer, this._cwd, 1)
+  }
+
   setCollapseChildrenOnClose(val) {
     this._collapseChildrenOnClose = val
   }
@@ -438,15 +442,9 @@ export class FileTree {
     row.appendChild(arrow)
     row.appendChild(label)
 
-    // Root action buttons (copy path + refresh)
+    // Root action buttons (copy path)
     const actions = document.createElement('div')
     actions.className = 'tree-root-actions'
-
-    const refreshBtn = document.createElement('button')
-    refreshBtn.className = 'tree-root-action'
-    refreshBtn.title = 'Обновить'
-    refreshBtn.innerHTML = Icons.refresh
-    actions.appendChild(refreshBtn)
 
     const copyBtn = document.createElement('button')
     copyBtn.className = 'tree-root-action'
@@ -467,23 +465,6 @@ export class FileTree {
         copyBtn.innerHTML = Icons.copy
         copyBtn.classList.remove('success')
       }, 1500)
-    })
-
-    refreshBtn.addEventListener('click', async (e) => {
-      e.stopPropagation()
-      e.preventDefault()
-      refreshBtn.classList.add('spinning')
-      const startTime = Date.now()
-      try {
-        await this._refreshList(this._rootContainer, this._cwd, 1)
-      } finally {
-        const elapsed = Date.now() - startTime
-        const minSpin = 1200 // minimum spin time in ms
-        const remaining = Math.max(0, minSpin - elapsed)
-        setTimeout(() => {
-          refreshBtn.classList.remove('spinning')
-        }, remaining)
-      }
     })
 
     row.appendChild(actions)
