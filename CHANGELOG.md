@@ -18,6 +18,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Terminal Home/End on macOS** — `Cmd+ArrowLeft` and `Cmd+ArrowRight` now send `\x1b[H` / `\x1b[F` (Home / End) escape sequences to the PTY in TUI applications (Vim, Emacs, readline, fzf, etc.). Previously xterm.js consumed these events for DOM text selection and never forwarded them to the shell.
 - **App quit cleanup** — graceful shutdown sequence for main and renderer processes
   - `beforeQuit` handler saves tab state, kills all PTY sessions, and unwatches all file system watchers before app exits
   - Main-process diagnostics interval now properly cleared on `window-all-closed`

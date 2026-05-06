@@ -94,6 +94,8 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 | `Shift+Enter` | Kitty protocol: `\x1b[13;2u` |
 | `Ctrl+Enter` | Kitty protocol: `\x1b[13;5u` |
 | `Ctrl+Shift+Enter` | Kitty protocol: `\x1b[13;6u` |
+| `Cmd+ArrowLeft` (macOS) | Home — `\x1b[H` |
+| `Cmd+ArrowRight` (macOS) | End — `\x1b[F` |
 
 ## Tech Stack
 
