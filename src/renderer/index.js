@@ -339,7 +339,7 @@ async function init() {
       await fileTree.restoreExpandedDirs(tab.treeExpandedDirs)
     }
     fileTree.setScrollTop(tab.treeScrollTop || 0)
-    editorPanel.restoreState(tab.editorState || null)
+    await editorPanel.restoreState(tab.editorState || null)
     // Восстановить git-панель если она была открыта на этой вкладке
     if (tab.gitPanelVisible) {
       gitPanel.show(tab.rootPath)

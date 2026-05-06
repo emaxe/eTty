@@ -281,7 +281,7 @@ export class EditorPanel {
    * Restore previously suspended editor state.
    * @param {object|null} state — return value of suspendState(), or null for fresh state
    */
-  restoreState(state) {
+  async restoreState(state) {
     // Clean up any current editor tabs — destroy CodeMirror views to prevent leaks
     for (const [, tab] of this._tabs) {
       if (this._bodyEl.contains(tab.view.dom)) tab.view.dom.remove()
@@ -301,7 +301,7 @@ export class EditorPanel {
     // If state has serialised data but no detached views — restore from disk
     if (!state._detachedTabs || state._detachedTabs.size === 0) {
       if (state.files && state.files.length > 0) {
-        this.restoreEditorFromSaved(state)
+        await this.restoreEditorFromSaved(state)
       } else {
         this._showPlaceholder('Файл не открыт')
         this.hide()
@@ -321,7 +321,7 @@ export class EditorPanel {
       : this._tabs.keys().next().value
 
     if (activePath) {
-      this._switchToTab(activePath)
+      await this._switchToTab(activePath)
     }
 
     if (state.visible) {
@@ -366,7 +366,6 @@ export class EditorPanel {
       if (tab) {
         tab.savedScrollTop = f.scrollTop
         tab.savedScrollLeft = f.scrollLeft
-        if (f.originalMtime != null) tab.originalMtime = f.originalMtime
       }
     }
     if (state.activePath && this._tabs.has(state.activePath)) {
@@ -853,6 +852,10 @@ export class EditorPanel {
     const tab = this._tabs.get(filePath)
     if (!tab) return
 
+    // Update metadata BEFORE dispatch so _onDocChanged sees correct originalContent
+    tab.originalContent = newContent
+    tab.originalMtime = newMtime
+
     const view = tab.view
     const tr = view.state.update({
       changes: {
@@ -862,9 +865,6 @@ export class EditorPanel {
       }
     })
     view.dispatch(tr)
-    tab.originalContent = newContent
-    tab.originalMtime = newMtime
-    this._setModified(filePath, false)
   }
 
   _updateSyncButton(isOutdated) {
