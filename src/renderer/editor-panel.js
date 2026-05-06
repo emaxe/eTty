@@ -1039,6 +1039,9 @@ export class EditorPanel {
     pair.append(currentPanel, diskPanel)
     diffContainer.appendChild(pair)
 
+    // Synchronize scroll between the two diff panels (percentage-based)
+    this._syncDiffScroll(currentEditor, diskEditor)
+
     overlay._diffEditors.push(currentEditor, diskEditor)
 
     const actions = document.createElement('div')
@@ -1069,8 +1072,50 @@ export class EditorPanel {
     dialog.append(header, diffContainer, actions)
   }
 
+  _syncDiffScroll(editorA, editorB) {
+    const scrollerA = editorA.scrollDOM
+    const scrollerB = editorB.scrollDOM
+    if (!scrollerA || !scrollerB) return
+
+    let syncing = false
+
+    const sync = (src, dst) => {
+      if (syncing) return
+      syncing = true
+      const srcMax = src.scrollHeight - src.clientHeight
+      const dstMax = dst.scrollHeight - dst.clientHeight
+      if (srcMax > 0 && dstMax > 0) {
+        const ratio = src.scrollTop / srcMax
+        dst.scrollTop = ratio * dstMax
+      }
+      requestAnimationFrame(() => { syncing = false })
+    }
+
+    const onScrollA = () => sync(scrollerA, scrollerB)
+    const onScrollB = () => sync(scrollerB, scrollerA)
+
+    scrollerA.addEventListener('scroll', onScrollA, { passive: true })
+    scrollerB.addEventListener('scroll', onScrollB, { passive: true })
+
+    // Store cleanup handles on the overlay so destroy() can remove them
+    if (this._conflictOverlay) {
+      if (!this._conflictOverlay._diffScrollCleanups) {
+        this._conflictOverlay._diffScrollCleanups = []
+      }
+      this._conflictOverlay._diffScrollCleanups.push(
+        () => {
+          scrollerA.removeEventListener('scroll', onScrollA)
+          scrollerB.removeEventListener('scroll', onScrollB)
+        }
+      )
+    }
+  }
+
   _closeConflictOverlay() {
     if (this._conflictOverlay) {
+      if (this._conflictOverlay._diffScrollCleanups) {
+        this._conflictOverlay._diffScrollCleanups.forEach((fn) => fn())
+      }
       if (this._conflictOverlay._diffEditors) {
         this._conflictOverlay._diffEditors.forEach((ed) => ed.destroy())
       }
