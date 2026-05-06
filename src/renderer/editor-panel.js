@@ -1258,12 +1258,22 @@ export class EditorPanel {
       const dstLineNum = Math.min(Math.max(1, srcLine), dstDoc.lines)
       const dstLine = dstDoc.line(dstLineNum)
 
-      // Scroll destination so the same line starts at the top
-      dstEditor.dispatch({
-        effects: EditorView.scrollIntoView(dstLine.from, { y: 'start' })
-      })
+      // Use lineBlockAt to get exact pixel position of the line top
+      const block = dstEditor.lineBlockAt(dstLine.from)
+      // Account for padding-top of the content DOM inside the scroller
+      const paddingTop = parseInt(getComputedStyle(dstEditor.contentDOM).paddingTop) || 0
+      const targetTop = block.top + paddingTop
+      // Clamp to valid scroll range
+      const maxScroll = dstEditor.scrollDOM.scrollHeight - dstEditor.scrollDOM.clientHeight
+      dstEditor.scrollDOM.scrollTop = Math.max(0, Math.min(targetTop, maxScroll))
 
-      requestAnimationFrame(() => { syncing = false })
+      // Defer unlocking across two frames so the programmatic scroll event
+      // fires while syncing is still true, preventing reverse-sync loops.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          syncing = false
+        })
+      })
     }
 
     const onScrollA = () => sync(editorA, editorB)
