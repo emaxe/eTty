@@ -1079,20 +1079,28 @@ export class EditorPanel {
 
     let syncing = false
 
-    const sync = (src, dst) => {
+    const sync = (srcEditor, dstEditor) => {
       if (syncing) return
       syncing = true
-      const srcMax = src.scrollHeight - src.clientHeight
-      const dstMax = dst.scrollHeight - dst.clientHeight
-      if (srcMax > 0 && dstMax > 0) {
-        const ratio = src.scrollTop / srcMax
-        dst.scrollTop = ratio * dstMax
-      }
+
+      // Determine top visible line in source editor
+      const srcLine = srcEditor.state.doc.lineAt(srcEditor.viewport.from).number
+
+      // Clamp to destination editor line count
+      const dstDoc = dstEditor.state.doc
+      const dstLineNum = Math.min(Math.max(1, srcLine), dstDoc.lines)
+      const dstLine = dstDoc.line(dstLineNum)
+
+      // Scroll destination so the same line starts at the top
+      dstEditor.dispatch({
+        effects: EditorView.scrollIntoView(dstLine.from, { y: 'start' })
+      })
+
       requestAnimationFrame(() => { syncing = false })
     }
 
-    const onScrollA = () => sync(scrollerA, scrollerB)
-    const onScrollB = () => sync(scrollerB, scrollerA)
+    const onScrollA = () => sync(editorA, editorB)
+    const onScrollB = () => sync(editorB, editorA)
 
     scrollerA.addEventListener('scroll', onScrollA, { passive: true })
     scrollerB.addEventListener('scroll', onScrollB, { passive: true })
