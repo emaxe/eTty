@@ -900,9 +900,8 @@ export class EditorPanel {
   }
 
   _showConflictDialog(filePath, newMtime) {
-    if (this._conflictOverlay) this._conflictOverlay.remove()
+    this._closeConflictOverlay()
 
-    const tab = this._tabs.get(filePath)
     const fileName = filePath.split('/').pop()
 
     const overlay = document.createElement('div')
@@ -935,8 +934,7 @@ export class EditorPanel {
     btnDiff.textContent = 'Показать diff'
 
     const close = () => {
-      overlay.remove()
-      this._conflictOverlay = null
+      this._closeConflictOverlay()
     }
 
     btnKeep.addEventListener('click', close)
@@ -958,7 +956,8 @@ export class EditorPanel {
     actions.append(btnKeep, btnReload, btnDiff)
     dialog.append(header, body, actions)
     overlay.appendChild(dialog)
-    this._panelEl.appendChild(overlay)
+    document.body.appendChild(overlay)
+    overlay._diffEditors = []
     this._conflictOverlay = overlay
     btnKeep.focus()
   }
@@ -970,8 +969,11 @@ export class EditorPanel {
     const read = await this._api.fsReadFile(filePath)
     if (!read.success) return
 
-    // Clear existing dialog content
+    const langExts = await getLanguageExtension(filePath)
+
+    // Clear existing dialog content and switch to full-height diff mode
     dialog.innerHTML = ''
+    dialog.classList.add('diff-mode')
 
     const header = document.createElement('div')
     header.className = 'conflict-dialog-header'
@@ -983,32 +985,61 @@ export class EditorPanel {
     const pair = document.createElement('div')
     pair.className = 'conflict-diff-pair'
 
-    // Current editor version
+    const readOnlyExt = EditorView.editable.of(false)
+    const themeExt = this._themeCompartment.of(this._currentThemeExts)
+
+    // Current editor version (CodeMirror read-only)
     const currentPanel = document.createElement('div')
     currentPanel.className = 'conflict-diff-panel'
     const currentLabel = document.createElement('div')
     currentLabel.className = 'conflict-diff-label'
     currentLabel.textContent = 'Текущая версия (редактор)'
-    const currentText = document.createElement('textarea')
-    currentText.className = 'conflict-diff-textarea'
-    currentText.readOnly = true
-    currentText.value = tab.view.state.doc.toString()
-    currentPanel.append(currentLabel, currentText)
+    const currentEditor = new EditorView({
+      state: EditorState.create({
+        doc: tab.view.state.doc.toString(),
+        extensions: [
+          themeExt,
+          readOnlyExt,
+          lineNumbers(),
+          highlightActiveLineGutter(),
+          highlightActiveLine(),
+          drawSelection(),
+          bracketMatching(),
+          foldGutter(),
+          ...langExts
+        ]
+      })
+    })
+    currentPanel.append(currentLabel, currentEditor.dom)
 
-    // Disk version
+    // Disk version (CodeMirror read-only)
     const diskPanel = document.createElement('div')
     diskPanel.className = 'conflict-diff-panel'
     const diskLabel = document.createElement('div')
     diskLabel.className = 'conflict-diff-label'
     diskLabel.textContent = 'Версия на диске'
-    const diskText = document.createElement('textarea')
-    diskText.className = 'conflict-diff-textarea'
-    diskText.readOnly = true
-    diskText.value = read.content
-    diskPanel.append(diskLabel, diskText)
+    const diskEditor = new EditorView({
+      state: EditorState.create({
+        doc: read.content,
+        extensions: [
+          themeExt,
+          readOnlyExt,
+          lineNumbers(),
+          highlightActiveLineGutter(),
+          highlightActiveLine(),
+          drawSelection(),
+          bracketMatching(),
+          foldGutter(),
+          ...langExts
+        ]
+      })
+    })
+    diskPanel.append(diskLabel, diskEditor.dom)
 
     pair.append(currentPanel, diskPanel)
     diffContainer.appendChild(pair)
+
+    overlay._diffEditors.push(currentEditor, diskEditor)
 
     const actions = document.createElement('div')
     actions.className = 'conflict-dialog-actions'
@@ -1022,8 +1053,10 @@ export class EditorPanel {
     btnReload.textContent = 'Загрузить с диска'
 
     const close = () => {
-      overlay.remove()
-      this._conflictOverlay = null
+      currentEditor.destroy()
+      diskEditor.destroy()
+      overlay._diffEditors = []
+      this._closeConflictOverlay()
     }
 
     btnKeep.addEventListener('click', close)
@@ -1034,6 +1067,16 @@ export class EditorPanel {
 
     actions.append(btnKeep, btnReload)
     dialog.append(header, diffContainer, actions)
+  }
+
+  _closeConflictOverlay() {
+    if (this._conflictOverlay) {
+      if (this._conflictOverlay._diffEditors) {
+        this._conflictOverlay._diffEditors.forEach((ed) => ed.destroy())
+      }
+      this._conflictOverlay.remove()
+      this._conflictOverlay = null
+    }
   }
 
   // — Context menu —

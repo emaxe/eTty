@@ -1537,10 +1537,10 @@ button svg {
 
 /* Conflict resolution dialog */
 .conflict-dialog-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
-  z-index: 50;
+  z-index: 999;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1549,13 +1549,19 @@ button svg {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
-  min-width: 420px;
+  width: 420px;
   max-width: 90%;
   max-height: 90%;
   display: flex;
   flex-direction: column;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   overflow: hidden;
+}
+.conflict-dialog.diff-mode {
+  width: 90%;
+  max-width: 1200px;
+  height: 90vh;
+  max-height: 90vh;
 }
 .conflict-dialog-header {
   padding: 12px 16px;
@@ -1628,6 +1634,12 @@ button svg {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.conflict-diff-panel .cm-editor {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 .conflict-diff-label {
@@ -1635,22 +1647,6 @@ button svg {
   color: var(--muted);
   padding-bottom: 4px;
   flex-shrink: 0;
-}
-.conflict-diff-textarea {
-  flex: 1;
-  min-height: 0;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 8px;
-  font-family: Menlo, 'SF Mono', Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text);
-  resize: none;
-  outline: none;
-  overflow: auto;
-  white-space: pre;
 }
 
 /* Floating send-lines button */
