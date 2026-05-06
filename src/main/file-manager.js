@@ -183,6 +183,12 @@ export class FileManager {
     return { success: true }
   }
 
+  async statFile(filePath) {
+    const resolved = path.resolve(filePath)
+    const st = await fs.stat(resolved)
+    return { success: true, mtimeMs: st.mtimeMs, size: st.size }
+  }
+
   getCwd() {
     return { cwd: this.cwd }
   }

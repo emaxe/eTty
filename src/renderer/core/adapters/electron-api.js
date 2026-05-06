@@ -26,6 +26,7 @@ export class ElectronApiAdapter {
   fsReadDir(path) { return this._api.fsReadDir(path) }
   fsReadFile(path) { return this._api.fsReadFile(path) }
   fsWriteFile(path, content) { return this._api.fsWriteFile(path, content) }
+  fsStatFile(path) { return this._api.fsStatFile(path) }
   fsCreateFile(path) { return this._api.fsCreateFile(path) }
   fsCreateDir(path) { return this._api.fsCreateDir(path) }
   fsRename(oldPath, newPath) { return this._api.fsRename(oldPath, newPath) }

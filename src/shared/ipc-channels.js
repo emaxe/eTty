@@ -22,6 +22,7 @@ export const IPC_CHANNELS = Object.freeze({
   FS_MOVE: 'fs:move',
   FS_READ_FILE: 'fs:read-file',
   FS_WRITE_FILE: 'fs:write-file',
+  FS_STAT_FILE: 'fs:stat-file',
   FS_GET_CWD: 'fs:get-cwd',
   FS_SET_ROOT: 'fs:set-root',
   FS_WATCH_DIR: 'fs:watch-dir',

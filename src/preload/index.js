@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fsMove: (srcPaths, destDir) => ipcRenderer.invoke(IPC_CHANNELS.FS_MOVE, { srcPaths, destDir }),
   fsReadFile: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.FS_READ_FILE, { filePath }),
   fsWriteFile: (filePath, content) => ipcRenderer.invoke(IPC_CHANNELS.FS_WRITE_FILE, { filePath, content }),
+  fsStatFile: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.FS_STAT_FILE, { filePath }),
   getCwd: () => ipcRenderer.invoke(IPC_CHANNELS.FS_GET_CWD),
   fsSetRoot: (dirPath) => ipcRenderer.invoke(IPC_CHANNELS.FS_SET_ROOT, { dirPath }),
   fsWatchDir: async (dirPath) => {

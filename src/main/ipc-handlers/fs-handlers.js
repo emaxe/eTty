@@ -65,6 +65,11 @@ export function registerFsHandlers(ipcMain, { fileManager }) {
     catch (e) { return { success: false, error: e.message } }
   })
 
+  ipcMain.handle(IPC_CHANNELS.FS_STAT_FILE, async (_, { filePath }) => {
+    try { return await fileManager.statFile(filePath) }
+    catch (e) { return { success: false, error: e.message } }
+  })
+
   ipcMain.handle(IPC_CHANNELS.FS_GET_CWD, () => fileManager.getCwd())
 
   ipcMain.handle(IPC_CHANNELS.FS_SET_ROOT, (_, { dirPath }) => {

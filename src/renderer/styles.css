@@ -1510,6 +1510,149 @@ button svg {
   white-space: nowrap;
 }
 
+.editor-sync-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+  transition: opacity 0.15s, color 0.15s;
+  line-height: 1;
+}
+.editor-sync-btn:hover {
+  opacity: 1;
+  color: var(--text);
+}
+.editor-sync-btn.sync-outdated {
+  color: var(--accent);
+  opacity: 1;
+}
+.editor-sync-btn.sync-outdated:hover {
+  filter: brightness(1.2);
+}
+
+/* Conflict resolution dialog */
+.conflict-dialog-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.conflict-dialog {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 420px;
+  max-width: 90%;
+  max-height: 90%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.conflict-dialog-header {
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.conflict-dialog-body {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+.conflict-dialog-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 12px;
+  flex-shrink: 0;
+}
+.conflict-dialog-btn {
+  padding: 5px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.conflict-dialog-btn:hover {
+  background: var(--surface-hover, var(--border));
+}
+.conflict-dialog-btn.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.conflict-dialog-btn.primary:hover {
+  filter: brightness(1.1);
+}
+.conflict-dialog-btn.danger {
+  color: var(--red);
+  border-color: var(--red);
+}
+.conflict-dialog-btn.danger:hover {
+  background: rgba(255, 80, 80, 0.12);
+}
+
+/* Diff viewer inside conflict dialog */
+.conflict-diff-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.conflict-diff-pair {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+.conflict-diff-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.conflict-diff-label {
+  font-size: 11px;
+  color: var(--muted);
+  padding-bottom: 4px;
+  flex-shrink: 0;
+}
+.conflict-diff-textarea {
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  font-family: Menlo, 'SF Mono', Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text);
+  resize: none;
+  outline: none;
+  overflow: auto;
+  white-space: pre;
+}
+
 /* Floating send-lines button */
 #btn-send-lines-float {
   position: absolute;

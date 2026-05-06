@@ -62,13 +62,15 @@ export class EditorPanel {
     this._btnOpenExternal = panelEl.querySelector('#btn-open-external')
     this._btnClose = panelEl.querySelector('#btn-close-editor')
     this._btnSendFloat = panelEl.querySelector('#btn-send-lines-float')
+    this._btnSync = panelEl.querySelector('#btn-sync-file')
     this._statusFile = panelEl.querySelector('#editor-status-file')
     this._statusPos = panelEl.querySelector('#editor-status-pos')
     this._statusModified = panelEl.querySelector('#editor-status-modified')
 
-    // Map<filePath, { view, element, modified, originalContent, pendingClose }>
+    // Map<filePath, { view, element, modified, originalContent, originalMtime, pendingClose }>
     this._tabs = new Map()
     this._activeFilePath = null
+    this._conflictOverlay = null
 
     this._contextMenu = new ContextMenu()
 
@@ -94,8 +96,9 @@ export class EditorPanel {
   // ── Public API ───────────────────────────────────────────────────────────
 
   async openFile(filePath) {
-    // If already open, just switch to it
+    // If already open, check sync and switch
     if (this._tabs.has(filePath)) {
+      await this._checkAndSyncTab(filePath)
       this._switchToTab(filePath)
       this.show()
       return
@@ -104,13 +107,16 @@ export class EditorPanel {
     this.show()
     this._showPlaceholder('Загрузка…')
 
-    const result = await this._api.fsReadFile(filePath)
-    if (!result.success) {
-      this._showPlaceholder(`Не удалось открыть файл:\n${result.error}`)
+    const [readResult, statResult] = await Promise.all([
+      this._api.fsReadFile(filePath),
+      this._api.fsStatFile(filePath)
+    ])
+    if (!readResult.success) {
+      this._showPlaceholder(`Не удалось открыть файл:\n${readResult.error}`)
       return
     }
 
-    const content = result.content
+    const content = readResult.content
     const langExts = await getLanguageExtension(filePath)
 
     let view
@@ -129,6 +135,7 @@ export class EditorPanel {
       element: tabEl,
       modified: false,
       originalContent: content,
+      originalMtime: statResult.success ? statResult.mtimeMs : 0,
       pendingClose: false
     })
 
@@ -206,7 +213,10 @@ export class EditorPanel {
     const result = await this._api.fsWriteFile(filePath, content)
     if (result.success) {
       tab.originalContent = content
+      const stat = await this._api.fsStatFile(filePath)
+      tab.originalMtime = stat.success ? stat.mtimeMs : Date.now()
       this._setModified(filePath, false)
+      this._updateSyncButton(false)
     }
   }
 
@@ -242,7 +252,8 @@ export class EditorPanel {
       files.push({
         path: filePath,
         scrollTop: tab.savedScrollTop ?? tab.view.scrollDOM.scrollTop,
-        scrollLeft: tab.savedScrollLeft ?? tab.view.scrollDOM.scrollLeft
+        scrollLeft: tab.savedScrollLeft ?? tab.view.scrollDOM.scrollLeft,
+        originalMtime: tab.originalMtime
       })
       // Detach DOM
       if (this._bodyEl.contains(tab.view.dom)) tab.view.dom.remove()
@@ -332,7 +343,8 @@ export class EditorPanel {
       files.push({
         path: filePath,
         scrollTop: tab.savedScrollTop ?? scroller.scrollTop,
-        scrollLeft: tab.savedScrollLeft ?? scroller.scrollLeft
+        scrollLeft: tab.savedScrollLeft ?? scroller.scrollLeft,
+        originalMtime: tab.originalMtime
       })
     }
     return {
@@ -344,7 +356,7 @@ export class EditorPanel {
 
   /**
    * Restore editor state from persistence (re-opens files from disk).
-   * @param {{ files: Array<{ path: string, scrollTop: number, scrollLeft: number }>, activePath: string|null, visible: boolean }} state
+   * @param {{ files: Array<{ path: string, scrollTop: number, scrollLeft: number, originalMtime?: number }>, activePath: string|null, visible: boolean }} state
    */
   async restoreEditorFromSaved(state) {
     if (!state || !state.files || state.files.length === 0) return
@@ -354,6 +366,7 @@ export class EditorPanel {
       if (tab) {
         tab.savedScrollTop = f.scrollTop
         tab.savedScrollLeft = f.scrollLeft
+        if (f.originalMtime != null) tab.originalMtime = f.originalMtime
       }
     }
     if (state.activePath && this._tabs.has(state.activePath)) {
@@ -463,7 +476,7 @@ export class EditorPanel {
     return tab
   }
 
-  _switchToTab(filePath) {
+  async _switchToTab(filePath) {
     const tab = this._tabs.get(filePath)
     if (!tab) return
 
@@ -509,6 +522,9 @@ export class EditorPanel {
     tab.view.focus()
     this._updateStatusBar()
     this._updateSendButton()
+
+    // Check if file on disk changed while tab was inactive
+    await this._checkAndSyncTab(filePath)
   }
 
   _closeTab(filePath) {
@@ -804,6 +820,222 @@ export class EditorPanel {
     placeholder.textContent = msg
   }
 
+  // — File sync —
+
+  async _checkAndSyncTab(filePath) {
+    const tab = this._tabs.get(filePath)
+    if (!tab) return
+
+    const stat = await this._api.fsStatFile(filePath)
+    if (!stat.success) return
+
+    const isOutdated = stat.mtimeMs > (tab.originalMtime || 0)
+    if (!isOutdated) {
+      this._updateSyncButton(false)
+      return
+    }
+
+    if (!tab.modified) {
+      // Clean tab — auto-reload
+      const read = await this._api.fsReadFile(filePath)
+      if (read.success) {
+        this._reloadTabContent(filePath, read.content, stat.mtimeMs)
+      }
+      this._updateSyncButton(false)
+      return
+    }
+
+    // Dirty tab — only highlight sync button
+    this._updateSyncButton(true)
+  }
+
+  _reloadTabContent(filePath, newContent, newMtime) {
+    const tab = this._tabs.get(filePath)
+    if (!tab) return
+
+    const view = tab.view
+    const tr = view.state.update({
+      changes: {
+        from: 0,
+        to: view.state.doc.length,
+        insert: newContent
+      }
+    })
+    view.dispatch(tr)
+    tab.originalContent = newContent
+    tab.originalMtime = newMtime
+    this._setModified(filePath, false)
+  }
+
+  _updateSyncButton(isOutdated) {
+    if (!this._btnSync) return
+    this._btnSync.classList.toggle('sync-outdated', !!isOutdated)
+  }
+
+  async _onSyncButtonClick() {
+    const filePath = this._activeFilePath
+    if (!filePath) return
+    const tab = this._tabs.get(filePath)
+    if (!tab) return
+
+    const stat = await this._api.fsStatFile(filePath)
+    if (!stat.success) return
+
+    const isOutdated = stat.mtimeMs > (tab.originalMtime || 0)
+    if (!isOutdated) {
+      this._updateSyncButton(false)
+      return
+    }
+
+    if (!tab.modified) {
+      const read = await this._api.fsReadFile(filePath)
+      if (read.success) {
+        this._reloadTabContent(filePath, read.content, stat.mtimeMs)
+      }
+      this._updateSyncButton(false)
+      return
+    }
+
+    this._showConflictDialog(filePath, stat.mtimeMs)
+  }
+
+  _showConflictDialog(filePath, newMtime) {
+    if (this._conflictOverlay) this._conflictOverlay.remove()
+
+    const tab = this._tabs.get(filePath)
+    const fileName = filePath.split('/').pop()
+
+    const overlay = document.createElement('div')
+    overlay.className = 'conflict-dialog-overlay'
+
+    const dialog = document.createElement('div')
+    dialog.className = 'conflict-dialog'
+
+    const header = document.createElement('div')
+    header.className = 'conflict-dialog-header'
+    header.textContent = `Файл изменён на диске: ${fileName}`
+
+    const body = document.createElement('div')
+    body.className = 'conflict-dialog-body'
+    body.textContent = 'Файл был изменён внешним процессом, а в редакторе есть несохранённые изменения. Выберите действие:'
+
+    const actions = document.createElement('div')
+    actions.className = 'conflict-dialog-actions'
+
+    const btnKeep = document.createElement('button')
+    btnKeep.className = 'conflict-dialog-btn'
+    btnKeep.textContent = 'Оставить мои изменения'
+
+    const btnReload = document.createElement('button')
+    btnReload.className = 'conflict-dialog-btn danger'
+    btnReload.textContent = 'Загрузить с диска'
+
+    const btnDiff = document.createElement('button')
+    btnDiff.className = 'conflict-dialog-btn primary'
+    btnDiff.textContent = 'Показать diff'
+
+    const close = () => {
+      overlay.remove()
+      this._conflictOverlay = null
+    }
+
+    btnKeep.addEventListener('click', close)
+
+    btnReload.addEventListener('click', async () => {
+      const read = await this._api.fsReadFile(filePath)
+      if (read.success) {
+        this._reloadTabContent(filePath, read.content, newMtime)
+      }
+      close()
+    })
+
+    btnDiff.addEventListener('click', () => {
+      this._showConflictDiff(filePath, newMtime, overlay, dialog)
+    })
+
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
+
+    actions.append(btnKeep, btnReload, btnDiff)
+    dialog.append(header, body, actions)
+    overlay.appendChild(dialog)
+    this._panelEl.appendChild(overlay)
+    this._conflictOverlay = overlay
+    btnKeep.focus()
+  }
+
+  async _showConflictDiff(filePath, newMtime, overlay, dialog) {
+    const tab = this._tabs.get(filePath)
+    if (!tab) return
+
+    const read = await this._api.fsReadFile(filePath)
+    if (!read.success) return
+
+    // Clear existing dialog content
+    dialog.innerHTML = ''
+
+    const header = document.createElement('div')
+    header.className = 'conflict-dialog-header'
+    header.textContent = 'Сравнение версий'
+
+    const diffContainer = document.createElement('div')
+    diffContainer.className = 'conflict-diff-container'
+
+    const pair = document.createElement('div')
+    pair.className = 'conflict-diff-pair'
+
+    // Current editor version
+    const currentPanel = document.createElement('div')
+    currentPanel.className = 'conflict-diff-panel'
+    const currentLabel = document.createElement('div')
+    currentLabel.className = 'conflict-diff-label'
+    currentLabel.textContent = 'Текущая версия (редактор)'
+    const currentText = document.createElement('textarea')
+    currentText.className = 'conflict-diff-textarea'
+    currentText.readOnly = true
+    currentText.value = tab.view.state.doc.toString()
+    currentPanel.append(currentLabel, currentText)
+
+    // Disk version
+    const diskPanel = document.createElement('div')
+    diskPanel.className = 'conflict-diff-panel'
+    const diskLabel = document.createElement('div')
+    diskLabel.className = 'conflict-diff-label'
+    diskLabel.textContent = 'Версия на диске'
+    const diskText = document.createElement('textarea')
+    diskText.className = 'conflict-diff-textarea'
+    diskText.readOnly = true
+    diskText.value = read.content
+    diskPanel.append(diskLabel, diskText)
+
+    pair.append(currentPanel, diskPanel)
+    diffContainer.appendChild(pair)
+
+    const actions = document.createElement('div')
+    actions.className = 'conflict-dialog-actions'
+
+    const btnKeep = document.createElement('button')
+    btnKeep.className = 'conflict-dialog-btn'
+    btnKeep.textContent = 'Оставить мои изменения'
+
+    const btnReload = document.createElement('button')
+    btnReload.className = 'conflict-dialog-btn danger'
+    btnReload.textContent = 'Загрузить с диска'
+
+    const close = () => {
+      overlay.remove()
+      this._conflictOverlay = null
+    }
+
+    btnKeep.addEventListener('click', close)
+    btnReload.addEventListener('click', () => {
+      this._reloadTabContent(filePath, read.content, newMtime)
+      close()
+    })
+
+    actions.append(btnKeep, btnReload)
+    dialog.append(header, diffContainer, actions)
+  }
+
   // — Context menu —
 
   _showTabContextMenu(filePath, x, y) {
@@ -884,6 +1116,11 @@ export class EditorPanel {
     this._cleanupController?.abort()
     this._cleanupController = null
 
+    if (this._conflictOverlay) {
+      this._conflictOverlay.remove()
+      this._conflictOverlay = null
+    }
+
     this._panelEl = null
     this._resizeHandleEl = null
     this._tabBarEl = null
@@ -891,6 +1128,7 @@ export class EditorPanel {
     this._btnOpenExternal = null
     this._btnClose = null
     this._btnSendFloat = null
+    this._btnSync = null
     this._statusFile = null
     this._statusPos = null
     this._statusModified = null
@@ -911,5 +1149,6 @@ export class EditorPanel {
     this._btnOpenExternal.addEventListener('click', () => this._openExternal(), { signal })
     this._btnClose.addEventListener('click', () => this.hide(), { signal })
     this._btnSendFloat.addEventListener('click', () => this._sendLinesToTerminal(), { signal })
+    this._btnSync.addEventListener('click', () => this._onSyncButtonClick(), { signal })
   }
 }
