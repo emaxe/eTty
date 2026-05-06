@@ -21,7 +21,8 @@ export class TabBar {
 
     this._tabListEl = tabBarEl.querySelector('#tab-list')
     this._addBtn = tabBarEl.querySelector('#tab-add')
-    this._addBtn.addEventListener('click', () => this._bus.emit('tab.add'))
+    this._cleanupController = new AbortController()
+    this._addBtn.addEventListener('click', () => this._bus.emit('tab.add'), { signal: this._cleanupController.signal })
 
     this._contextMenu = new ContextMenu()
 
@@ -239,6 +240,28 @@ export class TabBar {
         isActive: i === this.activeIndex,
         tabId: t.tabId
       }))
+  }
+
+  destroy() {
+    for (const tab of this.tabs) {
+      tab.term.dispose()
+      tab.container.remove()
+      tab.element.remove()
+    }
+    this.tabs = []
+    this.activeIndex = -1
+
+    this._draggable.destroy()
+    this._contextMenu.destroy()
+    this._cleanupController?.abort()
+    this._cleanupController = null
+
+    this.tabBarEl = null
+    this.terminalContainerEl = null
+    this._tabListEl = null
+    this._addBtn = null
+    this._bus = null
+    this._store = null
   }
 
   _updateTabLabel(tab) {

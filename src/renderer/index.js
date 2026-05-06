@@ -58,7 +58,7 @@ function applyTheme(themeName) {
 }
 
 /** Создаёт новую вкладку: Terminal + FitAddon + PTY-сессия. */
-async function createTab(cwd, tabId) {
+async function createTab(api, cwd, tabId) {
   const term = new Terminal({
     cursorBlink: TERMINAL_CONFIG.CURSOR_BLINK,
     fontSize: TERMINAL_CONFIG.FONT_SIZE,
@@ -74,9 +74,9 @@ async function createTab(cwd, tabId) {
   term.loadAddon(new SearchAddon())
 
   tabId = tabId || crypto.randomUUID()
-  const { config } = await window.electronAPI.settingsLoad()
+  const { config } = await api.settingsLoad()
   const promptStyle = config.terminal?.promptStyle || 'default'
-  const { pid } = await window.electronAPI.ptyCreate({
+  const { pid } = await api.ptyCreate({
     cols: TERMINAL_CONFIG.DEFAULT_COLS,
     rows: TERMINAL_CONFIG.DEFAULT_ROWS,
     cwd,
@@ -88,8 +88,10 @@ async function createTab(cwd, tabId) {
 }
 
 async function init() {
+  const api = new ElectronApiAdapter()
+
   // Загружаем настройки до инициализации всего остального
-  const { config, themes, warnings } = await window.electronAPI.settingsLoad()
+  const { config, themes, warnings } = await api.settingsLoad()
   loadedThemes = { ...THEMES, ...themes }
   if (warnings && warnings.length > 0) {
     console.warn('Settings warnings:', ...warnings)
@@ -188,13 +190,13 @@ async function init() {
   const sidebar = document.getElementById('sidebar')
   const resizeHandle = document.getElementById('resize-handle')
 
+  const { cwd: startCwd } = await api.getCwd()
+
   // — DI Container —
   const container = new AppContainer()
   container.register('store', () => appStore)
   container.register('bus', () => bus)
-  container.register('api', () => new ElectronApiAdapter())
-
-  const { cwd: startCwd } = await window.electronAPI.getCwd()
+  container.register('api', () => api)
   const agentCommands = {
     claude: 'claude\n',
     codex: 'codex\n',
@@ -238,7 +240,7 @@ async function init() {
   const writeToPtyActive = (data) => {
     const tab = tabBar.getActive()
     if (tab) {
-      window.electronAPI.ptyWrite(tab.pid, data)
+      api.ptyWrite(tab.pid, data)
       tab.term.focus()
     }
   }
@@ -246,7 +248,7 @@ async function init() {
   const shellCmdToPtyActive = (data) => {
     const tab = tabBar.getActive()
     if (tab) {
-      window.electronAPI.ptyWrite(tab.pid, '\x15' + data)
+      api.ptyWrite(tab.pid, '\x15' + data)
       tab.term.focus()
     }
   }
@@ -329,7 +331,7 @@ async function init() {
     }
     if (tab.rootPath !== fileTree.getCwd()) {
       await fileTree.setRoot(tab.rootPath)
-      window.electronAPI.fsSetRoot(tab.rootPath)
+      api.fsSetRoot(tab.rootPath)
     } else {
       fileTree.collapseAll()
     }
@@ -356,7 +358,7 @@ async function init() {
     if (settingsPage.isVisible()) return
     const active = tabBar.getActive()
     const cwd = active ? active.rootPath : startCwd
-    const tabData = await createTab(cwd)
+    const tabData = await createTab(api, cwd)
     const tab = tabBar.addTab(tabData)
     tab.isBusy = false
     tab.activeAgentId = null
@@ -378,7 +380,7 @@ async function init() {
       }
     }
     tabBar.removeTab(index)
-    window.electronAPI.ptyKill(tab.pid)
+    api.ptyKill(tab.pid)
   })
 
   // Страница настроек
@@ -400,6 +402,7 @@ async function init() {
       appStore.set('ui.gitPanelVisible', false)
       statusBar.updateNow()
     },
+    api: r('api'),
   }))
   const gitPanel = container.resolve('gitPanel')
 
@@ -411,7 +414,7 @@ async function init() {
     if (!command) return
 
     tab.activeAgentId = agentId
-    window.electronAPI.ptyWrite(tab.pid, command)
+    api.ptyWrite(tab.pid, command)
     syncStatusBarTerminalState()
     tab.term.focus()
   }
@@ -451,11 +454,12 @@ async function init() {
       config.agents.proxyEnabled = enabled
       r('api').settingsSave(config)
     },
-    quickReplies: config.quickReplies || { items: [] }
+    quickReplies: config.quickReplies || { items: [] },
+    api: r('api'),
   }))
   const statusBar = container.resolve('statusBar')
 
-  const agentsStatus = await window.electronAPI.agentsGetStatus().catch(() => ({ agents: [] }))
+  const agentsStatus = await api.agentsGetStatus().catch(() => ({ agents: [] }))
   applyAgentCommands(agentsStatus)
   statusBar.setAgentsStatus(agentsStatus)
   statusBar.setForceDisabled(config.agents?.forceDisabled || {})
@@ -507,13 +511,13 @@ async function init() {
   bus.on('editor.sendToTerminal', (lineRef) => {
     const tab = tabBar.getActive()
     if (tab) {
-      window.electronAPI.ptyWrite(tab.pid, '\x1b[200~' + lineRef + '\x1b[201~')
+      api.ptyWrite(tab.pid, '\x1b[200~' + lineRef + '\x1b[201~')
     }
   })
   bus.on('editor.openExternal', (cmd) => {
     const tab = tabBar.getActive()
     if (tab) {
-      window.electronAPI.ptyWrite(tab.pid, '\x15' + cmd)
+      api.ptyWrite(tab.pid, '\x15' + cmd)
       tab.term.focus()
     }
   })
@@ -522,14 +526,14 @@ async function init() {
   bus.on('filetree.shellCmd', (cmd) => {
     const tab = tabBar.getActive()
     if (tab) {
-      window.electronAPI.ptyWrite(tab.pid, '\x15' + cmd)
+      api.ptyWrite(tab.pid, '\x15' + cmd)
       tab.term.focus()
     }
   })
   bus.on('filetree.inject', (path) => {
     const tab = tabBar.getActive()
     if (tab) {
-      window.electronAPI.ptyWrite(tab.pid, '\x1b[200~' + path + '\x1b[201~')
+      api.ptyWrite(tab.pid, '\x1b[200~' + path + '\x1b[201~')
       tab.term.focus()
     }
   })
@@ -538,13 +542,13 @@ async function init() {
   })
   bus.on('filetree.openFile', (path) => editorPanel.openFile(path))
   bus.on('filetree.runInNewTab', async (path) => {
-    const tabData = await createTab(tabBar.getActive()?.rootPath || startCwd)
+    const tabData = await createTab(api, tabBar.getActive()?.rootPath || startCwd)
     const tab = tabBar.addTab(tabData)
     tab.isBusy = false
     tab.activeAgentId = null
     setupTabHandlers(tab)
     tab.fitAddon.fit()
-    window.electronAPI.ptyWrite(tab.pid, path + '\n')
+    api.ptyWrite(tab.pid, path + '\n')
   })
 
   // — Settings EventBus subscriber —
@@ -583,7 +587,7 @@ async function init() {
     }
   })
 
-  window.electronAPI.onAgentsSettingsUpdated(({ forceDisabled }) => {
+  api.onAgentsSettingsUpdated(({ forceDisabled }) => {
     config.agents.forceDisabled = forceDisabled
     statusBar.setForceDisabled(forceDisabled)
   })
@@ -609,7 +613,7 @@ async function init() {
   }
 
   // Глобальные IPC обработчики — маршрутизируют по pid
-  window.electronAPI.onPtyData((pid, data) => {
+  api.onPtyData((pid, data) => {
     diagnostics.recordPtyData(pid, data.length)
     const tab = tabBar.tabs.find(t => t.pid === pid)
     if (!tab) return
@@ -631,7 +635,7 @@ async function init() {
     } catch (e) { /* ignore */ }
   })
 
-  window.electronAPI.onPtyExit(({ pid }) => {
+  api.onPtyExit(({ pid }) => {
     const index = tabBar.tabs.findIndex(t => t.pid === pid)
     if (index >= 0) {
       const tab = tabBar.tabs[index]
@@ -647,18 +651,18 @@ async function init() {
   function setupTabHandlers(tab) {
     // Keyboard handling
     const keyboardHandler = new TerminalKeyboardHandler({
-      write: (pid, data) => window.electronAPI.ptyWrite(pid, data),
+      write: (pid, data) => api.ptyWrite(pid, data),
     })
     keyboardHandler.attach(tab.term, tab.pid)
 
     // Terminal → PTY data
     tab.term.onData((data) => {
-      window.electronAPI.ptyWrite(tab.pid, data)
+      api.ptyWrite(tab.pid, data)
     })
 
     // Terminal → PTY resize
     tab.term.onResize(({ cols, rows }) => {
-      window.electronAPI.ptyResize(tab.pid, cols, rows)
+      api.ptyResize(tab.pid, cols, rows)
     })
 
     // Title change — only for active tab
@@ -677,7 +681,7 @@ async function init() {
         if (tabBar.getActive()?.pid === pid) {
           if (newPath !== fileTree.getCwd()) {
             fileTree.setRoot(newPath)
-            window.electronAPI.fsSetRoot(newPath)
+            api.fsSetRoot(newPath)
           }
           updateNavButtons()
         }
@@ -736,7 +740,7 @@ async function init() {
     const oldCount = tabBar.tabs.length
     let activeIndex = oldCount
     for (let i = 0; i < savedTabs.length; i++) {
-      const tabData = await createTab(savedTabs[i].rootPath, savedTabs[i].tabId)
+          const tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId)
       const tab = tabBar.addTab(tabData)
       tab.isBusy = false
       tab.activeAgentId = null
@@ -751,7 +755,7 @@ async function init() {
     // Remove old tabs (in reverse to keep indices stable)
     for (let i = oldCount - 1; i >= 0; i--) {
       const tab = tabBar.tabs[i]
-      window.electronAPI.ptyKill(tab.pid)
+      api.ptyKill(tab.pid)
       tab.term.dispose()
       tab.container.remove()
       tab.element.remove()
@@ -775,21 +779,21 @@ async function init() {
     if (activeRestored?.gitPanelVisible) {
       gitPanel.show(activeRestored.rootPath)
     }
-    await window.electronAPI.tabsDeleteSavedState()
-    window.electronAPI.tabsStateChanged()
+    await api.tabsDeleteSavedState()
+    api.tabsStateChanged()
   }
 
   // Check for saved state on startup
   let restored = false
-  const hasSaved = await window.electronAPI.tabsHasSavedState()
+  const hasSaved = await api.tabsHasSavedState()
   if (hasSaved) {
-    const savedTabs = await window.electronAPI.tabsLoadSavedState()
+    const savedTabs = await api.tabsLoadSavedState()
     if (savedTabs && savedTabs.length > 0) {
-      const shouldRestore = await window.electronAPI.tabsShowRestoreDialog(savedTabs.length)
+      const shouldRestore = await api.tabsShowRestoreDialog(savedTabs.length)
       if (shouldRestore) {
         let activeIndex = 0
         for (let i = 0; i < savedTabs.length; i++) {
-          const tabData = await createTab(savedTabs[i].rootPath, savedTabs[i].tabId)
+      const tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId)
           const tab = tabBar.addTab(tabData)
           tab.isBusy = false
           tab.activeAgentId = null
@@ -819,13 +823,13 @@ async function init() {
         }
         restored = true
       }
-      await window.electronAPI.tabsDeleteSavedState()
-      window.electronAPI.tabsStateChanged()
+      await api.tabsDeleteSavedState()
+      api.tabsStateChanged()
     }
   }
 
   if (!restored) {
-    const firstTabData = await createTab(startCwd)
+    const firstTabData = await createTab(api, startCwd)
     const firstTab = tabBar.addTab(firstTabData)
     firstTab.isBusy = false
     firstTab.activeAgentId = null
@@ -837,18 +841,18 @@ async function init() {
 
   // Cleanup orphaned history files
   const activeTabIds = tabBar.tabs.map(t => t.tabId).filter(Boolean)
-  window.electronAPI.historyCleanup(activeTabIds)
+  api.historyCleanup(activeTabIds)
 
   // Menu: restore tabs trigger
-  window.electronAPI.onTabsTriggerRestore(async () => {
-    const savedTabs = await window.electronAPI.tabsLoadSavedState()
+  api.onTabsTriggerRestore(async () => {
+    const savedTabs = await api.tabsLoadSavedState()
     if (savedTabs && savedTabs.length > 0) {
       await restoreTabs(savedTabs)
     }
   })
 
   // Fullscreen: убираем padding titlebar
-  window.electronAPI.onFullscreenChange((isFullscreen) => {
+  api.onFullscreenChange((isFullscreen) => {
     document.body.classList.toggle('fullscreen', isFullscreen)
   })
 
@@ -934,7 +938,7 @@ async function init() {
   titlebarEl.addEventListener('mousedown', async (e) => {
     if (e.button !== 0) return
     titlebarDidDrag = false
-    const [winX, winY] = await window.electronAPI.windowGetPosition()
+    const [winX, winY] = await api.windowGetPosition()
     dragState = { startScreenX: e.screenX, startScreenY: e.screenY, startWinX: winX, startWinY: winY }
   })
 
@@ -946,7 +950,7 @@ async function init() {
       titlebarDidDrag = true
     }
     if (titlebarDidDrag) {
-      window.electronAPI.windowMove(dragState.startWinX + dx, dragState.startWinY + dy)
+      api.windowMove(dragState.startWinX + dx, dragState.startWinY + dy)
     }
   }
 

@@ -39,14 +39,17 @@ export class FileTree {
     this._autoScrollTimer = null
     this._autoScrollDirection = 0
 
+    this._cleanupController = new AbortController()
+    const signal = this._cleanupController.signal
+
     this._container.addEventListener('scroll', () => {
       if (this._hoverOverlay.style.display !== 'none' && this._hoverOverlay._currentRow) {
         this._positionHoverOverlay(this._hoverOverlay._currentRow)
       }
-    })
+    }, { signal })
 
-    this._setupModKeyListeners()
-    this._setupKeyboardShortcuts()
+    this._setupModKeyListeners(signal)
+    this._setupKeyboardShortcuts(signal)
   }
 
   _createHoverOverlay() {
@@ -152,28 +155,28 @@ export class FileTree {
     row?.classList.remove('hovered')
   }
 
-  _setupModKeyListeners() {
+  _setupModKeyListeners(signal) {
     document.addEventListener('keydown', (e) => {
       this._modKeys.shift = e.shiftKey
       this._modKeys.meta = e.metaKey
       this._modKeys.ctrl = e.ctrlKey
       this._updateHoverButtonsState()
-    })
+    }, { signal })
     document.addEventListener('keyup', (e) => {
       this._modKeys.shift = e.shiftKey
       this._modKeys.meta = e.metaKey
       this._modKeys.ctrl = e.ctrlKey
       this._updateHoverButtonsState()
-    })
+    }, { signal })
     window.addEventListener('blur', () => {
       this._modKeys.shift = false
       this._modKeys.meta = false
       this._modKeys.ctrl = false
       this._updateHoverButtonsState()
-    })
+    }, { signal })
   }
 
-  _setupKeyboardShortcuts() {
+  _setupKeyboardShortcuts(signal) {
     document.addEventListener('keydown', (e) => {
       const sidebar = document.getElementById('sidebar')
       if (!sidebar || !sidebar.contains(e.target)) return
@@ -188,7 +191,7 @@ export class FileTree {
         e.stopPropagation()
         this._undoLastMove()
       }
-    })
+    }, { signal })
   }
 
   getCwd() {
@@ -252,7 +255,7 @@ export class FileTree {
       const li = childrenEl.closest('li[data-path]')
       const arrow = li?.querySelector(':scope > .tree-node-row > .tree-arrow')
       if (arrow) arrow.classList.remove('expanded')
-      if (li?.dataset.path) { window.electronAPI.fsUnwatchDir(li.dataset.path) }
+      if (li?.dataset.path) { this._api.fsUnwatchDir(li.dataset.path) }
     }
   }
 
@@ -272,7 +275,7 @@ export class FileTree {
           childrenEl.dataset.loaded = '1'
         }
       } else {
-        window.electronAPI.fsWatchDir(dirPath)
+        this._api.fsWatchDir(dirPath)
       }
       childrenEl.classList.add('open')
       if (arrow) arrow.classList.add('expanded')
@@ -286,7 +289,7 @@ export class FileTree {
       const li = ch.closest('li[data-path]')
       const arrow = li?.querySelector(':scope > .tree-node-row > .tree-arrow')
       if (arrow) arrow.classList.remove('expanded')
-      if (li?.dataset.path) { window.electronAPI.fsUnwatchDir(li.dataset.path) }
+      if (li?.dataset.path) { this._api.fsUnwatchDir(li.dataset.path) }
     }
   }
 
@@ -320,7 +323,7 @@ export class FileTree {
     this._dirTimers.clear()
 
     if (this._cwd) {
-      window.electronAPI.fsUnwatchDir(this._cwd)
+      this._api.fsUnwatchDir(this._cwd)
     }
 
     // Отключаем watchers для всех раскрытых папок
@@ -328,13 +331,13 @@ export class FileTree {
     for (const childrenEl of openItems) {
       const li = childrenEl.closest('li[data-path]')
       if (li?.dataset.path) {
-        window.electronAPI.fsUnwatchDir(li.dataset.path)
+        this._api.fsUnwatchDir(li.dataset.path)
       }
     }
   }
 
   async init(startPath = null) {
-    const cwd = startPath ?? (await window.electronAPI.getCwd()).cwd
+    const cwd = startPath ?? (await this._api.getCwd()).cwd
     console.log('[FileTree] init called with cwd:', cwd)
     this._cwd = cwd
     this._container.innerHTML = ''
@@ -349,9 +352,10 @@ export class FileTree {
 
     // Создаем watcher для корневой директории
     console.log('[FileTree] Creating root watcher in init for:', cwd)
-    window.electronAPI.fsWatchDir(cwd)
+    this._api.fsWatchDir(cwd)
 
-    window.electronAPI.onFsDirChanged((data) => this._handleDirChanged(data))
+    this._fsDirChangedUnsub = this._api.onFsDirChanged((data) => this._handleDirChanged(data))
+    const signal = this._cleanupController.signal
 
     this._container.addEventListener('contextmenu', (e) => {
       const rootUl = this._rootContainer.querySelector(':scope > ul')
@@ -359,7 +363,7 @@ export class FileTree {
         e.preventDefault()
         this._showMenuEmpty(e.clientX, e.clientY, this._cwd, this._rootContainer, 1)
       }
-    })
+    }, { signal })
 
     // Container-level drop target for root (covers root row and empty space)
     this._container.addEventListener('dragover', (e) => {
@@ -376,7 +380,7 @@ export class FileTree {
       } else {
         this._rootNodeRow?.classList.remove('drag-over')
       }
-    })
+    }, { signal })
 
     this._container.addEventListener('dragleave', (e) => {
       if (!this._container.contains(e.relatedTarget)) {
@@ -384,7 +388,7 @@ export class FileTree {
         this._rootNodeRow?.classList.remove('drag-over')
         this._clearDragOver()
       }
-    })
+    }, { signal })
 
     this._container.addEventListener('drop', async (e) => {
       if (!this._isDragging) return
@@ -411,7 +415,7 @@ export class FileTree {
 
       this._setMoving(true)
       try {
-        const result = await window.electronAPI.fsMove(paths, dirPath)
+        const result = await this._api.fsMove(paths, dirPath)
         if (result && result.results) {
           this._pushMoveHistory(result.results)
           // Force refresh the root immediately (watcher may lag or be pruned)
@@ -420,7 +424,7 @@ export class FileTree {
       } finally {
         this._setMoving(false)
       }
-    })
+    }, { signal })
   }
 
   _renderRootNode(dirPath) {
@@ -494,13 +498,13 @@ export class FileTree {
   }
 
   async _loadDir(dirPath, isRoot = false) {
-    const result = await window.electronAPI.fsReadDir(dirPath)
+    const result = await this._api.fsReadDir(dirPath)
     if (!result || result.error) return null
 
     let entries = this._showHidden ? result : result.filter(e => !e.name.startsWith('.'))
 
     // Создаем watcher для всех открытых директорий
-    window.electronAPI.fsWatchDir(dirPath)
+    this._api.fsWatchDir(dirPath)
 
     return entries.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
@@ -603,7 +607,7 @@ export class FileTree {
         if (isOpen) {
           childrenEl.classList.remove('open')
           arrow.classList.remove('expanded')
-          window.electronAPI.fsUnwatchDir(entry.path)
+          this._api.fsUnwatchDir(entry.path)
           if (this._collapseChildrenOnClose) {
             this._collapseRecursive(childrenEl)
           }
@@ -615,7 +619,7 @@ export class FileTree {
             }
             childrenEl.dataset.loaded = '1'
           } else {
-            window.electronAPI.fsWatchDir(entry.path)
+            this._api.fsWatchDir(entry.path)
           }
           childrenEl.classList.add('open')
           arrow.classList.add('expanded')
@@ -837,7 +841,7 @@ export class FileTree {
                 childrenEl.dataset.loaded = '1'
               }
             } else {
-              window.electronAPI.fsWatchDir(dirPath)
+              this._api.fsWatchDir(dirPath)
             }
           }, 700)
         }
@@ -878,7 +882,7 @@ export class FileTree {
 
       this._setMoving(true)
       try {
-        const result = await window.electronAPI.fsMove(paths, dirPath)
+        const result = await this._api.fsMove(paths, dirPath)
         if (result && result.results) {
           this._pushMoveHistory(result.results)
         }
@@ -1011,7 +1015,7 @@ export class FileTree {
     const moves = this._moveHistory.pop()
     for (const move of moves) {
       try {
-        await window.electronAPI.fsRename(move.newPath, move.path)
+        await this._api.fsRename(move.newPath, move.path)
       } catch (e) {
         console.error('[FileTree] Undo failed for', move.newPath, '->', move.path, e)
       }
@@ -1167,9 +1171,9 @@ export class FileTree {
       const targetPath = parentPath.replace(/\/$/, '') + '/' + name
       let result
       if (kind === 'file') {
-        result = await window.electronAPI.fsCreateFile(targetPath)
+        result = await this._api.fsCreateFile(targetPath)
       } else {
-        result = await window.electronAPI.fsCreateDir(targetPath)
+        result = await this._api.fsCreateDir(targetPath)
       }
 
       if (result && result.success === false) {
@@ -1205,7 +1209,7 @@ export class FileTree {
 
       const dir = this._parentDir(entry.path)
       const newPath = dir + '/' + newName
-      const result = await window.electronAPI.fsRename(entry.path, newPath)
+      const result = await this._api.fsRename(entry.path, newPath)
 
       if (result && result.success === false) {
         input.style.borderColor = '#f38ba8'
@@ -1222,14 +1226,14 @@ export class FileTree {
   }
 
   async _deleteEntry(entry, row) {
-    const result = await window.electronAPI.fsDelete(entry.path)
+    const result = await this._api.fsDelete(entry.path)
     if (result && result.success === false) return
     row.closest('li').remove()
   }
 
   async _paste(destDir, container, depth) {
     if (!this._clipboard) return
-    const result = await window.electronAPI.fsCopy(this._clipboard.path, destDir)
+    const result = await this._api.fsCopy(this._clipboard.path, destDir)
     if (!result || result.success === false) return
     this._refreshList(container, destDir, depth)
   }
@@ -1347,5 +1351,32 @@ export class FileTree {
       if (childrenEl) return childrenEl
     }
     return this._rootContainer
+  }
+
+  destroy() {
+    this.unwatchAll()
+    this._fsDirChangedUnsub?.()
+    this._fsDirChangedUnsub = null
+    this._cleanupController?.abort()
+    this._cleanupController = null
+    this._hoverOverlay?.remove()
+    this._hoverOverlay = null
+    this._container = null
+    this._bus = null
+    this._api = null
+    this._cwd = null
+    this._contextMenu?.destroy()
+    this._contextMenu = null
+    this._dirTimers = null
+    this._selectedPaths = null
+    this._lastSelectedAnchor = null
+    this._moveHistory = null
+    this._rootContainer = null
+    this._rootNodeRow = null
+    this._autoExpandTimer = null
+    this._autoScrollTimer = null
+    this._autoScrollDirection = 0
+    this._isDragging = false
+    this._clipboard = null
   }
 }

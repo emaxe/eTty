@@ -32,7 +32,10 @@ export class ElectronApiAdapter {
   fsDelete(path) { return this._api.fsDelete(path) }
   fsCopy(src, dest) { return this._api.fsCopy(src, dest) }
   fsSetRoot(path) { this._api.fsSetRoot(path) }
-  fsWatchDir(path, fn) { return this._on('fsDirChanged', fn) }
+  fsWatchDir(path) { return this._api.fsWatchDir(path) }
+  fsUnwatchDir(path) { return this._api.fsUnwatchDir(path) }
+  fsMove(srcPaths, destDir) { return this._api.fsMove(srcPaths, destDir) }
+  onFsDirChanged(fn) { return this._on('fsDirChanged', fn) }
 
   // — Window —
   windowGetPosition() { return this._api.windowGetPosition() }
@@ -52,6 +55,7 @@ export class ElectronApiAdapter {
   onTabsTriggerRestore(fn) { return this._on('tabsTriggerRestore', fn) }
 
   // — Git —
+  gitGetRoot(cwd) { return this._api.gitGetRoot(cwd) }
   gitGetStatus(cwd) { return this._api.gitGetStatus(cwd) }
   gitGetDiff(cwd, filePath) { return this._api.gitGetDiff(cwd, filePath) }
   gitGetBranches(cwd) { return this._api.gitGetBranches(cwd) }
@@ -73,6 +77,7 @@ export class ElectronApiAdapter {
   // — App —
   getCwd() { return this._api.getCwd() }
   getHomedir() { return this._api.getHomedir() }
+  get nodeVersion() { return this._api.nodeVersion }
   openExternal(path) { return this._api.appOpenExternal(path) }
 
   _on(channel, fn) {

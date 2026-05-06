@@ -82,6 +82,7 @@ export class EditorPanel {
     this._currentThemeExts = [_fallbackHighlight]
     this._wordWrap = false
 
+    this._cleanupController = new AbortController()
     this._setupListeners()
   }
 
@@ -870,14 +871,45 @@ export class EditorPanel {
     this._tabs = newMap
   }
 
+  destroy() {
+    for (const [, tab] of this._tabs) {
+      tab.view.destroy()
+      tab.element.remove()
+    }
+    this._tabs.clear()
+    this._activeFilePath = null
+
+    this._draggable.destroy()
+    this._contextMenu.destroy()
+    this._cleanupController?.abort()
+    this._cleanupController = null
+
+    this._panelEl = null
+    this._resizeHandleEl = null
+    this._tabBarEl = null
+    this._bodyEl = null
+    this._btnOpenExternal = null
+    this._btnClose = null
+    this._btnSendFloat = null
+    this._statusFile = null
+    this._statusPos = null
+    this._statusModified = null
+    this._btnWordWrap = null
+    this._bus = null
+    this._api = null
+    this._getActiveCwd = null
+    this._store = null
+  }
+
   _setupListeners() {
+    const signal = this._cleanupController.signal
     this._btnWordWrap = this._panelEl.querySelector('#btn-word-wrap')
     this._btnWordWrap.addEventListener('click', () => {
       const on = this.toggleWordWrap()
       this._btnWordWrap.classList.toggle('active', on)
-    })
-    this._btnOpenExternal.addEventListener('click', () => this._openExternal())
-    this._btnClose.addEventListener('click', () => this.hide())
-    this._btnSendFloat.addEventListener('click', () => this._sendLinesToTerminal())
+    }, { signal })
+    this._btnOpenExternal.addEventListener('click', () => this._openExternal(), { signal })
+    this._btnClose.addEventListener('click', () => this.hide(), { signal })
+    this._btnSendFloat.addEventListener('click', () => this._sendLinesToTerminal(), { signal })
   }
 }

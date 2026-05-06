@@ -13,6 +13,8 @@ export class TerminalOscHandler {
     this._onCwdChange = onCwdChange
     this._onBusyChange = onBusyChange
     this._wasBusy = false
+    this._cwdDisposable = null
+    this._busyDisposable = null
   }
 
   /**
@@ -21,8 +23,17 @@ export class TerminalOscHandler {
    * @param {number|string} pid
    */
   attach(term, pid) {
-    term.parser.registerOscHandler(7, (data) => this._handleCwd(data, pid))
-    term.parser.registerOscHandler(133, (data) => this._handleBusy(data, pid))
+    this._cwdDisposable = term.parser.registerOscHandler(7, (data) => this._handleCwd(data, pid))
+    this._busyDisposable = term.parser.registerOscHandler(133, (data) => this._handleBusy(data, pid))
+  }
+
+  detach() {
+    this._cwdDisposable?.dispose()
+    this._busyDisposable?.dispose()
+    this._cwdDisposable = null
+    this._busyDisposable = null
+    this._onCwdChange = null
+    this._onBusyChange = null
   }
 
   _handleCwd(data, pid) {

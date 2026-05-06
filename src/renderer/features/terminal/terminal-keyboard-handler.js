@@ -9,6 +9,7 @@ export class TerminalKeyboardHandler {
    */
   constructor(ptyApi) {
     this._ptyApi = ptyApi
+    this._term = null
   }
 
   /**
@@ -17,9 +18,18 @@ export class TerminalKeyboardHandler {
    * @param {number|string} pid
    */
   attach(term, pid) {
+    this._term = term
     term.attachCustomKeyEventHandler((event) => {
       return this._handleKeyEvent(event, pid)
     })
+  }
+
+  detach() {
+    if (this._term) {
+      this._term.attachCustomKeyEventHandler(null)
+      this._term = null
+    }
+    this._ptyApi = null
   }
 
   _handleKeyEvent(event, pid) {

@@ -15,7 +15,7 @@ import { APP_CONFIG } from './core/config/app-config.js'
  *   чтобы click-события доходили для double-click обработки.
  */
 export class StatusBar {
-  constructor({ btnEl, cwdEl, nodeEl, onOpen, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [] } }) {
+  constructor({ btnEl, cwdEl, nodeEl, onOpen, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [] }, api }) {
     this._btnEl = btnEl
     this._cwdEl = cwdEl
     this._nodeEl = nodeEl
@@ -28,6 +28,7 @@ export class StatusBar {
     this._proxyToggleEl = proxyToggleEl
     this._onToggleProxy = onToggleProxy
     this._quickReplies = quickReplies
+    this._api = api
     this._getRootPath = null
     this._intervalId = null
     this._homeDir = null
@@ -37,8 +38,10 @@ export class StatusBar {
     this._activeAgentId = null
     this._proxy = ''
     this._proxyEnabled = false
+    this._cleanupController = new AbortController()
+    const signal = this._cleanupController.signal
 
-    this._btnEl.addEventListener('click', () => this._onOpen())
+    this._btnEl.addEventListener('click', () => this._onOpen(), { signal })
 
     for (const button of this._agentButtons) {
       let lastClickTime = 0
@@ -59,7 +62,7 @@ export class StatusBar {
         if (button.disabled || button.classList.contains('status-agent-busy')) return
         const agentId = button.dataset.agentId
         if (agentId) this._onLaunchAgent?.(agentId)
-      })
+      }, { signal })
     }
 
     if (this._proxyToggleEl) {
@@ -68,17 +71,17 @@ export class StatusBar {
         this._proxyEnabled = !this._proxyEnabled
         this._onToggleProxy?.(this._proxyEnabled)
         this._updateProxyButton()
-      })
+      }, { signal })
     }
 
     // Версия Node — статическое значение из preload
     if (this._nodeEl) {
-      const v = window.electronAPI.nodeVersion
+      const v = this._api.nodeVersion
       if (v) this._nodeEl.innerHTML = `${Icons.hexagon} v${v}`
     }
 
     // Получаем домашнюю директорию для сокращения путей
-    window.electronAPI.getHomedir().then(h => { this._homeDir = h })
+    this._api.getHomedir().then(h => { this._homeDir = h })
 
     this._updateAgentButtons()
   }
@@ -213,6 +216,27 @@ export class StatusBar {
       : 'Прокси не задан'
   }
 
+  destroy() {
+    this.stop()
+    this._cleanupController?.abort()
+    this._cleanupController = null
+    this._btnEl = null
+    this._cwdEl = null
+    this._nodeEl = null
+    this._agentButtons = []
+    this._agentCommandsPanelEl = null
+    this._proxyToggleEl = null
+    this._onOpen = null
+    this._onLaunchAgent = null
+    this._onSelectAgent = null
+    this._onToggleProxy = null
+    this._quickReplies = null
+    this._getRootPath = null
+    this._homeDir = null
+    this._agentsById = null
+    this._forceDisabled = null
+  }
+
   async _poll() {
     if (this._polling) return
     this._polling = true
@@ -240,7 +264,7 @@ export class StatusBar {
         return
       }
 
-      const result = await window.electronAPI.gitGetStatus(rootPath)
+      const result = await this._api.gitGetStatus(rootPath)
 
       if (result.notARepo) {
         this._btnEl.classList.add('hidden')

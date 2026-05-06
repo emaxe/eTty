@@ -677,6 +677,25 @@ export class SettingsPage {
     return wrapper
   }
 
+  destroy() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer)
+      this._saveTimer = null
+    }
+    if (this._overlay) {
+      this._overlay.remove()
+      this._overlay = null
+    }
+    this._bus = null
+    this._onClose = null
+    this._api = null
+    this._config = null
+    this._themes = null
+    this._agentsCategory = null
+    this._quickRepliesCategory = null
+    this._agentStatusById = null
+  }
+
   _scheduleSave() {
     clearTimeout(this._saveTimer)
     this._saveTimer = setTimeout(() => {

@@ -56,6 +56,11 @@ export class ContextMenu {
     document.removeEventListener('click', this._onDocClick)
   }
 
+  destroy() {
+    this.hide()
+    this._onDocClick = null
+  }
+
   _onDocClick(e) {
     if (this._el && !this._el.contains(e.target)) {
       this.hide()

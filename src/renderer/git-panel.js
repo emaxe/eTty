@@ -5,17 +5,19 @@
 import { Icons } from './icons.js'
 
 export class GitPanel {
-  constructor({ overlayEl, onClose }) {
+  constructor({ overlayEl, onClose, api }) {
     this._overlayEl = overlayEl;
     this._onClose = onClose;
+    this._api = api;
     this._rootPath = null;
     this._expandedFile = null;
     this._errorTimer = null;
+    this._cleanupController = new AbortController();
 
-    this._bindEvents();
+    this._bindEvents(this._cleanupController.signal);
   }
 
-  _bindEvents() {
+  _bindEvents(signal) {
     const el = this._overlayEl;
 
     // Esc key
@@ -23,12 +25,12 @@ export class GitPanel {
       if (e.key === 'Escape' && this.isVisible()) {
         this.hide();
       }
-    });
+    }, { signal });
 
     // Close button
     const closeBtn = el.querySelector('.git-close');
     if (closeBtn) {
-      closeBtn.addEventListener('click', () => this.hide());
+      closeBtn.addEventListener('click', () => this.hide(), { signal });
     }
 
     // Branch select
@@ -36,14 +38,14 @@ export class GitPanel {
     if (branchSelect) {
       branchSelect.addEventListener('change', async (e) => {
         const branch = e.target.value;
-        const result = await window.electronAPI.gitCheckout(this._rootPath, branch);
+        const result = await this._api.gitCheckout(this._rootPath, branch);
         if (result && result.error) {
           this._showError(result.error);
         } else {
           await this._loadStatus();
           await this._loadBranches();
         }
-      });
+      }, { signal });
     }
 
     // New branch button
@@ -64,7 +66,7 @@ export class GitPanel {
             const name = input.value.trim();
             if (!name) return;
             input.remove();
-            const result = await window.electronAPI.gitCreateBranch(this._rootPath, name);
+            const result = await this._api.gitCreateBranch(this._rootPath, name);
             if (result && result.error) {
               this._showError(result.error);
             } else {
@@ -74,8 +76,8 @@ export class GitPanel {
           } else if (e.key === 'Escape') {
             input.remove();
           }
-        });
-      });
+        }, { signal });
+      }, { signal });
     }
 
     // Delete branch button
@@ -95,33 +97,46 @@ export class GitPanel {
           return;
         }
 
-        const result = await window.electronAPI.gitDeleteBranch(this._rootPath, currentBranch);
+        const result = await this._api.gitDeleteBranch(this._rootPath, currentBranch);
         if (result && result.error) {
           this._showError(result.error);
         } else {
           await this._loadStatus();
           await this._loadBranches();
         }
-      });
+      }, { signal });
     }
 
     // Commit button
     const commitBtn = el.querySelector('#git-btn-commit');
     if (commitBtn) {
-      commitBtn.addEventListener('click', () => this._doCommit());
+      commitBtn.addEventListener('click', () => this._doCommit(), { signal });
     }
 
     // Push button
     const pushBtn = el.querySelector('#git-btn-push');
     if (pushBtn) {
-      pushBtn.addEventListener('click', () => this._doPush());
+      pushBtn.addEventListener('click', () => this._doPush(), { signal });
     }
 
     // Discard button
     const discardBtn = el.querySelector('#git-btn-discard');
     if (discardBtn) {
-      discardBtn.addEventListener('click', () => this._confirmDiscard());
+      discardBtn.addEventListener('click', () => this._confirmDiscard(), { signal });
     }
+  }
+
+  destroy() {
+    if (this._errorTimer) {
+      clearTimeout(this._errorTimer);
+      this._errorTimer = null;
+    }
+    this._cleanupController?.abort();
+    this._cleanupController = null;
+    this._overlayEl = null;
+    this._onClose = null;
+    this._rootPath = null;
+    this._expandedFile = null;
   }
 
   show(rootPath) {
@@ -137,7 +152,7 @@ export class GitPanel {
     const el = this._overlayEl.querySelector('#git-root-path')
     if (!el) return
     if (!this._rootPath) { el.textContent = ''; return }
-    const root = await window.electronAPI.gitGetRoot(this._rootPath)
+    const root = await this._api.gitGetRoot(this._rootPath)
     el.textContent = root || this._rootPath
     console.log('[git-panel] git root resolved:', root)
   }
@@ -160,7 +175,7 @@ export class GitPanel {
 
   async _loadStatus() {
     if (!this._rootPath) return;
-    const result = await window.electronAPI.gitGetStatus(this._rootPath);
+    const result = await this._api.gitGetStatus(this._rootPath);
     console.log('[git-panel] status result:', result)
     if (result && result.error) {
       this._showError(result.error);
@@ -175,7 +190,7 @@ export class GitPanel {
 
   async _loadBranches() {
     if (!this._rootPath) return;
-    const result = await window.electronAPI.gitGetBranches(this._rootPath);
+    const result = await this._api.gitGetBranches(this._rootPath);
     console.log('[git-panel] branches result:', result)
     if (result && result.error) {
       this._showError(result.error);
@@ -269,7 +284,7 @@ export class GitPanel {
     if (!diffBlock) return;
     diffBlock.innerHTML = '';
 
-    const result = await window.electronAPI.gitGetDiff(this._rootPath, filePath);
+    const result = await this._api.gitGetDiff(this._rootPath, filePath);
     const diffStr = typeof result === 'string' ? result : '';
     const lines = this._parseDiff(diffStr);
 
@@ -371,7 +386,7 @@ export class GitPanel {
     }
 
     this._setActionsDisabled(true);
-    const result = await window.electronAPI.gitCommit(this._rootPath, msg);
+    const result = await this._api.gitCommit(this._rootPath, msg);
 
     if (result && result.error) {
       this._showError(result.error);
@@ -390,7 +405,7 @@ export class GitPanel {
     this._setActionsDisabled(true);
     if (pushBtn) pushBtn.textContent = '...';
 
-    const result = await window.electronAPI.gitPush(this._rootPath);
+    const result = await this._api.gitPush(this._rootPath);
 
     if (result && result.error) {
       this._showError(result.error);
@@ -428,7 +443,7 @@ export class GitPanel {
     yesBtn.addEventListener('click', async () => {
       confirmWrapper.remove();
       discardBtn.style.display = '';
-      const result = await window.electronAPI.gitDiscard(this._rootPath);
+      const result = await this._api.gitDiscard(this._rootPath);
       if (result && result.error) {
         this._showError(result.error);
       } else {

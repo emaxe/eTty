@@ -136,6 +136,13 @@ class Diagnostics {
   }
 
   /** Print full snapshot to console. */
+  destroy() {
+    this.stop()
+    this._samples = []
+    this._ptyDataCounter.clear()
+    if (this._xtermStates) this._xtermStates.clear()
+  }
+
   dump() {
     console.group('[Diagnostics] Full Snapshot')
     console.log('Latest sample:', this._samples[this._samples.length - 1])
