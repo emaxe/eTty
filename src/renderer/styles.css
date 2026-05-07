@@ -1216,6 +1216,33 @@ html, body {
 .diff-line-del { background: rgba(243,139,168,0.12); color: var(--red); }
 .diff-line-hunk { color: var(--muted); font-style: italic; }
 
+/* Git status — file tree */
+.git-status-new .tree-name { color: var(--green); }
+.git-status-modified .tree-name { color: var(--accent); }
+.git-status-deleted .tree-name { color: var(--red); text-decoration: line-through; }
+.git-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-left: 4px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.git-dot-new { background: var(--green); }
+.git-dot-modified { background: var(--accent); }
+.git-dot-deleted { background: var(--red); }
+
+/* Git diff — editor gutter */
+.cm-diff-gutter { width: 8px; }
+.diff-gutter-bar {
+  width: 3px;
+  height: 100%;
+  border-radius: 1px;
+}
+.diff-gutter-added { background: var(--green); }
+.diff-gutter-modified { background: var(--accent); }
+
 /* SVG inside buttons — ensure block-level for crisp centering */
 button svg {
   display: block;
