@@ -29,6 +29,7 @@ import { StateStore } from './core/state-store.js'
 import { ElectronApiAdapter } from './core/adapters/electron-api.js'
 import { AppContainer } from './core/container.js'
 import { diagnostics } from './core/diagnostics.js'
+import { GitStatusService } from './services/git-status-service.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
@@ -113,6 +114,11 @@ async function init() {
     settings: {
       collapseChildrenOnClose: config.fileTree?.collapseChildrenOnClose ?? true,
       fileOpenMode: config.fileTree?.fileOpenMode || 'double',
+    },
+    git: {
+      isRepo: false,
+      rootPath: null,
+      fileStatuses: {},
     }
   })
 
@@ -197,6 +203,11 @@ async function init() {
   container.register('store', () => appStore)
   container.register('bus', () => bus)
   container.register('api', () => api)
+  container.register('gitStatusService', (r) => new GitStatusService({
+    api: r('api'),
+    eventBus: r('bus'),
+    store: r('store'),
+  }))
   const agentCommands = {
     claude: 'claude\n',
     codex: 'codex\n',
@@ -349,6 +360,7 @@ async function init() {
     updateNavButtons()
     syncStatusBarTerminalState()
     statusBar.updateNow()
+    gitStatusService.setRootPath(tab.rootPath || null)
     } finally {
       _isSwitchingTab = false
     }
@@ -466,6 +478,9 @@ async function init() {
   statusBar.setProxyConfig({ proxy: config.agents.proxy || '', enabled: config.agents.proxyEnabled })
 
   statusBar.start(() => tabBar.getActive()?.rootPath)
+
+  const gitStatusService = container.resolve('gitStatusService')
+  gitStatusService.setRootPath(startCwd)
 
   // — Visibility subscribers (must be after component creation) —
   appStore.subscribe((state, path) => {
@@ -1043,6 +1058,7 @@ async function init() {
     document.removeEventListener('keydown', onKeyDown)
     document.removeEventListener('mousemove', onMouseMove)
     document.removeEventListener('mouseup', onMouseUp)
+    gitStatusService.destroy()
     container.destroy()
   }
 

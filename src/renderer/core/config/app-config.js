@@ -6,6 +6,7 @@ export const APP_CONFIG = Object.freeze({
   // Polling intervals (ms)
   STATUS_POLL_INTERVAL_MS: 5000,
   GIT_PANEL_POLL_INTERVAL_MS: 3000,
+  GIT_STATUS_POLL_INTERVAL_MS: 5000,
 
   // Debounce / batch delays (ms)
   PTY_DATA_BATCH_MS: 8,
