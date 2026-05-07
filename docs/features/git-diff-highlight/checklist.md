@@ -9,8 +9,8 @@
 - [x] Задача #2: Создать `GitStatusService` (polling, EventBus, StateStore)
 - [x] Задача #3: Зарегистрировать GitStatusService в DI + подписать на tab switch в index.js
 - [x] Задача #4: Добавить CSS стили (файловое дерево + редактор gutter)
-- [ ] Задача #5: FileTree — подписка на git.fileStatuses, CSS-классы + dot-индикаторы папок
-- [ ] Задача #6: EditorPanel — diff gutter extension, парсинг diff, подписка на git:status-updated
+- [x] Задача #5: FileTree — подписка на git.fileStatuses, CSS-классы + dot-индикаторы папок
+- [x] Задача #6: EditorPanel — diff gutter extension, парсинг diff, подписка на git:status-updated
 
 ## Финализация
 - [ ] Все проверки пройдены

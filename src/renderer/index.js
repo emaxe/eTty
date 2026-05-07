@@ -276,7 +276,7 @@ async function init() {
     getActiveCwd: () => container.resolve('tabBar').getActive()?.rootPath || startCwd,
     store: r('store'),
   }))
-  container.register('fileTree', (r) => new FileTree(fileTreeContainerEl, { eventBus: r('bus'), api: r('api') }))
+  container.register('fileTree', (r) => new FileTree(fileTreeContainerEl, { eventBus: r('bus'), api: r('api'), store: r('store') }))
 
   editorPanel = container.resolve('editorPanel')
   // Apply current theme immediately (applyTheme ran before editorPanel was created)

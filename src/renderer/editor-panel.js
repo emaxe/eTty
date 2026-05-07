@@ -2,7 +2,7 @@ import { Icons } from './icons.js'
 import { UI_DIMENSIONS } from './core/config/ui-dimensions.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 import { DraggableTabs } from './components/base/tabs/draggable-tabs.js'
-import { EditorState, Compartment } from '@codemirror/state'
+import { EditorState, Compartment, StateField, StateEffect, RangeSetBuilder } from '@codemirror/state'
 import {
   EditorView,
   keymap,
@@ -12,7 +12,9 @@ import {
   drawSelection,
   dropCursor,
   rectangularSelection,
-  crosshairCursor
+  crosshairCursor,
+  gutter,
+  GutterMarker
 } from '@codemirror/view'
 import {
   defaultKeymap,
@@ -36,6 +38,56 @@ import { buildEditorTheme } from './editor-theme.js'
 import { getLanguageExtension } from './editor-languages.js'
 import { fileLinksExtension, normalizePath } from './editor-file-links.js'
 import { ContextMenu } from './components/base/context-menu/context-menu.js'
+
+// ── Diff Gutter Extension ────────────────────────────────────────────────────
+
+const setDiffData = StateEffect.define()
+
+const diffDataField = StateField.define({
+  create: () => [],
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setDiffData)) return effect.value
+    }
+    return value
+  }
+})
+
+class DiffGutterMarker extends GutterMarker {
+  constructor(type) {
+    super()
+    this.type = type // 'added' | 'modified'
+  }
+  toDOM() {
+    const bar = document.createElement('div')
+    bar.className = `diff-gutter-bar diff-gutter-${this.type}`
+    return bar
+  }
+}
+
+const diffGutterExtension = [
+  diffDataField,
+  gutter({
+    class: 'cm-diff-gutter',
+    markers(view) {
+      const data = view.state.field(diffDataField)
+      const builder = new RangeSetBuilder()
+      for (const { line, type } of data) {
+        const doc = view.state.doc
+        if (line >= 1 && line <= doc.lines) {
+          const lineObj = doc.line(line)
+          builder.add(lineObj.from, lineObj.from, new DiffGutterMarker(type))
+        }
+      }
+      return builder.finish()
+    },
+    lineMarkerChange: (update) =>
+      update.docChanged ||
+      update.transactions.some(tr => tr.effects.some(e => e.is(setDiffData))),
+  })
+]
+
+// ── EditorPanel ──────────────────────────────────────────────────────────────
 
 export class EditorPanel {
   /**
@@ -84,8 +136,11 @@ export class EditorPanel {
     this._currentThemeExts = [_fallbackHighlight]
     this._wordWrap = false
 
+    this._diffUnsubscribe = null
+
     this._cleanupController = new AbortController()
     this._setupListeners()
+    this._setupGitStatusSubscription()
   }
 
   _syncStore() {
@@ -143,6 +198,10 @@ export class EditorPanel {
     this._draggable.observeElement(tabEl)
     this._syncStore()
     this._switchToTab(filePath)
+
+    if (this._store?.get('git.isRepo')) {
+      this._fetchAndApplyDiff(filePath)
+    }
   }
 
   closeFile(filePath) {
@@ -232,6 +291,7 @@ export class EditorPanel {
       tab.originalMtime = stat.success ? stat.mtimeMs : Date.now()
       this._setModified(filePath, false)
       this._updateSyncButton(false)
+      this._bus?.emit('editor:file-saved', { filePath })
     }
   }
 
@@ -329,6 +389,8 @@ export class EditorPanel {
       this._tabs.set(filePath, tab)
       this._tabBarEl.appendChild(tab.element)
     }
+    // Clear stale references so index.js cleanup doesn't destroy re-attached views
+    state._detachedTabs.clear()
 
     // Switch to previously active tab
     const activePath = state.activePath && this._tabs.has(state.activePath)
@@ -450,7 +512,10 @@ export class EditorPanel {
             self._updateStatusBar()
             self._updateSendButton()
           }
-        })
+        }),
+
+        // Diff gutter
+        ...diffGutterExtension
       ]
     })
 
@@ -1244,53 +1309,60 @@ export class EditorPanel {
     const scrollerB = editorB.scrollDOM
     if (!scrollerA || !scrollerB) return
 
-    let syncing = false
+    let lastSetA = -1
+    let lastSetB = -1
+    let rafId = null
 
-    const sync = (srcEditor, dstEditor) => {
-      if (syncing) return
-      syncing = true
+    const doSync = () => {
+      rafId = null
 
-      // Determine top visible line in source editor
-      const srcLine = srcEditor.state.doc.lineAt(srcEditor.viewport.from).number
+      const posA = scrollerA.scrollTop
+      const posB = scrollerB.scrollTop
 
-      // Clamp to destination editor line count
-      const dstDoc = dstEditor.state.doc
-      const dstLineNum = Math.min(Math.max(1, srcLine), dstDoc.lines)
-      const dstLine = dstDoc.line(dstLineNum)
+      const maxA = scrollerA.scrollHeight - scrollerA.clientHeight
+      const maxB = scrollerB.scrollHeight - scrollerB.clientHeight
+      if (maxA <= 0 || maxB <= 0) return
 
-      // Use lineBlockAt to get exact pixel position of the line top
-      const block = dstEditor.lineBlockAt(dstLine.from)
-      // Account for padding-top of the content DOM inside the scroller
-      const paddingTop = parseInt(getComputedStyle(dstEditor.contentDOM).paddingTop) || 0
-      const targetTop = block.top + paddingTop
-      // Clamp to valid scroll range
-      const maxScroll = dstEditor.scrollDOM.scrollHeight - dstEditor.scrollDOM.clientHeight
-      dstEditor.scrollDOM.scrollTop = Math.max(0, Math.min(targetTop, maxScroll))
+      const userScrolledA = posA !== lastSetA
+      const userScrolledB = posB !== lastSetB
 
-      // Defer unlocking across two frames so the programmatic scroll event
-      // fires while syncing is still true, preventing reverse-sync loops.
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          syncing = false
-        })
-      })
+      if (!userScrolledA && !userScrolledB) return
+
+      const ratioA = posA / maxA
+      const ratioB = posB / maxB
+
+      if (userScrolledA) {
+        const target = Math.round(ratioA * maxB)
+        scrollerB.scrollTop = Math.max(0, Math.min(target, maxB))
+        lastSetB = scrollerB.scrollTop
+      } else {
+        const target = Math.round(ratioB * maxA)
+        scrollerA.scrollTop = Math.max(0, Math.min(target, maxA))
+        lastSetA = scrollerA.scrollTop
+      }
+
+      lastSetA = scrollerA.scrollTop
+      lastSetB = scrollerB.scrollTop
     }
 
-    const onScrollA = () => sync(editorA, editorB)
-    const onScrollB = () => sync(editorB, editorA)
+    const onScroll = () => {
+      if (rafId === null) {
+        rafId = requestAnimationFrame(doSync)
+      }
+    }
 
-    scrollerA.addEventListener('scroll', onScrollA, { passive: true })
-    scrollerB.addEventListener('scroll', onScrollB, { passive: true })
+    scrollerA.addEventListener('scroll', onScroll, { passive: true })
+    scrollerB.addEventListener('scroll', onScroll, { passive: true })
 
-    // Store cleanup handles on the overlay so destroy() can remove them
     if (this._conflictOverlay) {
       if (!this._conflictOverlay._diffScrollCleanups) {
         this._conflictOverlay._diffScrollCleanups = []
       }
       this._conflictOverlay._diffScrollCleanups.push(
         () => {
-          scrollerA.removeEventListener('scroll', onScrollA)
-          scrollerB.removeEventListener('scroll', onScrollB)
+          scrollerA.removeEventListener('scroll', onScroll)
+          scrollerB.removeEventListener('scroll', onScroll)
+          if (rafId !== null) cancelAnimationFrame(rafId)
         }
       )
     }
@@ -1307,6 +1379,118 @@ export class EditorPanel {
       this._conflictOverlay.remove()
       this._conflictOverlay = null
     }
+    if (this._activeFilePath) {
+      const tab = this._tabs.get(this._activeFilePath)
+      if (tab) tab.view.focus()
+    }
+  }
+
+  // — Diff gutter —
+
+  _setupGitStatusSubscription() {
+    if (!this._bus) return
+
+    this._diffUnsubscribe = this._bus.on('git:status-updated', ({ rootPath, fileStatuses }) => {
+      const filePath = this._activeFilePath
+      if (!filePath) return
+
+      let relPath = filePath
+      if (rootPath && filePath.startsWith(rootPath)) {
+        relPath = filePath.slice(rootPath.length)
+        if (relPath.startsWith('/')) relPath = relPath.slice(1)
+      }
+
+      if (fileStatuses[relPath]) {
+        this._fetchAndApplyDiff(filePath)
+      } else {
+        this._clearDiffGutter()
+      }
+    })
+  }
+
+  async _fetchAndApplyDiff(filePath) {
+    if (!filePath) return
+    const rootPath = this._store?.get('git.rootPath')
+    if (!rootPath) return
+
+    const tab = this._tabs.get(filePath)
+    if (!tab?.view) return
+
+    let relPath = filePath
+    if (filePath.startsWith(rootPath)) {
+      relPath = filePath.slice(rootPath.length)
+      if (relPath.startsWith('/')) relPath = relPath.slice(1)
+    }
+
+    const diffStr = await this._api.gitGetDiff(rootPath, relPath)
+
+    // Проверить, что файл всё ещё актуален после async операции
+    if (this._activeFilePath !== filePath || !this._tabs.has(filePath)) return
+
+    if (!diffStr || typeof diffStr !== 'string') {
+      this._clearDiffGutter()
+      return
+    }
+
+    const diffData = this._parseDiffForGutter(diffStr)
+
+    const freshTab = this._tabs.get(filePath)
+    if (!freshTab?.view) return
+    freshTab.view.dispatch({
+      effects: setDiffData.of(diffData)
+    })
+  }
+
+  _parseDiffForGutter(diffStr) {
+    const lines = diffStr.split('\n')
+    const result = []
+    let newLineNum = 0
+    const hunkLines = []
+
+    const flushHunk = () => {
+      let i = 0
+      while (i < hunkLines.length) {
+        const line = hunkLines[i]
+        if (line.type === 'add') {
+          const hasNeighborDel = hunkLines.slice(Math.max(0, i - 2), i + 3).some(l => l.type === 'del')
+          result.push({ line: line.lineNum, type: hasNeighborDel ? 'modified' : 'added' })
+        }
+        i++
+      }
+      hunkLines.length = 0
+    }
+
+    for (const line of lines) {
+      if (line.startsWith('@@')) {
+        flushHunk()
+        const match = line.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/)
+        if (match) {
+          newLineNum = parseInt(match[1], 10)
+        }
+        continue
+      }
+      if (line.startsWith('+++') || line.startsWith('---')) continue
+      if (line.startsWith('+')) {
+        hunkLines.push({ type: 'add', lineNum: newLineNum })
+        newLineNum++
+      } else if (line.startsWith('-')) {
+        hunkLines.push({ type: 'del', lineNum: newLineNum })
+      } else {
+        hunkLines.push({ type: 'ctx', lineNum: newLineNum })
+        newLineNum++
+      }
+    }
+    flushHunk()
+
+    return result
+  }
+
+  _clearDiffGutter() {
+    const filePath = this._activeFilePath
+    if (!filePath) return
+    const tab = this._tabs.get(filePath)
+    if (!tab?.view) return
+    tab.view.dispatch({ effects: setDiffData.of([]) })
   }
 
   // — Context menu —
@@ -1377,6 +1561,11 @@ export class EditorPanel {
   }
 
   destroy() {
+    if (this._diffUnsubscribe) {
+      this._diffUnsubscribe()
+      this._diffUnsubscribe = null
+    }
+
     for (const [, tab] of this._tabs) {
       tab.view.destroy()
       tab.element.remove()

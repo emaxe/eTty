@@ -12,10 +12,11 @@ import { Icons } from './icons.js'
  * - Undo: Ctrl+Z для отката move-операций
  */
 export class FileTree {
-  constructor(container, { eventBus, api } = {}) {
+  constructor(container, { eventBus, api, store } = {}) {
     this._container = container
     this._bus = eventBus
     this._api = api
+    this._store = store || null
     this._cwd = null
     this._modKeys = { shift: false, meta: false, ctrl: false }
     this._contextMenu = new ContextMenu()
@@ -50,6 +51,7 @@ export class FileTree {
 
     this._setupModKeyListeners(signal)
     this._setupKeyboardShortcuts(signal)
+    this._setupGitStatusSubscription()
   }
 
   _createHoverOverlay() {
@@ -192,6 +194,87 @@ export class FileTree {
         this._undoLastMove()
       }
     }, { signal })
+  }
+
+  _setupGitStatusSubscription() {
+    if (!this._store) return
+
+    this._unsubGitStatus = this._store.subscribe((state, path) => {
+      if (path === 'git.fileStatuses' || path === 'git.isRepo') {
+        this._applyGitStatuses()
+      }
+    })
+  }
+
+  _applyGitStatuses() {
+    if (!this._store) return
+
+    const isRepo = this._store.get('git.isRepo')
+    const rootPath = this._store.get('git.rootPath')
+    const fileStatuses = this._store.get('git.fileStatuses') || {}
+
+    // Убрать все git-классы с файлов
+    const allFileRows = this._container.querySelectorAll('.tree-node-row[data-path]')
+    for (const row of allFileRows) {
+      row.classList.remove('git-status-new', 'git-status-modified', 'git-status-deleted')
+    }
+
+    // Убрать все git-dot с папок
+    const allDots = this._container.querySelectorAll('.git-dot')
+    for (const dot of allDots) dot.remove()
+
+    if (!isRepo || !rootPath || Object.keys(fileStatuses).length === 0) return
+
+    // Применить статусы к файлам (только li с isDir=0)
+    const allLiNodes = this._container.querySelectorAll('li[data-path][data-is-dir="0"]')
+    for (const li of allLiNodes) {
+      const absPath = li.dataset.path
+      if (!absPath) continue
+
+      let relPath = absPath
+      if (absPath.startsWith(rootPath)) {
+        relPath = absPath.slice(rootPath.length)
+        if (relPath.startsWith('/')) relPath = relPath.slice(1)
+      }
+
+      const status = fileStatuses[relPath]
+      if (status) {
+        const row = li.querySelector(':scope > .tree-node-row')
+        if (row) row.classList.add(`git-status-${status}`)
+      }
+    }
+
+    // Применить dot-индикаторы к папкам (только уже загруженным)
+    const allDirLiNodes = this._container.querySelectorAll('li[data-path][data-is-dir="1"]')
+    for (const li of allDirLiNodes) {
+      const dirAbsPath = li.dataset.path
+      if (!dirAbsPath) continue
+
+      let dirRelPath = dirAbsPath
+      if (dirAbsPath.startsWith(rootPath)) {
+        dirRelPath = dirAbsPath.slice(rootPath.length)
+        if (dirRelPath.startsWith('/')) dirRelPath = dirRelPath.slice(1)
+      }
+
+      // Найти наихудший статус среди дочерних файлов
+      const statusPriority = { deleted: 3, modified: 2, new: 1 }
+      let worstStatus = null
+      for (const [relPath, status] of Object.entries(fileStatuses)) {
+        if (relPath.startsWith(dirRelPath + '/') || dirRelPath === '') {
+          if ((statusPriority[status] || 0) > (statusPriority[worstStatus] || 0)) {
+            worstStatus = status
+          }
+        }
+      }
+
+      if (worstStatus) {
+        const dot = document.createElement('span')
+        dot.className = `git-dot git-dot-${worstStatus}`
+        const dirRow = li.querySelector(':scope > .tree-node-row')
+        const nameEl = dirRow?.querySelector('.tree-name')
+        if (nameEl) nameEl.appendChild(dot)
+      }
+    }
   }
 
   getCwd() {
@@ -1357,6 +1440,10 @@ export class FileTree {
     this.unwatchAll()
     this._fsDirChangedUnsub?.()
     this._fsDirChangedUnsub = null
+    if (this._unsubGitStatus) {
+      this._unsubGitStatus()
+      this._unsubGitStatus = null
+    }
     this._cleanupController?.abort()
     this._cleanupController = null
     this._hoverOverlay?.remove()
