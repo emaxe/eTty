@@ -291,7 +291,7 @@ export class EditorPanel {
       tab.originalMtime = stat.success ? stat.mtimeMs : Date.now()
       this._setModified(filePath, false)
       this._updateSyncButton(false)
-      this._bus?.emit('editor:file-saved', { filePath })
+      this._bus.emit('editor.file-saved', { filePath })
     }
   }
 
@@ -1390,7 +1390,7 @@ export class EditorPanel {
   _setupGitStatusSubscription() {
     if (!this._bus) return
 
-    this._diffUnsubscribe = this._bus.on('git:status-updated', ({ rootPath, fileStatuses }) => {
+    this._diffUnsubscribe = this._bus.on('git.status-updated', ({ rootPath, fileStatuses }) => {
       const filePath = this._activeFilePath
       if (!filePath) return
 

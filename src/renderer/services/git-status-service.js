@@ -13,9 +13,9 @@ export class GitStatusService {
 
     this._rootPath = null
     this._pollTimer = null
-    this._unsubFileSaved = null  // для отписки от editor:file-saved
+    this._unsubFileSaved = null  // для отписки от editor.file-saved
 
-    this._unsubFileSaved = eventBus.on('editor:file-saved', () => {
+    this._unsubFileSaved = eventBus.on('editor.file-saved', () => {
       this._poll()
     })
   }
@@ -78,7 +78,7 @@ export class GitStatusService {
     }
 
     this._store.set('git.fileStatuses', fileStatuses)
-    this._bus.emit('git:status-updated', { rootPath: this._rootPath, fileStatuses })
+    this._bus.emit('git.status-updated', { rootPath: this._rootPath, fileStatuses })
   }
 
   /**
