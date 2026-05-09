@@ -378,6 +378,7 @@ export class FileTree {
 
   async setRoot(newPath) {
     console.log('[FileTree] setRoot called:', newPath, 'current:', this._cwd)
+    const prevPath = this._cwd
     if (this._cwd === newPath) return
 
     // Очищаем все watchers для старой директории
@@ -388,6 +389,7 @@ export class FileTree {
     this._moveHistory = []
 
     this._cwd = newPath
+    this._bus?.emit('filetree.rootChanged', { newPath, prevPath })
 
     const labelEl = this._rootNodeRow?.querySelector('.tree-root-label')
     if (labelEl) {
@@ -706,6 +708,7 @@ export class FileTree {
           }
           childrenEl.classList.add('open')
           arrow.classList.add('expanded')
+          this._applyGitStatuses()
         }
       })
     }
@@ -1396,6 +1399,8 @@ export class FileTree {
     if (expandedDirs.size > 0) {
       await this.restoreExpandedDirs(expandedDirs)
     }
+
+    this._applyGitStatuses()
   }
 
   _restoreSelection() {

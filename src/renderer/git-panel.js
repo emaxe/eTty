@@ -158,6 +158,7 @@ export class GitPanel {
   }
 
   hide() {
+    if (!this.isVisible()) return;
     this._overlayEl.classList.add('hidden');
     this._rootPath = null;
     this._onClose();

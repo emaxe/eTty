@@ -22,11 +22,17 @@ export function buildEditorTheme(colors) {
         borderLeftColor: colors.cursor,
         borderLeftWidth: '2px'
       },
-      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
-        backgroundColor: colors.selection
+      '& .cm-selectionBackground': {
+        backgroundColor: colors.selection && colors.selection.startsWith('#') && colors.selection.length === 7 ? colors.selection + 'c0' : colors.selection
+      },
+      '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
+        backgroundColor: colors.selection && colors.selection.startsWith('#') && colors.selection.length === 7 ? colors.selection + 'f0' : colors.selection,
+        borderRadius: '2px',
+        outline: '1px solid ' + (colors.selectionBorder || colors.selection),
+        outlineOffset: '1px'
       },
       '.cm-activeLine': {
-        backgroundColor: colors.activeLine
+        backgroundColor: colors.activeLineBg || 'rgba(255, 255, 255, 0.05)'
       },
       '.cm-gutters': {
         backgroundColor: colors.gutterBg,

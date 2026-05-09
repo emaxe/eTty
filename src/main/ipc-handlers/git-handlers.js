@@ -32,9 +32,9 @@ export function registerGitHandlers(ipcMain) {
           const { additions, deletions } = countDiffLines(diff)
           totalAdditions += additions
           totalDeletions += deletions
-          files.push({ path: filePath, additions, deletions })
+          files.push({ path: filePath, additions, deletions, status: 'M' })
         } catch {
-          files.push({ path: filePath, additions: 0, deletions: 0 })
+          files.push({ path: filePath, additions: 0, deletions: 0, status: 'M' })
         }
       }
 
@@ -44,9 +44,9 @@ export function registerGitHandlers(ipcMain) {
           const content = await fs.readFile(path.join(rootPath, filePath), 'utf-8')
           const additions = content ? content.replace(/\n$/, '').split('\n').length : 0
           totalAdditions += additions
-          files.push({ path: filePath, additions, deletions: 0, untracked: true })
+          files.push({ path: filePath, additions, deletions: 0, untracked: true, status: '?' })
         } catch {
-          files.push({ path: filePath, additions: 0, deletions: 0, untracked: true })
+          files.push({ path: filePath, additions: 0, deletions: 0, untracked: true, status: '?' })
         }
       }
 
@@ -57,9 +57,9 @@ export function registerGitHandlers(ipcMain) {
           const { additions, deletions } = countDiffLines(diff)
           totalAdditions += additions
           totalDeletions += deletions
-          files.push({ path: filePath, additions, deletions })
+          files.push({ path: filePath, additions, deletions, status: 'A' })
         } catch {
-          files.push({ path: filePath, additions: 0, deletions: 0 })
+          files.push({ path: filePath, additions: 0, deletions: 0, status: 'A' })
         }
       }
 
@@ -70,9 +70,9 @@ export function registerGitHandlers(ipcMain) {
           const { additions, deletions } = countDiffLines(diff)
           totalAdditions += additions
           totalDeletions += deletions
-          files.push({ path: filePath, additions, deletions })
+          files.push({ path: filePath, additions, deletions, status: 'D' })
         } catch {
-          files.push({ path: filePath, additions: 0, deletions: 0 })
+          files.push({ path: filePath, additions: 0, deletions: 0, status: 'D' })
         }
       }
 
@@ -83,9 +83,9 @@ export function registerGitHandlers(ipcMain) {
           const { additions, deletions } = countDiffLines(diff)
           totalAdditions += additions
           totalDeletions += deletions
-          files.push({ path: rename.to, additions, deletions })
+          files.push({ path: rename.to, additions, deletions, status: 'R' })
         } catch {
-          files.push({ path: rename.to, additions: 0, deletions: 0 })
+          files.push({ path: rename.to, additions: 0, deletions: 0, status: 'R' })
         }
       }
 

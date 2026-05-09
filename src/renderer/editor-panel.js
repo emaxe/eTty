@@ -141,6 +141,7 @@ export class EditorPanel {
     this._cleanupController = new AbortController()
     this._setupListeners()
     this._setupGitStatusSubscription()
+    this._setupFileTreeSubscription()
   }
 
   _syncStore() {
@@ -1408,6 +1409,14 @@ export class EditorPanel {
     })
   }
 
+  _setupFileTreeSubscription() {
+    if (!this._bus) return
+
+    this._rootChangeUnsub = this._bus.on('filetree.rootChanged', () => {
+      this._closeAllTabs()
+    })
+  }
+
   async _fetchAndApplyDiff(filePath) {
     if (!filePath) return
     const rootPath = this._store?.get('git.rootPath')
@@ -1564,6 +1573,10 @@ export class EditorPanel {
     if (this._diffUnsubscribe) {
       this._diffUnsubscribe()
       this._diffUnsubscribe = null
+    }
+    if (this._rootChangeUnsub) {
+      this._rootChangeUnsub()
+      this._rootChangeUnsub = null
     }
 
     for (const [, tab] of this._tabs) {
