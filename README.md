@@ -58,6 +58,23 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Commit, push, discard** — all from the GUI
 - **Per-file stats** — additions and deletions count for each changed file
 
+### Git Diff Highlighting
+
+- **File tree indicators** — new files (green), modified (blue), deleted (red + strikethrough)
+- **Folder dot markers** — nested changes bubble up to parent directories (deleted > modified > new)
+- **Editor gutter bars** — 3px color strips left of line numbers for added (green) and modified (blue) lines
+- **Auto-refresh** — polling every 5 seconds + immediate update on file save (`Cmd+S`)
+- **Repository-aware** — only active when the working directory is inside a git repo
+
+### Project Search
+
+- **Modal search dialog** — `Cmd+F` (macOS) / `Ctrl+F` (Windows/Linux), or double-tap `Shift`
+- **File names + contents** — searches both simultaneously; file-name matches shown first
+- **Search options** — case sensitive, whole word, regex toggles; include/exclude glob patterns
+- **Live preview** — click a result to preview file contents with highlighted matches
+- **Quick open** — double-click or `Enter` opens the file in the editor and closes the dialog
+- **Cancellable** — long searches abort automatically when the query changes
+
 ### AI Agents
 
 - **Status-bar launcher** — one-click launch of detected CLI agents
@@ -88,6 +105,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 
 | Shortcut | Action |
 |----------|--------|
+| `Cmd+F` / `Ctrl+F` | Open project search dialog |
 | `Cmd+E` / `Ctrl+E` | Toggle editor panel |
 | `Cmd+S` / `Ctrl+S` | Save file in editor |
 | `Cmd+Enter` | Send selection from editor to terminal |
@@ -107,6 +125,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 | PTY backend | node-pty 1.0 (native module) |
 | Code editor | CodeMirror 6 with 13 language packages (JS/TS, Python, Go, Rust, HTML, CSS, JSON, YAML, Markdown, Vue, C#) |
 | Git operations | simple-git |
+| UI font | Roboto (global application font) |
 | Packaging | electron-builder |
 | Logging | electron-log |
 | Auto-update | electron-updater (stub) |
@@ -192,16 +211,17 @@ spctl -a -vvv -t install dist/mac-arm64/eTty.app
 │  ┌─────────────────────────────────────────────────────────────────┐  │
 │  │ Core Infrastructure                                              │  │
 │  │  EventBus  │  StateStore  │  DI Container  │  ElectronApiAdapter │  │
+│  │  GitStatusService (polling)                                      │  │
 │  └─────────────────────────────────────────────────────────────────┘  │
 │  ┌────────┐ ┌────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐  │
 │  │Terminal│ │FileTree│ │EditorPanel│ │ GitPanel │ │SettingsPage  │  │
 │  │xterm.js│ │ lazy   │ │CodeMirror │ │  diff    │ │ overlay    │  │
 │  │ tabs   │ │ DnD    │ │ 20+ langs │ │ branches │ │ themes     │  │
 │  └────────┘ └────────┘ └──────────┘ └──────────┘ └──────────────┘  │
-│  ┌────────┐ ┌─────────────────────────────────────────────────────┐  │
-│  │ TabBar │ │              StatusBar                              │  │
-│  │reorder │ │  git ±  │  cwd  │  node  │  AI agents  │ proxy   │  │
-│  └────────┘ └─────────────────────────────────────────────────────┘  │
+│  ┌────────┐ ┌────────────────┐ ┌─────────────────────────────────┐  │
+│  │ TabBar │ │ ProjectSearch  │ │            StatusBar            │  │
+│  │reorder │ │  dialog        │ │  git ±  │  cwd  │  AI agents   │  │
+│  └────────┘ └────────────────┘ └─────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────┘
 ```
 

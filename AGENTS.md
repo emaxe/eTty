@@ -23,6 +23,11 @@ Electron-терминал с файловым деревом, редакторо
 
 Актуальная структура описана в `project-rules.md`.
 
+### Новые сервисы и компоненты (после рефакторинга)
+
+- `GitStatusService` (`renderer/services/git-status-service.js`) — polling git-статуса (5 сек), публикует `git:status-updated`, хранит данные в `StateStore` (`git.isRepo`, `git.rootPath`, `git.fileStatuses`). Используется `FileTree` и `EditorPanel` для подсветки diff.
+- `ProjectSearchDialog` (`renderer/project-search.js`) — модальный диалог поиска по проекту. Открывается по `Cmd+F` / double-tap `Shift`. Работает через IPC `SEARCH_QUERY` / `SEARCH_CANCEL` и адаптер `ElectronApiAdapter`.
+
 ## Правила реализации
 
 Перед написанием кода определи тип изменения и следуй соответствующему чеклисту.

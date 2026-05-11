@@ -10,6 +10,21 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Git diff highlighting** — live visual indicators for git status in the file tree and editor gutter
+  - File tree: new files (green), modified (blue), deleted (red strikethrough); folders show colored dot markers for nested changes
+  - Editor gutter: 3px color bars next to line numbers for added (green) and modified (blue) lines
+  - Auto-refreshes every 5 seconds and on file save (`Cmd+S`); only active inside git repositories
+  - Powered by new `GitStatusService` (renderer) with 5-second polling via existing `git:get-status` IPC channel
+
+- **Project search dialog** — full-text and filename search inside the current working directory
+  - Open with `Cmd+F` / `Ctrl+F` or double-tap `Shift`
+  - Searches file names and file contents simultaneously; name matches shown first
+  - Options: case sensitive, whole word, regex; include/exclude glob patterns
+  - Live preview with highlighted matches; double-click or `Enter` opens file in editor
+  - Cancellable backend search via `AbortController` in `FileManager.searchFiles()`
+
+- **Roboto font** — applied globally across the application for consistent typography
+
 - **Status bar size setting** — three selectable sizes (compact / standard / large) in Settings → Appearance
   - Compact: 22px height, 11px font (current default)
   - Standard: 28px height, 13px font
@@ -27,6 +42,7 @@ All notable changes to this project will be documented in this file.
   - `ResizeObserver` disconnected and debounce timer cleared
   - Global `focusin`, `mousedown`, `blur`, `keydown`, `mousemove`, `mouseup` listeners removed
   - Terminal container `destroy()` called to prevent memory leaks
+- **PTY init protection** — `init()` now wrapped in try/catch to prevent PTY spawn errors from cascading into UI failures (e.g., shell not found, permission denied). Error is logged and the terminal remains in a clean error state instead of freezing the app.
 
 ## [0.1.2]
 
