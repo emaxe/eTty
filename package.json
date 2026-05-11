@@ -28,6 +28,7 @@
     "@codemirror/search": "^6.6.0",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.41.1",
+    "@fontsource/roboto": "^5.2.10",
     "@lezer/highlight": "^1.2.3",
     "@replit/codemirror-lang-csharp": "^6.2.0",
     "@xterm/addon-fit": "^0.10.0",
@@ -64,7 +65,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "hardenedRuntime": true,
