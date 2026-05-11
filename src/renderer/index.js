@@ -372,7 +372,13 @@ async function init() {
     if (settingsPage.isVisible()) return
     const active = tabBar.getActive()
     const cwd = active ? active.rootPath : startCwd
-    const tabData = await createTab(api, cwd)
+    let tabData
+    try {
+      tabData = await createTab(api, cwd)
+    } catch (e) {
+      console.error('[tab.add] Failed to create tab', cwd, e.message)
+      return
+    }
     const tab = tabBar.addTab(tabData)
     tab.isBusy = false
     tab.activeAgentId = null
@@ -771,7 +777,13 @@ async function init() {
     const oldCount = tabBar.tabs.length
     let activeIndex = oldCount
     for (let i = 0; i < savedTabs.length; i++) {
-          const tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId)
+      let tabData
+      try {
+        tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId)
+      } catch (e) {
+        console.error('[restoreTabs] Failed to restore tab', savedTabs[i].rootPath, e.message)
+        continue
+      }
       const tab = tabBar.addTab(tabData)
       tab.isBusy = false
       tab.activeAgentId = null
@@ -824,7 +836,13 @@ async function init() {
       if (shouldRestore) {
         let activeIndex = 0
         for (let i = 0; i < savedTabs.length; i++) {
-      const tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId)
+          let tabData
+          try {
+            tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId)
+          } catch (e) {
+            console.error('[Init] Failed to restore tab', savedTabs[i].rootPath, e.message)
+            continue
+          }
           const tab = tabBar.addTab(tabData)
           tab.isBusy = false
           tab.activeAgentId = null
@@ -860,12 +878,19 @@ async function init() {
   }
 
   if (!restored) {
-    const firstTabData = await createTab(api, startCwd)
-    const firstTab = tabBar.addTab(firstTabData)
-    firstTab.isBusy = false
-    firstTab.activeAgentId = null
-    setupTabHandlers(firstTab)
-    firstTab.fitAddon.fit()
+    let firstTabData
+    try {
+      firstTabData = await createTab(api, startCwd)
+    } catch (e) {
+      console.error('[Init] Failed to create initial tab', startCwd, e.message)
+    }
+    if (firstTabData) {
+      const firstTab = tabBar.addTab(firstTabData)
+      firstTab.isBusy = false
+      firstTab.activeAgentId = null
+      setupTabHandlers(firstTab)
+      firstTab.fitAddon.fit()
+    }
   }
 
   syncStatusBarTerminalState()
