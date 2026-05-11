@@ -2147,7 +2147,7 @@ button svg {
 }
 
 .search-result-item {
-  padding: 7px 14px;
+  padding: 4px 12px;
   cursor: pointer;
   border-left: 2px solid transparent;
 }
@@ -2164,7 +2164,7 @@ button svg {
 .search-result-main {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .search-result-icon {
@@ -2183,15 +2183,15 @@ button svg {
 
 .search-result-meta {
   font-size: 11px;
-  color: var(--muted);
+  color: var(--subtext);
   flex-shrink: 0;
 }
 
 .search-result-path {
   font-size: 11px;
-  color: var(--muted);
-  margin-left: 22px;
-  margin-top: 2px;
+  color: var(--subtext);
+  margin-left: 20px;
+  margin-top: 1px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
