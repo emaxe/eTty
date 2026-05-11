@@ -298,4 +298,158 @@ export class FileManager {
   getRootWatcherPath() {
     return this._rootWatcherPath
   }
+
+  /**
+   * Рекурсивный поиск файлов по имени и содержимому внутри директории.
+   * @param {string} dirPath — абсолютный путь к корневой директории поиска
+   * @param {string} query — поисковый запрос
+   * @param {Object} options — настройки поиска
+   * @returns {Promise<{nameMatches: Array, contentMatches: Array}>}
+   */
+  async searchFiles(dirPath, query, options = {}) {
+    const {
+      caseSensitive = false,
+      wholeWord = false,
+      regex = false,
+      includePatterns = '',
+      excludePatterns = 'node_modules,.git,dist,out,build'
+    } = options
+
+    if (!query || query.trim().length === 0) {
+      return { nameMatches: [], contentMatches: [], totalCount: 0 }
+    }
+
+    const resolvedDir = path.resolve(dirPath)
+    await this.validatePath(resolvedDir)
+
+    const flags = caseSensitive ? '' : 'i'
+    let pattern
+    if (regex) {
+      try {
+        pattern = new RegExp(query, flags)
+      } catch (e) {
+        throw new Error('Invalid regex: ' + e.message)
+      }
+    } else {
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      if (wholeWord) {
+        pattern = new RegExp(`\\b${escaped}\\b`, flags)
+      } else {
+        pattern = new RegExp(escaped, flags)
+      }
+    }
+
+    const includeList = includePatterns.split(',').map(s => s.trim()).filter(Boolean)
+    const excludeList = excludePatterns.split(',').map(s => s.trim()).filter(Boolean)
+
+    const nameMatches = []
+    const contentMatches = []
+    let contentMatchCount = 0
+    const MAX_CONTENT_MATCHES = 500
+    const MAX_FILE_SIZE = 1024 * 1024
+
+    const binaryExts = new Set([
+      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico', '.webp',
+      '.mp3', '.mp4', '.avi', '.mov', '.wav', '.ogg',
+      '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar',
+      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+      '.exe', '.dll', '.so', '.dylib', '.bin',
+      '.ttf', '.otf', '.woff', '.woff2', '.eot',
+      '.sqlite', '.db', '.o', '.a', '.class', '.pyc',
+      '.node', '.wasm'
+    ])
+
+    const isBinaryFile = (fileName) => {
+      const ext = path.extname(fileName).toLowerCase()
+      return binaryExts.has(ext)
+    }
+
+    const matchGlob = (str, globPattern) => {
+      if (globPattern === '*') return true
+      if (!globPattern.includes('*') && !globPattern.includes('?')) {
+        return str === globPattern || path.basename(str) === globPattern
+      }
+      const regexPattern = globPattern
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*/g, '.*')
+        .replace(/\?/g, '.')
+      const re = new RegExp(`^${regexPattern}$`)
+      return re.test(path.basename(str)) || re.test(str)
+    }
+
+    const shouldInclude = (relPath, isDir) => {
+      for (const pat of excludeList) {
+        if (matchGlob(relPath, pat)) return false
+        if (isDir && matchGlob(path.basename(relPath), pat)) return false
+      }
+      if (includeList.length > 0 && !isDir) {
+        let matched = false
+        for (const pat of includeList) {
+          if (matchGlob(relPath, pat)) { matched = true; break }
+        }
+        if (!matched) return false
+      }
+      return true
+    }
+
+    const walk = async (currentDir, relPrefix) => {
+      const entries = await fs.readdir(currentDir, { withFileTypes: true })
+      for (const entry of entries) {
+        const relPath = relPrefix ? path.join(relPrefix, entry.name) : entry.name
+        const fullPath = path.join(currentDir, entry.name)
+
+        if (!shouldInclude(relPath, entry.isDirectory())) continue
+
+        if (entry.isDirectory()) {
+          await walk(fullPath, relPath)
+        } else {
+          // Name match
+          const nameToCheck = caseSensitive ? entry.name : entry.name.toLowerCase()
+          const queryToCheck = caseSensitive ? query : query.toLowerCase()
+          let nameHit = false
+          if (!regex) {
+            nameHit = nameToCheck.includes(queryToCheck)
+          } else {
+            nameHit = pattern.test(entry.name)
+          }
+          if (nameHit) {
+            nameMatches.push({ path: fullPath, relPath, name: entry.name, matchType: 'name' })
+          }
+
+          // Content match
+          if (contentMatchCount < MAX_CONTENT_MATCHES && !isBinaryFile(entry.name)) {
+            try {
+              const stat = await fs.stat(fullPath)
+              if (stat.size <= MAX_FILE_SIZE && stat.size > 0) {
+                const content = await fs.readFile(fullPath, 'utf-8')
+                const lines = content.split('\n')
+                const matchingLines = []
+                for (let i = 0; i < lines.length; i++) {
+                  if (pattern.test(lines[i])) {
+                    matchingLines.push({ line: i + 1, text: lines[i].trim() })
+                    if (matchingLines.length >= 5) break
+                  }
+                }
+                if (matchingLines.length > 0) {
+                  contentMatches.push({
+                    path: fullPath,
+                    relPath,
+                    name: entry.name,
+                    matchType: 'content',
+                    lines: matchingLines
+                  })
+                  contentMatchCount++
+                }
+              }
+            } catch (e) {
+              // Skip unreadable files
+            }
+          }
+        }
+      }
+    }
+
+    await walk(resolvedDir, '')
+    return { nameMatches, contentMatches, totalCount: nameMatches.length + contentMatches.length }
+  }
 }

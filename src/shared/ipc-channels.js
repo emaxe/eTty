@@ -70,4 +70,8 @@ export const IPC_CHANNELS = Object.freeze({
   // App
   APP_HOMEDIR: 'app:homedir',
   APP_OPEN_EXTERNAL: 'app:open-external',
+
+  // Search
+  SEARCH_QUERY: 'search:query',
+  SEARCH_CANCEL: 'search:cancel',
 })

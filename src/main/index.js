@@ -25,6 +25,7 @@ import {
   registerSettingsHandlers,
   registerAgentsHandlers,
   registerGitHandlers,
+  registerSearchHandlers,
 } from './ipc-handlers/index.js'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
@@ -63,6 +64,7 @@ app.whenReady().then(async () => {
   registerSettingsHandlers(ipcMain, { loadSettings, saveSettings })
   registerAgentsHandlers(ipcMain, { agentService })
   registerGitHandlers(ipcMain)
+  registerSearchHandlers(ipcMain, { fileManager })
 
   ipcMain.on(IPC_CHANNELS.TABS_STATE_CHANGED, () => appService.rebuildMenu())
 

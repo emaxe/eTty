@@ -19,6 +19,7 @@ import { SettingsPage } from './settings-page.js'
 import { StatusBar } from './status-bar.js'
 import { GitPanel } from './git-panel.js'
 import { EditorPanel } from './editor-panel.js'
+import { ProjectSearchDialog } from './project-search.js'
 import { Icons } from './icons.js'
 import { TERMINAL_CONFIG } from './core/config/terminal-config.js'
 import { APP_CONFIG } from './core/config/app-config.js'
@@ -190,6 +191,7 @@ async function init() {
   const btnHome = document.getElementById('btn-home')
   const btnRefreshTree = document.getElementById('btn-refresh-tree')
   const btnToggleHidden = document.getElementById('btn-toggle-hidden')
+  const btnSearchProject = document.getElementById('btn-search-project')
   const btnToggleSidebar = document.getElementById('btn-toggle-sidebar')
   const btnSettings = document.getElementById('btn-settings')
   const btnToggleEditor = document.getElementById('btn-toggle-editor')
@@ -417,6 +419,20 @@ async function init() {
     api: r('api'),
   }))
   const gitPanel = container.resolve('gitPanel')
+
+  container.register('projectSearch', (r) => new ProjectSearchDialog({
+    eventBus: r('bus'),
+    api: r('api'),
+    store: r('store'),
+    getActiveCwd: () => container.resolve('tabBar').getActive()?.rootPath || startCwd,
+    onClose: () => focusActiveTerminal(),
+  }))
+  const projectSearch = container.resolve('projectSearch')
+
+  bus.on('search.show', () => {
+    if (settingsPage.isVisible() || gitPanel.isVisible()) return
+    projectSearch.show()
+  })
 
   const launchAgentInActiveTab = (agentId) => {
     const tab = tabBar.getActive()
@@ -906,6 +922,7 @@ async function init() {
   })
 
   // Горячая клавиша Cmd+E / Ctrl+E — toggle панели редактора
+  // Cmd+F / Ctrl+F — открыть поиск по проекту
   function onKeyDown(e) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'e' && !e.shiftKey && !e.altKey) {
       // Не перехватываем, если фокус в CodeMirror (он сам обработает)
@@ -914,8 +931,32 @@ async function init() {
       e.preventDefault()
       appStore.set('ui.editorVisible', !appStore.get('ui.editorVisible'))
     }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f' && !e.shiftKey && !e.altKey) {
+      // Не перехватываем, если фокус в CodeMirror (у CodeMirror свой поиск)
+      if (document.activeElement?.closest('#editor-body')) return
+      if (settingsPage.isVisible() || gitPanel.isVisible()) return
+      e.preventDefault()
+      bus.emit('search.show')
+    }
   }
   document.addEventListener('keydown', onKeyDown)
+
+  // Двойное нажатие Shift — открыть поиск по проекту
+  let lastShiftTime = 0
+  function onShiftKeyDown(e) {
+    if (e.key === 'Shift' && !e.repeat) {
+      const now = Date.now()
+      if (now - lastShiftTime < APP_CONFIG.SEARCH_DOUBLE_SHIFT_TIMEOUT_MS) {
+        if (settingsPage.isVisible() || gitPanel.isVisible() || projectSearch.isVisible()) return
+        e.preventDefault()
+        bus.emit('search.show')
+        lastShiftTime = 0
+      } else {
+        lastShiftTime = now
+      }
+    }
+  }
+  document.addEventListener('keydown', onShiftKeyDown)
 
   btnRefreshTree.innerHTML = Icons.refresh
 
@@ -943,6 +984,12 @@ async function init() {
     btnToggleHidden.classList.toggle('active', showHidden)
     btnToggleHidden.title = showHidden ? 'Скрыть скрытые файлы' : 'Показать скрытые файлы'
     fileTree.setShowHidden(showHidden)
+  })
+
+  btnSearchProject.innerHTML = Icons.search
+  btnSearchProject.addEventListener('click', () => {
+    if (settingsPage.isVisible() || gitPanel.isVisible()) return
+    bus.emit('search.show')
   })
 
   // Кастомный drag тайтлбара — работает даже когда вкладки заполняют всю ширину
@@ -1056,9 +1103,11 @@ async function init() {
     document.removeEventListener('mousedown', onMouseDown)
     window.removeEventListener('blur', onWindowBlur)
     document.removeEventListener('keydown', onKeyDown)
+    document.removeEventListener('keydown', onShiftKeyDown)
     document.removeEventListener('mousemove', onMouseMove)
     document.removeEventListener('mouseup', onMouseUp)
     gitStatusService.destroy()
+    projectSearch.destroy()
     container.destroy()
   }
 

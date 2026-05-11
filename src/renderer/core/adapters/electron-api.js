@@ -81,6 +81,9 @@ export class ElectronApiAdapter {
   get nodeVersion() { return this._api.nodeVersion }
   openExternal(path) { return this._api.appOpenExternal(path) }
 
+  // — Search —
+  searchQuery(dirPath, query, options) { return this._api.searchQuery(dirPath, query, options) }
+
   _on(channel, fn) {
     const unsub = this._api[`on${channel.charAt(0).toUpperCase() + channel.slice(1)}`]?.(fn)
     return unsub || (() => {})
