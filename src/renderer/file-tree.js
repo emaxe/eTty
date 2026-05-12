@@ -188,6 +188,40 @@ export class FileTree {
         e.stopPropagation()
         this._selectAllVisible()
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'c' && !e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (this._selectedPaths.size > 0) {
+          this._clipboard = [...this._selectedPaths]
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'v' && !e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (this._clipboard && this._clipboard.length > 0) {
+          let destDir = this._cwd
+          let container = this._rootContainer
+          let depth = 1
+          if (this._selectedPaths.size === 1) {
+            const path = [...this._selectedPaths][0]
+            const row = this._container.querySelector(`.tree-node-row[data-path="${CSS.escape(path)}"]`)
+            const li = row?.closest('li[data-path]')
+            if (li && li.dataset.isDir === '1') {
+              destDir = path
+              container = li.querySelector(':scope > .tree-children')
+              depth = parseInt(li.dataset.depth, 10) + 1
+            }
+          }
+          this._pasteMany(destDir, container, depth)
+        }
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (this._selectedPaths.size > 0) {
+          this._deletePaths([...this._selectedPaths])
+        }
+      }
       if (e.key === 'z' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
         e.preventDefault()
         e.stopPropagation()
@@ -752,7 +786,9 @@ export class FileTree {
     row.addEventListener('contextmenu', (e) => {
       e.preventDefault()
       e.stopPropagation()
-      this._selectSingle(entry.path, row)
+      if (!this._selectedPaths.has(entry.path)) {
+        this._selectSingle(entry.path, row)
+      }
       if (entry.isDirectory) {
         this._showMenuDir(e.clientX, e.clientY, entry, childrenEl, arrow, depth + 1, row)
       } else {
@@ -1120,12 +1156,18 @@ export class FileTree {
     const rel = entry.path.startsWith(this._cwd + '/')
       ? entry.path.slice(this._cwd.length + 1)
       : entry.path
-    this._contextMenu.show([
+    const isMulti = this._selectedPaths.has(entry.path) && this._selectedPaths.size > 1
+    const targets = isMulti ? [...this._selectedPaths] : [entry.path]
+    const items = [
       { label: 'Новый файл', action: () => this._createInline('file', parentDir, parentContainer, 0) },
       { label: 'Новая папка', action: () => this._createInline('dir', parentDir, parentContainer, 0) },
-      { separator: true },
-      { label: 'Переименовать', action: () => this._renameInline(entry, row) },
-      { label: 'Удалить', action: () => this._deleteEntry(entry, row) },
+      { separator: true }
+    ]
+    if (!isMulti) {
+      items.push({ label: 'Переименовать', action: () => this._renameInline(entry, row) })
+    }
+    items.push(
+      { label: 'Удалить', action: () => this._deletePaths(targets) },
       { separator: true },
       { label: 'Открыть в терминале', disabled: this._isBusy, action: () => {
           const escaped = entry.path.replace(/'/g, "'\\''")
@@ -1139,17 +1181,24 @@ export class FileTree {
         }
       },
       { separator: true },
-      { label: 'Копировать', action: () => { this._clipboard = { path: entry.path } } },
+      { label: 'Копировать', action: () => { this._clipboard = targets } },
       { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(entry.path); this._bus.emit('terminal.focus') } },
       { label: 'Копировать относительный путь', action: () => { navigator.clipboard.writeText(rel); this._bus.emit('terminal.focus') } }
-    ], x, y)
+    )
+    if (this._clipboard && this._clipboard.length > 0) {
+      items.push({ separator: true })
+      items.push({ label: 'Вставить', action: () => this._pasteMany(parentDir, parentContainer, 0) })
+    }
+    this._contextMenu.show(items, x, y)
   }
 
   _showMenuDir(x, y, entry, childrenEl, arrow, childDepth, row) {
     const rel = entry.path.startsWith(this._cwd + '/')
       ? entry.path.slice(this._cwd.length + 1)
       : entry.path
-    this._contextMenu.show([
+    const isMulti = this._selectedPaths.has(entry.path) && this._selectedPaths.size > 1
+    const targets = isMulti ? [...this._selectedPaths] : [entry.path]
+    const items = [
       { label: 'cd в директорию', disabled: this._isBusy, action: () => {
           const escaped = entry.path.replace(/'/g, "'\\''")
           this._bus.emit('filetree.shellCmd', `cd '${escaped}'\r`)
@@ -1163,19 +1212,24 @@ export class FileTree {
       { separator: true },
       { label: 'Новый файл', action: () => this._createInlineInDir('file', entry.path, childrenEl, arrow, childDepth) },
       { label: 'Новая папка', action: () => this._createInlineInDir('dir', entry.path, childrenEl, arrow, childDepth) },
+      { separator: true }
+    ]
+    if (!isMulti) {
+      items.push({ label: 'Переименовать', action: () => this._renameInline(entry, row) })
+    }
+    items.push(
+      { label: 'Удалить', action: () => this._deletePaths(targets) },
       { separator: true },
-      { label: 'Переименовать', action: () => this._renameInline(entry, row) },
-      { label: 'Удалить', action: () => this._deleteEntry(entry, row) },
-      { separator: true },
-      { label: 'Копировать', action: () => { this._clipboard = { path: entry.path } } },
-      { label: 'Вставить', action: () => this._paste(entry.path, childrenEl, childDepth) },
+      { label: 'Копировать', action: () => { this._clipboard = targets } },
+      { label: 'Вставить', disabled: !this._clipboard || this._clipboard.length === 0, action: () => this._pasteMany(entry.path, childrenEl, childDepth) },
       { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(entry.path); this._bus.emit('terminal.focus') } },
       { label: 'Копировать относительный путь', action: () => { navigator.clipboard.writeText(rel); this._bus.emit('terminal.focus') } }
-    ], x, y)
+    )
+    this._contextMenu.show(items, x, y)
   }
 
   _showMenuRoot(x, y) {
-    this._contextMenu.show([
+    const items = [
       { label: 'Новый файл', action: () => this._createInline('file', this._cwd, this._rootContainer, 1) },
       { label: 'Новая папка', action: () => this._createInline('dir', this._cwd, this._rootContainer, 1) },
       { separator: true },
@@ -1185,7 +1239,12 @@ export class FileTree {
       },
       { separator: true },
       { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(this._cwd); this._bus.emit('terminal.focus') } }
-    ], x, y)
+    ]
+    if (this._clipboard && this._clipboard.length > 0) {
+      items.push({ separator: true })
+      items.push({ label: 'Вставить', action: () => this._pasteMany(this._cwd, this._rootContainer, 1) })
+    }
+    this._contextMenu.show(items, x, y)
   }
 
   _showMenuEmpty(x, y, dirPath, container, depth = 0) {
@@ -1198,9 +1257,9 @@ export class FileTree {
         }
       }
     ]
-    if (this._clipboard) {
+    if (this._clipboard && this._clipboard.length > 0) {
       items.push({ separator: true })
-      items.push({ label: 'Вставить', action: () => this._paste(dirPath, container, depth) })
+      items.push({ label: 'Вставить', action: () => this._pasteMany(dirPath, container, depth) })
     }
     this._contextMenu.show(items, x, y)
   }
@@ -1311,15 +1370,21 @@ export class FileTree {
     input.addEventListener('blur', restore)
   }
 
-  async _deleteEntry(entry, row) {
-    const result = await this._api.fsDelete(entry.path)
+  async _deletePaths(paths) {
+    if (paths.length === 0) return
+    const result = await this._api.fsDeleteMany(paths)
     if (result && result.success === false) return
-    row.closest('li').remove()
+    for (const p of paths) {
+      const row = this._container.querySelector(`.tree-node-row[data-path="${CSS.escape(p)}"]`)
+      if (row) row.closest('li')?.remove()
+    }
+    for (const p of paths) this._selectedPaths.delete(p)
+    this._updateSelectionUI()
   }
 
-  async _paste(destDir, container, depth) {
-    if (!this._clipboard) return
-    const result = await this._api.fsCopy(this._clipboard.path, destDir)
+  async _pasteMany(destDir, container, depth) {
+    if (!this._clipboard || this._clipboard.length === 0) return
+    const result = await this._api.fsCopyMany(this._clipboard, destDir)
     if (!result || result.success === false) return
     this._refreshList(container, destDir, depth)
   }

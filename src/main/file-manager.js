@@ -85,6 +85,14 @@ export class FileManager {
     return { success: true }
   }
 
+  async deleteMany(targetPaths) {
+    for (const targetPath of targetPaths) {
+      const resolved = await this.validatePath(targetPath)
+      await fs.rm(resolved, { recursive: true, force: true })
+    }
+    return { success: true }
+  }
+
   async copy(srcPath, destDir) {
     const resolvedSrc = await this.validatePath(srcPath)
     const resolvedDestDir = await this.validatePath(destDir)
@@ -103,6 +111,15 @@ export class FileManager {
     await this.validatePath(destPath)
     await fs.cp(resolvedSrc, destPath, { recursive: true })
     return { newPath: destPath }
+  }
+
+  async copyMany(srcPaths, destDir) {
+    const results = []
+    for (const srcPath of srcPaths) {
+      const result = await this.copy(srcPath, destDir)
+      results.push({ path: srcPath, ...result })
+    }
+    return { results }
   }
 
   async move(srcPaths, destDir) {

@@ -31,7 +31,9 @@ export class ElectronApiAdapter {
   fsCreateDir(path) { return this._api.fsCreateDir(path) }
   fsRename(oldPath, newPath) { return this._api.fsRename(oldPath, newPath) }
   fsDelete(path) { return this._api.fsDelete(path) }
+  fsDeleteMany(paths) { return this._api.fsDeleteMany(paths) }
   fsCopy(src, dest) { return this._api.fsCopy(src, dest) }
+  fsCopyMany(srcPaths, destDir) { return this._api.fsCopyMany(srcPaths, destDir) }
   fsSetRoot(path) { this._api.fsSetRoot(path) }
   fsWatchDir(path) { return this._api.fsWatchDir(path) }
   fsUnwatchDir(path) { return this._api.fsUnwatchDir(path) }

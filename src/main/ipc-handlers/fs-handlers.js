@@ -50,9 +50,32 @@ export function registerFsHandlers(ipcMain, { fileManager }) {
     catch (e) { return { success: false, error: e.message } }
   })
 
+  ipcMain.handle(IPC_CHANNELS.FS_COPY_MANY, async (_, { srcPaths, destDir }) => {
+    try { return await fileManager.copyMany(srcPaths, destDir) }
+    catch (e) { return { success: false, error: e.message } }
+  })
+
   ipcMain.handle(IPC_CHANNELS.FS_MOVE, async (_, { srcPaths, destDir }) => {
     try { return await fileManager.move(srcPaths, destDir) }
     catch (e) { return { success: false, error: e.message } }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FS_DELETE_MANY, async (_, { targetPaths }) => {
+    try {
+      const win = BrowserWindow.getFocusedWindow()
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'warning',
+        buttons: ['Удалить', 'Отмена'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Подтверждение удаления',
+        message: `Удалить ${targetPaths.length} элементов?`
+      })
+      if (response !== 0) return { success: false, error: 'Cancelled' }
+      return await fileManager.deleteMany(targetPaths)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.FS_READ_FILE, async (_, { filePath }) => {
