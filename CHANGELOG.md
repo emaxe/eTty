@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Bulk file operations in file tree** — copy, paste, and delete multiple selected items at once
+  - `Ctrl+C` / `Cmd+C` — copy all selected paths to internal clipboard
+  - `Ctrl+V` / `Cmd+V` — paste copied items into the current or selected directory
+  - `Delete` / `Backspace` — delete all selected items with a confirmation dialog
+  - Context menus updated for multi-select: "Delete" operates on selection, "Rename" hidden when multiple items selected, "Paste" enabled when clipboard is non-empty
+  - New IPC channels: `fs:copy-many`, `fs:delete-many`; renderer `_clipboard` changed from single object to array of paths
+
 ## [0.1.3]
 
 ### Security

@@ -1,5 +1,7 @@
 # eTty
 
+[🇷🇺 Русский](README.ru.md)
+
 Modern terminal emulator built with Electron. Lightweight, fast, and feature-rich.
 
 <p align="center">
@@ -35,6 +37,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Live sync** — filesystem watcher with 500ms debounce
 - **Context menus** — new file/folder, rename, delete, copy, paste, open external, copy relative path
 - **Multi-select** — Ctrl/Cmd+Click, Shift+Click range, Ctrl+A select all
+- **Bulk operations** — copy (`Ctrl+C` / `Cmd+C`), paste (`Ctrl+V` / `Cmd+V`), and delete (`Delete`) on the current selection
 - **Drag-and-drop** — move files/folders within the tree
 - **Undo** — Ctrl+Z to undo last move operation
 - **Resizable** sidebar (150–600px)
