@@ -4,7 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-05-13
+
 ### Added
+
+- **Terminal scroll-to-bottom button** — floating button that appears when the user scrolls up into the terminal history; click to jump back to the latest output
+  - Listens to xterm.js `onScroll` and mouse `wheel` events to detect when the viewport leaves the bottom of the buffer
+  - Circular accent-colored button with shadow, positioned at the bottom-right of the terminal area
+  - Auto-hides when the buffer is scrolled back to the bottom or when a new tab is switched
 
 - **Bulk file operations in file tree** — copy, paste, and delete multiple selected items at once
   - `Ctrl+C` / `Cmd+C` — copy all selected paths to internal clipboard

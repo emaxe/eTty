@@ -1700,6 +1700,34 @@ button svg {
   transform: scale(1.08);
 }
 
+/* Terminal scroll-to-bottom button */
+#terminal-scroll-btn {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 10;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--accent);
+  border: none;
+  border-radius: 50%;
+  color: var(--bg);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  opacity: 0.9;
+  pointer-events: auto;
+}
+#terminal-scroll-btn:hover {
+  filter: brightness(1.15);
+  transform: scale(1.08);
+  opacity: 1;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    Quick Replies Settings
    ═══════════════════════════════════════════════════════════════ */

@@ -16,3 +16,6 @@ release/
 !.agents/skills/
 .github/skills/
 .agents/
+
+# Documentation
+docs/

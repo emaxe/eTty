@@ -20,6 +20,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Command busy indicator** via OSC 133 — navigation buttons reflect shell state
 - **Tab drag-and-drop** — reorder tabs by dragging the grip handle
 - **2,500 lines** scrollback buffer (performance-optimized)
+- **Scroll-to-bottom button** — floating button appears when you scroll up into history; click to jump back to the latest output
 
 ### Command History
 
@@ -95,6 +96,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Focus indicator** — glow, border, top-line, or none
 - **File tree behavior** — collapse children on close, single/double-click to open
 - **Prompt style** — default (from `~/.zshrc`), short, minimal, arrow (for new tabs)
+- **Status bar size** — compact, standard, or large; adjustable in Settings → Appearance
 - **AI agent quick replies** — CRUD editor with per-agent toggles; drag-and-drop reordering
 - **Auto-persisted** to disk with debounced saves
 

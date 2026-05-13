@@ -27,6 +27,7 @@ import { TERMINAL_CONFIG } from './core/config/terminal-config.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 import { TerminalKeyboardHandler } from './features/terminal/terminal-keyboard-handler.js'
 import { TerminalOscHandler } from './features/terminal/terminal-osc-handler.js'
+import { TerminalScrollButton } from './features/terminal/terminal-scroll-button.js'
 import { EventBus } from './core/event-bus.js'
 import { StateStore } from './core/state-store.js'
 import { ElectronApiAdapter } from './core/adapters/electron-api.js'
@@ -317,6 +318,12 @@ async function init() {
 
   tabBar = container.resolve('tabBar')
   window.__tabBar = tabBar
+
+  container.register('terminalScrollButton', (r) => new TerminalScrollButton({
+    eventBus: r('bus'),
+    container: terminalContainerEl,
+  }))
+  container.resolve('terminalScrollButton')
 
   let _isSwitchingTab = false
   bus.on('tab.switch', async ({ tab, prevTab }) => {
