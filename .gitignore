@@ -7,15 +7,16 @@ release/
 .worktrees/
 .skill-hub.local.json
 
-# AI agent directories (skill-hub)
-.claude/
-.cursor/
-.codex/
+# Ignore all hidden directories at root level (AI configs, IDE metadata, etc.)
+.*/
+!.git/
+!.github/
+!.agents/
 .agents/*
 !.agents/rules/
 !.agents/skills/
+
 .github/skills/
-.agents/
 
 # Documentation
 docs/
