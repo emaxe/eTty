@@ -15,11 +15,13 @@ import { APP_CONFIG } from './core/config/app-config.js'
  *   чтобы click-события доходили для double-click обработки.
  */
 export class StatusBar {
-  constructor({ btnEl, cwdEl, nodeEl, onOpen, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [] }, api }) {
+  constructor({ btnEl, cwdEl, nodeEl, onOpen, agentsContainerEl = null, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [] }, api }) {
     this._btnEl = btnEl
     this._cwdEl = cwdEl
     this._nodeEl = nodeEl
     this._onOpen = onOpen
+    this._agentsContainerEl = agentsContainerEl
+    this._agentConfigs = []
     this._agentButtons = agentButtons
     this._onLaunchAgent = onLaunchAgent
     this._onSelectAgent = onSelectAgent
@@ -34,35 +36,19 @@ export class StatusBar {
     this._homeDir = null
     this._agentsById = new Map()
     this._forceDisabled = {}
+    this._customAgentsById = new Map()
     this._activeTabBusy = false
     this._activeAgentId = null
     this._proxy = ''
     this._proxyEnabled = false
+    this._customAgentsCategory = null
     this._cleanupController = new AbortController()
     const signal = this._cleanupController.signal
 
     this._btnEl.addEventListener('click', () => this._onOpen(), { signal })
 
     for (const button of this._agentButtons) {
-      let lastClickTime = 0
-
-      button.addEventListener('click', () => {
-        const now = Date.now()
-        const isDoubleClick = now - lastClickTime < APP_CONFIG.DOUBLE_CLICK_THRESHOLD_MS
-        lastClickTime = now
-
-        // Double-click: если терминал занят и нет активного агента — назначаем
-        if (isDoubleClick && this._activeTabBusy && !this._activeAgentId) {
-          const agentId = button.dataset.agentId
-          if (agentId) this._onSelectAgent?.(agentId)
-          return
-        }
-
-        // Single-click: запуск агента только если терминал свободен
-        if (button.disabled || button.classList.contains('status-agent-busy')) return
-        const agentId = button.dataset.agentId
-        if (agentId) this._onLaunchAgent?.(agentId)
-      }, { signal })
+      this._attachAgentButtonHandler(button, signal)
     }
 
     if (this._proxyToggleEl) {
@@ -121,6 +107,11 @@ export class StatusBar {
     this._poll()
   }
 
+  setAgentConfigs(agents) {
+    this._agentConfigs = Array.isArray(agents) ? agents : []
+    this._regenerateAgentButtons()
+  }
+
   setAgentsStatus(statusPayload) {
     const agents = statusPayload?.agents || []
     this._agentsById = new Map(agents.map(a => [a.id, a]))
@@ -158,9 +149,10 @@ export class StatusBar {
 
       const isActive = this._activeTabBusy && this._activeAgentId === agentId
       const isOtherBusy = this._activeTabBusy && this._activeAgentId && this._activeAgentId !== agentId
+      const notDetected = agentStatus && !agentStatus.detected
 
-      // Скрываем кнопки агентов: неактивные — когда терминал занят, все — когда агент не запущен
-      button.style.display = disabledBySettings ? 'none' : (isOtherBusy ? 'none' : '')
+      // Скрываем кнопки агентов: disabled / not detected / other busy
+      button.style.display = disabledBySettings || notDetected ? 'none' : (isOtherBusy ? 'none' : '')
 
       // Неактивные кнопки при занятой вкладке — busy class; активная — disabled + подсветка
       const isBusyState = this._activeTabBusy && !isActive
@@ -204,6 +196,51 @@ export class StatusBar {
       })
       this._agentCommandsPanelEl.appendChild(btn)
     }
+  }
+
+  _attachAgentButtonHandler(button, signal) {
+    let lastClickTime = 0
+    button.addEventListener('click', () => {
+      const now = Date.now()
+      const isDoubleClick = now - lastClickTime < APP_CONFIG.DOUBLE_CLICK_THRESHOLD_MS
+      lastClickTime = now
+      const agentId = button.dataset.agentId
+      if (!agentId) return
+
+      // Double-click: если терминал занят и нет активного агента — назначаем
+      if (isDoubleClick && this._activeTabBusy && !this._activeAgentId) {
+        this._onSelectAgent?.(agentId)
+        return
+      }
+
+      // Single-click: запуск агента только если терминал свободен
+      if (button.disabled || button.classList.contains('status-agent-busy')) return
+      this._onLaunchAgent?.(agentId)
+    }, { signal })
+  }
+
+  _regenerateAgentButtons() {
+    const container = this._agentsContainerEl
+    if (!container) return
+    // Remove existing agent buttons, but keep agent-commands-panel
+    const existing = container.querySelectorAll('.status-agent-btn')
+    for (const btn of existing) btn.remove()
+
+    const panel = container.querySelector('#agent-commands-panel')
+
+    for (const agent of this._agentConfigs) {
+      const btn = document.createElement('button')
+      btn.className = 'status-bar-btn status-agent-btn'
+      btn.dataset.agentId = agent.id
+      btn.title = `Запустить ${agent.label}`
+      btn.textContent = agent.label
+      this._attachAgentButtonHandler(btn, this._cleanupController.signal)
+      container.insertBefore(btn, panel)
+    }
+
+    // Update internal button list
+    this._agentButtons = Array.from(container.querySelectorAll('.status-agent-btn'))
+    this._updateAgentButtons()
   }
 
   _updateProxyButton() {

@@ -124,12 +124,12 @@ export class AgentService {
     return this._cache
   }
 
-  async refresh() {
+  async refresh(customAgents = []) {
     // Инвалидируем кэш PATH, чтобы подхватить свежие установки
     this._shellPathResolver.invalidate()
     const resolvedPath = await this._shellPathResolver.resolve()
 
-    const agents = await Promise.all(
+    const builtInAgents = await Promise.all(
       SUPPORTED_AGENTS.map(async (agent) => {
         const result = await detectAgent(agent, resolvedPath)
         return {
@@ -141,6 +141,22 @@ export class AgentService {
       })
     )
 
+    const customAgentResults = await Promise.all(
+      (customAgents || []).map(async (agent) => {
+        let detected = true
+        if (agent.checkCommand) {
+          detected = await commandExists(agent.checkCommand, resolvedPath)
+        }
+        return {
+          id: agent.id,
+          label: agent.label,
+          launchCommand: agent.launchCommand,
+          detected
+        }
+      })
+    )
+
+    const agents = [...builtInAgents, ...customAgentResults]
     this._cache = { checkedAt: Date.now(), agents }
     return this._cache
   }

@@ -60,7 +60,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   settingsLoad: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_LOAD),
   settingsSave: (settings) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SAVE, settings),
   agentsGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.AGENTS_GET_STATUS),
-  agentsRefresh: () => ipcRenderer.invoke(IPC_CHANNELS.AGENTS_REFRESH),
+  agentsRefresh: (customAgents) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS_REFRESH, customAgents),
   onAgentsSettingsUpdated: (cb) => onIPC(IPC_CHANNELS.AGENTS_SETTINGS_UPDATED, (_, data) => cb(data)),
   gitGetRoot: (rootPath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_ROOT, rootPath),
   gitGetStatus: (rootPath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_STATUS, rootPath),

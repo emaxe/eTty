@@ -213,20 +213,24 @@ async function init() {
     eventBus: r('bus'),
     store: r('store'),
   }))
-  const agentCommands = {
-    claude: 'claude\n',
-    codex: 'codex\n',
-    copilot: 'gh copilot\n',
-    agent: 'agent\n',
-    opencode: 'opencode\n'
-  }
+  const agentCommands = new Map()
 
   const applyAgentCommands = (statusPayload) => {
     const agents = statusPayload?.agents || []
     for (const agent of agents) {
       if (agent?.id && agent?.launchCommand) {
-        agentCommands[agent.id] = `${agent.launchCommand}\n`
+        agentCommands.set(agent.id, `${agent.launchCommand}\n`)
       }
+    }
+  }
+
+  const refreshAgents = async () => {
+    try {
+      const result = await api.agentsRefresh(config.agents?.custom)
+      applyAgentCommands(result)
+      return result
+    } catch {
+      return null
     }
   }
 
@@ -453,7 +457,7 @@ async function init() {
     const tab = tabBar.getActive()
     if (!tab || tab.isBusy) return
 
-    const command = buildAgentCommand(agentCommands[agentId])
+    const command = buildAgentCommand(agentCommands.get(agentId))
     if (!command) return
 
     tab.activeAgentId = agentId
@@ -481,7 +485,7 @@ async function init() {
     cwdEl: document.getElementById('status-cwd'),
     nodeEl: document.getElementById('status-node'),
     onOpen: () => appStore.set('ui.gitPanelVisible', true),
-    agentButtons: [...document.querySelectorAll('.status-agent-btn')],
+    agentsContainerEl: document.getElementById('status-agents'),
     onLaunchAgent: launchAgentInActiveTab,
     onSelectAgent: selectAgentAsActive,
     agentCommandsPanelEl: document.getElementById('agent-commands-panel'),
@@ -502,9 +506,9 @@ async function init() {
   }))
   const statusBar = container.resolve('statusBar')
 
-  const agentsStatus = await api.agentsGetStatus().catch(() => ({ agents: [] }))
-  applyAgentCommands(agentsStatus)
-  statusBar.setAgentsStatus(agentsStatus)
+  const agentResult = await refreshAgents()
+  if (agentResult) statusBar.setAgentsStatus(agentResult)
+  statusBar.setAgentConfigs(config.agents?.custom || [])
   statusBar.setForceDisabled(config.agents?.forceDisabled || {})
   statusBar.setProxyConfig({ proxy: config.agents.proxy || '', enabled: config.agents.proxyEnabled })
 
@@ -611,6 +615,12 @@ async function init() {
       fileTree.setFileOpenMode(value)
     }
     if (key === 'agents.forceDisabled') statusBar.setForceDisabled(value)
+    if (key === 'agents.custom') {
+      if (!config.agents) config.agents = {}
+      config.agents.custom = value
+      statusBar.setAgentConfigs(value || [])
+      refreshAgents()
+    }
     if (key === 'agents.proxy') {
       config.agents.proxy = value
       statusBar.setProxyConfig({ proxy: config.agents.proxy, enabled: config.agents.proxyEnabled })

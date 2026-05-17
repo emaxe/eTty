@@ -71,7 +71,7 @@ export class ElectronApiAdapter {
 
   // — Agents —
   agentsGetStatus() { return this._api.agentsGetStatus() }
-  agentsRefresh() { return this._api.agentsRefresh() }
+  agentsRefresh(customAgents) { return this._api.agentsRefresh(customAgents) }
   onAgentsSettingsUpdated(fn) { return this._on('agentsSettingsUpdated', fn) }
 
   // — History —

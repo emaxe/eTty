@@ -51,7 +51,7 @@ export class SettingsPage {
 
   async _loadAgentStatus() {
     try {
-      const result = await this._api.agentsRefresh()
+      const result = await this._api.agentsRefresh(this._config?.agents?.custom)
       this._agentStatusById = new Map((result?.agents || []).map(agent => [agent.id, agent]))
     } catch {
       this._agentStatusById = new Map()
@@ -68,6 +68,9 @@ export class SettingsPage {
       if (typeof this._config.agents.forceDisabled[agent.id] !== 'boolean') {
         this._config.agents.forceDisabled[agent.id] = false
       }
+    }
+    if (!Array.isArray(this._config.agents.custom)) {
+      this._config.agents.custom = []
     }
   }
 
@@ -190,6 +193,8 @@ export class SettingsPage {
     this._agentsCategory = this._buildCategory('ИИ-агенты', this._buildAgentRows())
     body.appendChild(this._agentsCategory)
 
+    body.appendChild(this._buildCustomAgentsCategory())
+
     this._quickRepliesCategory = this._buildQuickRepliesCategory()
     body.appendChild(this._quickRepliesCategory)
 
@@ -260,9 +265,260 @@ export class SettingsPage {
     this._agentsCategory = next
   }
 
+  _buildCustomAgentsCategory() {
+    const category = document.createElement('div')
+    category.className = 'settings-category'
+
+    const title = document.createElement('div')
+    title.className = 'settings-category-title'
+    title.textContent = 'Кастомные ИИ-агенты'
+    category.appendChild(title)
+
+    const list = document.createElement('div')
+    list.className = 'settings-custom-agents-list'
+
+    const items = this._config.agents?.custom || []
+    for (let i = 0; i < items.length; i++) {
+      list.appendChild(this._buildCustomAgentRow(items[i], i, list))
+    }
+
+    // DnD
+    list.addEventListener('dragover', (e) => {
+      e.preventDefault()
+      const dragging = list.querySelector('.settings-custom-agent-row.dragging')
+      if (!dragging) return
+      const after = this._getDragAfterElement(list, e.clientY, '.settings-custom-agent-row:not(.dragging)')
+      if (after) list.insertBefore(dragging, after)
+      else list.appendChild(dragging)
+    })
+    list.addEventListener('drop', (e) => {
+      e.preventDefault()
+      const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'), 10)
+      if (Number.isNaN(draggedIndex)) return
+      const rows = [...list.querySelectorAll('.settings-custom-agent-row')]
+      const newIndex = rows.findIndex(r => r.dataset.index === String(draggedIndex))
+      if (newIndex !== -1 && newIndex !== draggedIndex) {
+        const items = this._config.agents?.custom || []
+        const [moved] = items.splice(draggedIndex, 1)
+        items.splice(newIndex, 0, moved)
+        this._saveCustomAgents()
+      }
+      for (const r of rows) r.classList.remove('dragging')
+    })
+
+    const addBtn = document.createElement('button')
+    addBtn.className = 'settings-custom-agent-add-btn'
+    addBtn.textContent = '+ Добавить агента'
+    addBtn.addEventListener('click', () => this._openCustomAgentDialog(-1, list))
+    category.appendChild(addBtn)
+    category.appendChild(list)
+
+    this._customAgentsCategory = category
+    return category
+  }
+
+  _buildCustomAgentRow(item, index, list) {
+    const row = document.createElement('div')
+    row.className = 'settings-custom-agent-row'
+    row.draggable = true
+    row.dataset.index = String(index)
+
+    const grip = document.createElement('div')
+    grip.className = 'settings-custom-agent-grip'
+    grip.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="4" r="1.5"/><circle cx="11" cy="4" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="12" r="1.5"/></svg>'
+
+    const info = document.createElement('div')
+    info.className = 'settings-custom-agent-info'
+
+    const name = document.createElement('div')
+    name.className = 'settings-custom-agent-name'
+    name.textContent = item.label || '(без названия)'
+
+    const cmd = document.createElement('div')
+    cmd.className = 'settings-custom-agent-command'
+    cmd.textContent = item.launchCommand || ''
+
+    info.appendChild(name)
+    info.appendChild(cmd)
+
+    const toggle = this._createToggle(!!item.enabled, (val) => {
+      const items = this._config.agents?.custom || []
+      if (items[index]) {
+        items[index].enabled = val
+        this._saveCustomAgents()
+      }
+    })
+
+    row.appendChild(grip)
+    row.appendChild(info)
+    row.appendChild(toggle)
+
+    row.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', String(index))
+      row.classList.add('dragging')
+    })
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging')
+    })
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('label')) return
+      this._openCustomAgentDialog(index, list)
+    })
+
+    return row
+  }
+
+  _openCustomAgentDialog(index, list) {
+    const items = this._config.agents?.custom || []
+    const item = index >= 0 ? items[index] : { id: crypto.randomUUID(), label: '', launchCommand: '', checkCommand: '', enabled: true }
+
+    const overlay = document.createElement('div')
+    overlay.className = 'settings-dialog-overlay'
+
+    const dialog = document.createElement('div')
+    dialog.className = 'settings-dialog'
+
+    const header = document.createElement('div')
+    header.className = 'settings-dialog-header'
+    header.textContent = index >= 0 ? 'Редактировать агента' : 'Новый ИИ-агент'
+    dialog.appendChild(header)
+
+    const body = document.createElement('div')
+    body.className = 'settings-dialog-body'
+
+    const labelRow = document.createElement('div')
+    labelRow.className = 'settings-dialog-row'
+    const labelLabel = document.createElement('label')
+    labelLabel.textContent = 'Название'
+    const labelInput = document.createElement('input')
+    labelInput.type = 'text'
+    labelInput.className = 'settings-input'
+    labelInput.value = item.label || ''
+    labelInput.placeholder = 'Например: MyAgent'
+    labelRow.appendChild(labelLabel)
+    labelRow.appendChild(labelInput)
+    body.appendChild(labelRow)
+
+    const launchRow = document.createElement('div')
+    launchRow.className = 'settings-dialog-row'
+    const launchLabel = document.createElement('label')
+    launchLabel.textContent = 'Команда запуска'
+    const launchInput = document.createElement('input')
+    launchInput.type = 'text'
+    launchInput.className = 'settings-input'
+    launchInput.value = item.launchCommand || ''
+    launchInput.placeholder = 'Например: myagent'
+    launchRow.appendChild(launchLabel)
+    launchRow.appendChild(launchInput)
+    body.appendChild(launchRow)
+
+    const checkRow = document.createElement('div')
+    checkRow.className = 'settings-dialog-row'
+    const checkLabel = document.createElement('label')
+    checkLabel.textContent = 'Команда отслеживания (опционально)'
+    const checkInput = document.createElement('input')
+    checkInput.type = 'text'
+    checkInput.className = 'settings-input'
+    checkInput.value = item.checkCommand || ''
+    checkInput.placeholder = 'Например: myagent — оставьте пустым для авто-доступности'
+    checkRow.appendChild(checkLabel)
+    checkRow.appendChild(checkInput)
+    body.appendChild(checkRow)
+
+    const enabledRow = document.createElement('div')
+    enabledRow.className = 'settings-dialog-row'
+    const enabledLabel = document.createElement('label')
+    enabledLabel.textContent = 'Включён'
+    const enabledToggle = this._createToggle(!!item.enabled, () => {})
+    enabledRow.appendChild(enabledLabel)
+    enabledRow.appendChild(enabledToggle)
+    body.appendChild(enabledRow)
+
+    const footer = document.createElement('div')
+    footer.className = 'settings-dialog-footer'
+
+    const deleteBtn = document.createElement('button')
+    deleteBtn.className = 'settings-dialog-btn-delete'
+    deleteBtn.textContent = 'Удалить'
+    deleteBtn.style.visibility = index >= 0 ? '' : 'hidden'
+    deleteBtn.addEventListener('click', () => {
+      if (index >= 0) {
+        items.splice(index, 1)
+        this._saveCustomAgents()
+      }
+      overlay.remove()
+    })
+
+    const cancelBtn = document.createElement('button')
+    cancelBtn.className = 'settings-dialog-btn-secondary'
+    cancelBtn.textContent = 'Отмена'
+    cancelBtn.addEventListener('click', () => overlay.remove())
+
+    const saveBtn = document.createElement('button')
+    saveBtn.className = 'settings-dialog-btn-primary'
+    saveBtn.textContent = 'Сохранить'
+    saveBtn.addEventListener('click', () => {
+      const newItem = {
+        id: item.id,
+        label: labelInput.value.trim(),
+        launchCommand: launchInput.value.trim(),
+        checkCommand: checkInput.value.trim(),
+        enabled: enabledToggle.querySelector('input').checked
+      }
+      if (index >= 0) {
+        items[index] = newItem
+      } else {
+        items.push(newItem)
+      }
+      this._saveCustomAgents()
+      overlay.remove()
+    })
+
+    footer.appendChild(deleteBtn)
+    footer.appendChild(cancelBtn)
+    footer.appendChild(saveBtn)
+
+    dialog.appendChild(body)
+    dialog.appendChild(footer)
+    overlay.appendChild(dialog)
+    document.body.appendChild(overlay)
+
+    setTimeout(() => labelInput.focus(), 0)
+  }
+
+  _saveCustomAgents() {
+    const value = [...(this._config.agents?.custom || [])]
+    this._bus.emit('settings.changed', { key: 'agents.custom', value })
+    this._scheduleSave()
+    this._rerenderCustomAgentsCategory()
+  }
+
+  _rerenderCustomAgentsCategory() {
+    if (!this._customAgentsCategory) return
+    const next = this._buildCustomAgentsCategory()
+    this._customAgentsCategory.replaceWith(next)
+    this._customAgentsCategory = next
+  }
+
   _ensureQuickRepliesSettings() {
     if (!this._config.quickReplies) this._config.quickReplies = { items: [] }
     if (!Array.isArray(this._config.quickReplies.items)) this._config.quickReplies.items = []
+  }
+
+  _findAgentById(id) {
+    const builtIn = SUPPORTED_AGENTS.find(a => a.id === id)
+    if (builtIn) return builtIn
+    const custom = (this._config?.agents?.custom || []).find(a => a.id === id)
+    return custom ? { id: custom.id, label: custom.label } : null
+  }
+
+  _getAllAgentToggles() {
+    const customAgents = (this._config?.agents?.custom || []).filter(a => a.enabled)
+    const result = SUPPORTED_AGENTS.map(a => ({ id: a.id, label: a.label }))
+    for (const ca of customAgents) {
+      result.push({ id: ca.id, label: ca.label })
+    }
+    return result
   }
 
   _buildQuickRepliesCategory() {
@@ -353,8 +609,9 @@ export class SettingsPage {
     return category
   }
 
-  _getDragAfterElement(container, y) {
-    const draggableElements = [...container.querySelectorAll('.settings-quick-reply-compact-row:not(.dragging)')]
+  _getDragAfterElement(container, y, selector) {
+    const sel = selector || '.settings-quick-reply-compact-row:not(.dragging)'
+    const draggableElements = [...container.querySelectorAll(sel)]
     return draggableElements.reduce((closest, child) => {
       const box = child.getBoundingClientRect()
       const offset = y - box.top - box.height / 2
@@ -389,7 +646,7 @@ export class SettingsPage {
     agents.className = 'settings-quick-reply-agents-text'
     if (item.agents && item.agents.length > 0) {
       const agentLabels = item.agents.map(id => {
-        const agent = SUPPORTED_AGENTS.find(a => a.id === id)
+        const agent = this._findAgentById(id)
         return agent ? agent.label : id
       })
       agents.textContent = agentLabels.join(', ')
@@ -480,7 +737,7 @@ export class SettingsPage {
     const agentsGrid = document.createElement('div')
     agentsGrid.className = 'settings-dialog-agents-grid'
     const agentToggles = []
-    for (const agent of SUPPORTED_AGENTS) {
+    for (const agent of this._getAllAgentToggles()) {
       const isChecked = (item.agents || []).includes(agent.id)
       const agentRow = document.createElement('div')
       agentRow.className = 'settings-dialog-agent-row'

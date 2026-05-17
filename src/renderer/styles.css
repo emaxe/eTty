@@ -1841,6 +1841,78 @@ button svg {
   background: var(--hover);
 }
 
+/* Custom agents list */
+.settings-custom-agents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-custom-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 150ms;
+}
+
+.settings-custom-agent-row:hover {
+  background: var(--hover);
+}
+
+.settings-custom-agent-row.dragging {
+  opacity: 0.4;
+}
+
+.settings-custom-agent-grip {
+  cursor: grab;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.settings-custom-agent-grip:active {
+  cursor: grabbing;
+}
+
+.settings-custom-agent-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-custom-agent-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.settings-custom-agent-command {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: monospace;
+  margin-top: 2px;
+}
+
+.settings-custom-agent-add-btn {
+  margin-top: 8px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.settings-custom-agent-add-btn:hover {
+  opacity: 0.85;
+}
+
 .settings-btn-add {
   margin-top: 8px;
   background: var(--accent);

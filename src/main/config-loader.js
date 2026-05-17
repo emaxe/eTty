@@ -30,6 +30,7 @@ export function getConfigDefaults() {
         agent: false,
         opencode: false
       },
+      custom: [],
       lastDetected: {},
       proxy: '',
       proxyEnabled: false
