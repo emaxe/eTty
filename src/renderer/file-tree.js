@@ -234,7 +234,7 @@ export class FileTree {
     if (!this._store) return
 
     this._unsubGitStatus = this._store.subscribe((state, path) => {
-      if (path === 'git.fileStatuses' || path === 'git.isRepo') {
+      if (path === 'git.fileStatuses' || path === 'git.isRepo' || path === 'git.ignoredPaths' || path === 'git.ignoredTracked') {
         this._applyGitStatuses()
       }
     })
@@ -246,11 +246,25 @@ export class FileTree {
     const isRepo = this._store.get('git.isRepo')
     const rootPath = this._store.get('git.rootPath')
     const fileStatuses = this._store.get('git.fileStatuses') || {}
+    const ignoredTracked = this._store.get('git.ignoredTracked') || new Set()
+    const ignoredPaths = this._store.get('git.ignoredPaths') || []
 
-    // Убрать все git-классы с файлов
+    const isPathIgnored = (relPath) => {
+      if (!ignoredPaths.length) return false
+      for (const ip of ignoredPaths) {
+        if (ip === relPath) return true
+        if (ip.endsWith('/')) {
+          const ipDir = ip.slice(0, -1)
+          if (relPath === ipDir || relPath.startsWith(ip)) return true
+        } else if (relPath.startsWith(ip + '/')) return true
+      }
+      return false
+    }
+
+    // Убрать все git-классы с файлов и папок
     const allFileRows = this._container.querySelectorAll('.tree-node-row[data-path]')
     for (const row of allFileRows) {
-      row.classList.remove('git-status-new', 'git-status-modified', 'git-status-deleted')
+      row.classList.remove('git-status-new', 'git-status-modified', 'git-status-deleted', 'git-status-ignored')
     }
 
     // Убрать все git-dot с папок
@@ -272,9 +286,17 @@ export class FileTree {
       }
 
       const status = fileStatuses[relPath]
+      const row = li.querySelector(':scope > .tree-node-row')
+      if (!row) continue
+
       if (status) {
-        const row = li.querySelector(':scope > .tree-node-row')
-        if (row) row.classList.add(`git-status-${status}`)
+        if (ignoredTracked.has(relPath)) {
+          row.classList.add('git-status-ignored')
+        } else {
+          row.classList.add(`git-status-${status}`)
+        }
+      } else if (isPathIgnored(relPath)) {
+        row.classList.add('git-status-ignored')
       }
     }
 
@@ -290,11 +312,25 @@ export class FileTree {
         if (dirRelPath.startsWith('/')) dirRelPath = dirRelPath.slice(1)
       }
 
-      // Найти наихудший статус среди дочерних файлов
+      const dirRow = li.querySelector(':scope > .tree-node-row')
+      const nameEl = dirRow?.querySelector('.tree-name')
+      if (!nameEl) continue
+
+      // Сама директория в gitignore — серый, дочерние не проверяем
+      if (isPathIgnored(dirRelPath)) {
+        const dot = document.createElement('span')
+        dot.className = 'git-dot git-dot-ignored'
+        nameEl.appendChild(dot)
+        dirRow.classList.add('git-status-ignored')
+        continue
+      }
+
+      // Найти наихудший статус среди дочерних файлов (исключая ignored)
       const statusPriority = { deleted: 3, modified: 2, new: 1 }
       let worstStatus = null
       for (const [relPath, status] of Object.entries(fileStatuses)) {
         if (relPath.startsWith(dirRelPath + '/') || dirRelPath === '') {
+          if (isPathIgnored(relPath) || ignoredTracked.has(relPath)) continue
           if ((statusPriority[status] || 0) > (statusPriority[worstStatus] || 0)) {
             worstStatus = status
           }
@@ -304,9 +340,12 @@ export class FileTree {
       if (worstStatus) {
         const dot = document.createElement('span')
         dot.className = `git-dot git-dot-${worstStatus}`
-        const dirRow = li.querySelector(':scope > .tree-node-row')
-        const nameEl = dirRow?.querySelector('.tree-name')
-        if (nameEl) nameEl.appendChild(dot)
+        nameEl.appendChild(dot)
+      } else if (ignoredPaths.some(ip => ip.startsWith(dirRelPath + '/'))) {
+        const dot = document.createElement('span')
+        dot.className = 'git-dot git-dot-ignored'
+        nameEl.appendChild(dot)
+        dirRow.classList.add('git-status-ignored')
       }
     }
   }

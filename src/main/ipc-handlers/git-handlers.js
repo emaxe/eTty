@@ -41,6 +41,34 @@ export function registerGitHandlers(ipcMain) {
         git.branch()
       ])
 
+      const trackedPaths = [
+        ...status.modified,
+        ...status.deleted,
+        ...status.created,
+        ...status.renamed.map(r => r.to),
+      ]
+
+      let ignoredTracked = []
+      try {
+        if (trackedPaths.length > 0 && trackedPaths.length <= 500) {
+          const raw = await git.raw(['check-ignore', '--no-index', ...trackedPaths])
+          ignoredTracked = raw.split('\n').filter(Boolean)
+        }
+      } catch {
+        ignoredTracked = []
+      }
+
+      let ignoredPaths = []
+      try {
+        const porcelain = await git.raw(['status', '--porcelain', '--ignored=matching'])
+        ignoredPaths = porcelain
+          .split('\n')
+          .filter(line => line.startsWith('!! '))
+          .map(line => line.slice(3).trim())
+      } catch {
+        ignoredPaths = []
+      }
+
       const files = []
       let totalAdditions = 0
       let totalDeletions = 0
@@ -55,16 +83,18 @@ export function registerGitHandlers(ipcMain) {
 
       for (const filePath of status.modified) {
         const stats = headNumstatMap.get(filePath) || { additions: 0, deletions: 0 }
+        const isIgnored = ignoredTracked.includes(filePath)
         totalAdditions += stats.additions
         totalDeletions += stats.deletions
-        files.push({ path: filePath, additions: stats.additions, deletions: stats.deletions, status: 'M' })
+        files.push({ path: filePath, additions: stats.additions, deletions: stats.deletions, status: 'M', isIgnored })
       }
 
       for (const filePath of status.deleted) {
         const stats = headNumstatMap.get(filePath) || { additions: 0, deletions: 0 }
+        const isIgnored = ignoredTracked.includes(filePath)
         totalAdditions += stats.additions
         totalDeletions += stats.deletions
-        files.push({ path: filePath, additions: stats.additions, deletions: stats.deletions, status: 'D' })
+        files.push({ path: filePath, additions: stats.additions, deletions: stats.deletions, status: 'D', isIgnored })
       }
 
       // Renamed files are rare; keep per-file accuracy
@@ -78,9 +108,10 @@ export function registerGitHandlers(ipcMain) {
         } catch {
           // ignore
         }
+        const isIgnored = ignoredTracked.includes(rename.to)
         totalAdditions += stats.additions
         totalDeletions += stats.deletions
-        files.push({ path: rename.to, additions: stats.additions, deletions: stats.deletions, status: 'R' })
+        files.push({ path: rename.to, additions: stats.additions, deletions: stats.deletions, status: 'R', isIgnored })
       }
 
       // 2. Staged new files — single diff --numstat --cached
@@ -92,9 +123,10 @@ export function registerGitHandlers(ipcMain) {
 
       for (const filePath of status.created) {
         const stats = stagedNumstatMap.get(filePath) || { additions: 0, deletions: 0 }
+        const isIgnored = ignoredTracked.includes(filePath)
         totalAdditions += stats.additions
         totalDeletions += stats.deletions
-        files.push({ path: filePath, additions: stats.additions, deletions: stats.deletions, status: 'A' })
+        files.push({ path: filePath, additions: stats.additions, deletions: stats.deletions, status: 'A', isIgnored })
       }
 
       // 3. Untracked files — stream-count lines, capped by size/count to avoid OOM/hang
@@ -146,6 +178,12 @@ export function registerGitHandlers(ipcMain) {
         // no upstream tracking
       }
 
+      const stableIgnoredSort = (a, b) => {
+        if (a.isIgnored === b.isIgnored) return 0
+        return a.isIgnored ? 1 : -1
+      }
+      files.sort(stableIgnoredSort)
+
       return {
         branch: branch.current,
         ahead,
@@ -153,6 +191,8 @@ export function registerGitHandlers(ipcMain) {
         files,
         totalAdditions,
         totalDeletions,
+        ignoredTracked,
+        ignoredPaths,
       }
     } catch {
       return { notARepo: true }

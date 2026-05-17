@@ -223,9 +223,15 @@ export class GitPanel {
     fileList.innerHTML = '';
     this._expandedFile = null;
 
-    files.forEach((file) => {
+    const sorted = [...files].sort((a, b) => {
+      if (a.isIgnored === b.isIgnored) return 0
+      return a.isIgnored ? 1 : -1
+    })
+
+    sorted.forEach((file) => {
       const row = document.createElement('div');
       row.className = 'git-file-row';
+      if (file.isIgnored) row.classList.add('git-file-row-ignored');
       row.dataset.filePath = file.path;
 
       const arrow = document.createElement('span');

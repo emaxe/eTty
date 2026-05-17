@@ -123,6 +123,8 @@ async function init() {
       isRepo: false,
       rootPath: null,
       fileStatuses: {},
+      ignoredTracked: new Set(),
+      ignoredPaths: [],
     }
   })
 

@@ -217,6 +217,8 @@ docs/                        — спецификации, планы, чекл�
 electron-builder делает это автоматически через `"npmRebuild": true` в секции `"build"` package.json.
 `electron-rebuild` в `postinstall` — для dev-режима, не трогать.
 
+**Troubleshooting:** терминал не открывается (сессия PTY не создаётся) — пересобрать `node-pty` вручную: `npx electron-rebuild`.
+
 ### Конфиг electron-builder
 
 Весь конфиг — в `package.json`, секция `"build"`. Отдельный yml не используется.

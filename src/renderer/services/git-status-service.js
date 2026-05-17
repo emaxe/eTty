@@ -64,7 +64,8 @@ export class GitStatusService {
     if (!this._rootPath || !this._store.get('git.isRepo')) return
 
     const pollPath = this._rootPath
-    const result = await this._api.gitGetStatus(this._rootPath)
+    const repoRoot = this._store.get('git.rootPath')
+    const result = await this._api.gitGetStatus(repoRoot || this._rootPath)
 
     // Guard: discard stale result if rootPath changed while awaiting
     if (this._rootPath !== pollPath) return
@@ -94,7 +95,9 @@ export class GitStatusService {
     this._store.set('git.branch', result.branch || 'HEAD')
     this._store.set('git.totalAdditions', result.totalAdditions || 0)
     this._store.set('git.totalDeletions', result.totalDeletions || 0)
-    this._bus.emit('git.status-updated', { rootPath: this._rootPath, fileStatuses })
+    this._store.set('git.ignoredTracked', new Set(result.ignoredTracked || []))
+    this._store.set('git.ignoredPaths', result.ignoredPaths || [])
+    this._bus.emit('git.status-updated', { rootPath: this._rootPath, fileStatuses, ignoredPaths: result.ignoredPaths || [] })
   }
 
   /**
