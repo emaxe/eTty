@@ -807,12 +807,17 @@ html, body {
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text);
-  font-family: inherit;
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
   padding: 4px 8px;
   border-radius: 4px;
   outline: none;
   min-width: 260px;
+}
+
+.settings-input::placeholder {
+  color: var(--muted);
+  opacity: 1;
 }
 
 .settings-input:hover {
@@ -1949,7 +1954,7 @@ button svg {
   max-width: 420px;
   width: 100%;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  font-family: inherit;
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .settings-dialog-header {
@@ -1972,9 +1977,11 @@ button svg {
 }
 
 .settings-dialog-field label,
+.settings-dialog-row label,
 .settings-dialog-label {
   font-size: 12px;
-  color: var(--subtext);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .settings-dialog-row {

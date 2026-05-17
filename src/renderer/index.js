@@ -17,7 +17,7 @@ import './components/base/button/button.css'
 import { FileTree } from './file-tree.js'
 import { TabBar } from './tab-bar.js'
 import { THEMES } from './themes.js'
-import { SettingsPage } from './settings-page.js'
+import { SettingsPage, SUPPORTED_AGENTS } from './settings-page.js'
 import { StatusBar } from './status-bar.js'
 import { GitPanel } from './git-panel.js'
 import { EditorPanel } from './editor-panel.js'
@@ -508,7 +508,10 @@ async function init() {
 
   const agentResult = await refreshAgents()
   if (agentResult) statusBar.setAgentsStatus(agentResult)
-  statusBar.setAgentConfigs(config.agents?.custom || [])
+  statusBar.setAgentConfigs([
+    ...SUPPORTED_AGENTS.map(a => ({ id: a.id, label: a.label })),
+    ...(config.agents?.custom || [])
+  ])
   statusBar.setForceDisabled(config.agents?.forceDisabled || {})
   statusBar.setProxyConfig({ proxy: config.agents.proxy || '', enabled: config.agents.proxyEnabled })
 
@@ -618,7 +621,10 @@ async function init() {
     if (key === 'agents.custom') {
       if (!config.agents) config.agents = {}
       config.agents.custom = value
-      statusBar.setAgentConfigs(value || [])
+      statusBar.setAgentConfigs([
+        ...SUPPORTED_AGENTS.map(a => ({ id: a.id, label: a.label })),
+        ...(value || [])
+      ])
       refreshAgents()
     }
     if (key === 'agents.proxy') {

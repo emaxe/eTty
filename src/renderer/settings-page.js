@@ -1,4 +1,4 @@
-const SUPPORTED_AGENTS = [
+export const SUPPORTED_AGENTS = [
   { id: 'claude', label: 'Claude Code' },
   { id: 'codex', label: 'Codex' },
   { id: 'copilot', label: 'Copilot' },

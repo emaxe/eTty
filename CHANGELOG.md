@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Agent edit dialog label contrast** — labels in the custom agent edit dialog now use `var(--text)` for proper contrast on both light and dark themes. Previously labels were rendered in a low-contrast gray that was hard to read.
+
 ### Changed
 
 - **Git diff highlighting performance overhaul** — switched from per-file `git diff` + line-count parsing to bulk `git diff --numstat` for tracked and staged files
