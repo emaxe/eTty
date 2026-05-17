@@ -1,92 +1,136 @@
 import simpleGit from 'simple-git'
 import fs from 'fs/promises'
+import { createReadStream } from 'fs'
 import path from 'path'
 import { IPC_CHANNELS } from '../../shared/ipc-channels.js'
-import { countDiffLines } from '../git-service.js'
+
+const MAX_UNTRACKED_SIZE = 50 * 1024 * 1024 // 50 MB
+const MAX_UNTRACKED_COUNT = 200
 
 /**
  * @param {Electron.IpcMain} ipcMain
  */
 export function registerGitHandlers(ipcMain) {
+  /**
+   * Parse `git diff --numstat` output into a Map(path => { additions, deletions }).
+   * Binary files appear as `-\t-\tpath`.
+   */
+  function parseNumstat(output) {
+    const map = new Map()
+    for (const line of (output || '').split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      const parts = trimmed.split('\t')
+      if (parts.length < 3) continue
+      const additions = parts[0] === '-' ? 0 : (parseInt(parts[0], 10) || 0)
+      const deletions = parts[1] === '-' ? 0 : (parseInt(parts[1], 10) || 0)
+      const filePath = parts.slice(2).join('\t')
+      map.set(filePath, { additions, deletions })
+    }
+    return map
+  }
+
   ipcMain.handle(IPC_CHANNELS.GIT_GET_STATUS, async (_event, rootPath) => {
     try {
       const git = simpleGit(rootPath)
       const isRepo = await git.checkIsRepo()
-      console.log('[git-panel] get-status rootPath:', rootPath, 'isRepo:', isRepo)
       if (!isRepo) return { notARepo: true }
 
       const [status, branch] = await Promise.all([
         git.status(),
         git.branch()
       ])
-      console.log('[git-panel] status modified:', status.modified, 'not_added:', status.not_added, 'deleted:', status.deleted)
 
       const files = []
       let totalAdditions = 0
       let totalDeletions = 0
 
-      // Modified tracked files
-      for (const filePath of status.modified) {
-        try {
-          const diff = await git.diff(['HEAD', '--', filePath])
-          const { additions, deletions } = countDiffLines(diff)
-          totalAdditions += additions
-          totalDeletions += deletions
-          files.push({ path: filePath, additions, deletions, status: 'M' })
-        } catch {
-          files.push({ path: filePath, additions: 0, deletions: 0, status: 'M' })
-        }
+      // 1. Tracked changes against HEAD (modified, deleted, renamed) — single diff --numstat HEAD
+      const hasTrackedChanges = status.modified.length > 0 || status.deleted.length > 0 || status.renamed.length > 0
+      let headNumstatMap = new Map()
+      if (hasTrackedChanges) {
+        const headNumstat = await git.raw(['diff', '--numstat', 'HEAD'])
+        headNumstatMap = parseNumstat(headNumstat)
       }
 
-      // Untracked files: all lines are additions
-      for (const filePath of status.not_added) {
+      for (const filePath of status.modified) {
+        const stats = headNumstatMap.get(filePath) || { additions: 0, deletions: 0 }
+        totalAdditions += stats.additions
+        totalDeletions += stats.deletions
+        files.push({ path: filePath, additions: stats.additions, deletions: stats.deletions, status: 'M' })
+      }
+
+      for (const filePath of status.deleted) {
+        const stats = headNumstatMap.get(filePath) || { additions: 0, deletions: 0 }
+        totalAdditions += stats.additions
+        totalDeletions += stats.deletions
+        files.push({ path: filePath, additions: stats.additions, deletions: stats.deletions, status: 'D' })
+      }
+
+      // Renamed files are rare; keep per-file accuracy
+      for (const rename of status.renamed) {
+        let stats = { additions: 0, deletions: 0 }
         try {
-          const content = await fs.readFile(path.join(rootPath, filePath), 'utf-8')
-          const additions = content ? content.replace(/\n$/, '').split('\n').length : 0
+          const diff = await git.raw(['diff', '--numstat', 'HEAD', '--', rename.to])
+          const parsed = parseNumstat(diff)
+          const found = parsed.get(rename.to)
+          if (found) stats = found
+        } catch {
+          // ignore
+        }
+        totalAdditions += stats.additions
+        totalDeletions += stats.deletions
+        files.push({ path: rename.to, additions: stats.additions, deletions: stats.deletions, status: 'R' })
+      }
+
+      // 2. Staged new files — single diff --numstat --cached
+      let stagedNumstatMap = new Map()
+      if (status.created.length > 0) {
+        const stagedNumstat = await git.raw(['diff', '--numstat', '--cached'])
+        stagedNumstatMap = parseNumstat(stagedNumstat)
+      }
+
+      for (const filePath of status.created) {
+        const stats = stagedNumstatMap.get(filePath) || { additions: 0, deletions: 0 }
+        totalAdditions += stats.additions
+        totalDeletions += stats.deletions
+        files.push({ path: filePath, additions: stats.additions, deletions: stats.deletions, status: 'A' })
+      }
+
+      // 3. Untracked files — stream-count lines, capped by size/count to avoid OOM/hang
+      async function countLines(filePath) {
+        return new Promise((resolve, reject) => {
+          let count = 0
+          const stream = createReadStream(filePath)
+          stream.on('data', (chunk) => {
+            for (let i = 0; i < chunk.length; i++) {
+              if (chunk[i] === 0x0A) count++
+            }
+          })
+          stream.on('end', () => resolve(count))
+          stream.on('error', reject)
+        })
+      }
+
+      const untrackedFiles = status.not_added.slice(0, MAX_UNTRACKED_COUNT)
+      await Promise.all(untrackedFiles.map(async (filePath) => {
+        const fullPath = path.join(rootPath, filePath)
+        try {
+          const st = await fs.stat(fullPath)
+          if (!st.isFile() || st.size > MAX_UNTRACKED_SIZE) {
+            files.push({ path: filePath, additions: 0, deletions: 0, untracked: true, status: '?' })
+            return
+          }
+          const additions = await countLines(fullPath)
           totalAdditions += additions
           files.push({ path: filePath, additions, deletions: 0, untracked: true, status: '?' })
         } catch {
           files.push({ path: filePath, additions: 0, deletions: 0, untracked: true, status: '?' })
         }
-      }
+      }))
 
-      // Staged new files
-      for (const filePath of status.created) {
-        try {
-          const diff = await git.diff(['--cached', filePath])
-          const { additions, deletions } = countDiffLines(diff)
-          totalAdditions += additions
-          totalDeletions += deletions
-          files.push({ path: filePath, additions, deletions, status: 'A' })
-        } catch {
-          files.push({ path: filePath, additions: 0, deletions: 0, status: 'A' })
-        }
-      }
-
-      // Deleted files
-      for (const filePath of status.deleted) {
-        try {
-          const diff = await git.diff(['HEAD', '--', filePath])
-          const { additions, deletions } = countDiffLines(diff)
-          totalAdditions += additions
-          totalDeletions += deletions
-          files.push({ path: filePath, additions, deletions, status: 'D' })
-        } catch {
-          files.push({ path: filePath, additions: 0, deletions: 0, status: 'D' })
-        }
-      }
-
-      // Renamed files
-      for (const rename of status.renamed) {
-        try {
-          const diff = await git.diff([rename.to])
-          const { additions, deletions } = countDiffLines(diff)
-          totalAdditions += additions
-          totalDeletions += deletions
-          files.push({ path: rename.to, additions, deletions, status: 'R' })
-        } catch {
-          files.push({ path: rename.to, additions: 0, deletions: 0, status: 'R' })
-        }
+      if (status.not_added.length > MAX_UNTRACKED_COUNT) {
+        console.warn(`[git-panel] Truncated untracked files: ${status.not_added.length} > ${MAX_UNTRACKED_COUNT}`)
       }
 
       let ahead = 0

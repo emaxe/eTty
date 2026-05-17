@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Git diff highlighting performance overhaul** — switched from per-file `git diff` + line-count parsing to bulk `git diff --numstat` for tracked and staged files
+  - Untracked files now use streaming line-count with hard caps: 50 MB per file, 200 files max, preventing OOM/hang on large repos
+  - Added stale-poll guard in `GitStatusService`: discards results if `rootPath` changes while awaiting IPC response
+  - `StateStore` now keeps `git.branch`, `git.totalAdditions`, and `git.totalDeletions` for status-bar consumption without re-polling
+
 ## [0.1.4] - 2026-05-13
 
 ### Added

@@ -34,6 +34,9 @@ export class GitStatusService {
       this._store.set('git.isRepo', false)
       this._store.set('git.rootPath', null)
       this._store.set('git.fileStatuses', {})
+      this._store.set('git.branch', null)
+      this._store.set('git.totalAdditions', 0)
+      this._store.set('git.totalDeletions', 0)
       return
     }
 
@@ -48,6 +51,9 @@ export class GitStatusService {
       await this._poll()
     } else {
       this._store.set('git.fileStatuses', {})
+      this._store.set('git.branch', null)
+      this._store.set('git.totalAdditions', 0)
+      this._store.set('git.totalDeletions', 0)
     }
   }
 
@@ -57,12 +63,19 @@ export class GitStatusService {
   async _poll() {
     if (!this._rootPath || !this._store.get('git.isRepo')) return
 
+    const pollPath = this._rootPath
     const result = await this._api.gitGetStatus(this._rootPath)
+
+    // Guard: discard stale result if rootPath changed while awaiting
+    if (this._rootPath !== pollPath) return
 
     if (result.error || result.notARepo) {
       this._store.set('git.isRepo', false)
       this._store.set('git.rootPath', null)
       this._store.set('git.fileStatuses', {})
+      this._store.set('git.branch', null)
+      this._store.set('git.totalAdditions', 0)
+      this._store.set('git.totalDeletions', 0)
       return
     }
 
@@ -78,6 +91,9 @@ export class GitStatusService {
     }
 
     this._store.set('git.fileStatuses', fileStatuses)
+    this._store.set('git.branch', result.branch || 'HEAD')
+    this._store.set('git.totalAdditions', result.totalAdditions || 0)
+    this._store.set('git.totalDeletions', result.totalDeletions || 0)
     this._bus.emit('git.status-updated', { rootPath: this._rootPath, fileStatuses })
   }
 

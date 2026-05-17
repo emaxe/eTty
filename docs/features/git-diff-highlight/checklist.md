@@ -12,6 +12,12 @@
 - [x] Задача #5: FileTree — подписка на git.fileStatuses, CSS-классы + dot-индикаторы папок
 - [x] Задача #6: EditorPanel — diff gutter extension, парсинг diff, подписка на git:status-updated
 
+## Оптимизации (после первой реализации)
+- [x] Заменить построчный парсинг diff на `git diff --numstat` для tracked/staged файлов
+- [x] Streaming подсчёт строк для untracked файлов с лимитами (50 MB / 200 файлов)
+- [x] Guard на stale poll results при смене rootPath
+- [x] Сохранять branch, totalAdditions, totalDeletions в StateStore
+
 ## Финализация
 - [x] Все проверки пройдены
 - [x] Код закоммичен
