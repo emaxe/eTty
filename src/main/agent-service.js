@@ -42,6 +42,20 @@ export const SUPPORTED_AGENTS = [
     launchCommand: 'opencode',
     checkType: 'command',
     command: 'opencode'
+  },
+  {
+    id: 'qwen',
+    label: 'Qwen',
+    launchCommand: 'qwen',
+    checkType: 'command',
+    command: 'qwen'
+  },
+  {
+    id: 'agento',
+    label: 'Agento',
+    launchCommand: 'agento',
+    checkType: 'command',
+    command: 'agento'
   }
 ]
 
