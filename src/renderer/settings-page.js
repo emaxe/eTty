@@ -253,9 +253,27 @@ export class SettingsPage {
     )
     toggle.title = 'Включить/выключить агента'
 
+    const modeLabel = document.createElement('span')
+    modeLabel.className = 'settings-agent-switch-label'
+    modeLabel.textContent = 'Shift+Enter'
+
+    const modeSelect = this._createSelect([
+      { key: 'kitty', name: 'Kitty протокол' },
+      { key: 'newline', name: 'Перенос строки' },
+      { key: 'ctrl-j', name: 'Ctrl+J' }
+    ], this._config.agents.keyboardModes?.[agentId] || 'kitty', (val) => {
+      if (!this._config.agents.keyboardModes) this._config.agents.keyboardModes = {}
+      this._config.agents.keyboardModes[agentId] = val
+      this._bus.emit('settings.changed', { key: 'agents.keyboardModes', value: { ...this._config.agents.keyboardModes } })
+      this._scheduleSave()
+    })
+    modeSelect.title = 'Режим работы Shift+Enter для этого агента'
+
     wrapper.appendChild(badge)
     wrapper.appendChild(stateLabel)
     wrapper.appendChild(toggle)
+    wrapper.appendChild(modeLabel)
+    wrapper.appendChild(modeSelect)
     return wrapper
   }
 
@@ -349,9 +367,27 @@ export class SettingsPage {
       }
     })
 
+    const modeLabel = document.createElement('span')
+    modeLabel.className = 'settings-agent-switch-label'
+    modeLabel.textContent = 'Shift+Enter'
+
+    const modeSelect = this._createSelect([
+      { key: 'kitty', name: 'Kitty протокол' },
+      { key: 'newline', name: 'Перенос строки' },
+      { key: 'ctrl-j', name: 'Ctrl+J' }
+    ], this._config.agents.keyboardModes?.[item.id] || 'kitty', (val) => {
+      if (!this._config.agents.keyboardModes) this._config.agents.keyboardModes = {}
+      this._config.agents.keyboardModes[item.id] = val
+      this._bus.emit('settings.changed', { key: 'agents.keyboardModes', value: { ...this._config.agents.keyboardModes } })
+      this._scheduleSave()
+    })
+    modeSelect.title = 'Режим работы Shift+Enter для этого агента'
+
     row.appendChild(grip)
     row.appendChild(info)
     row.appendChild(toggle)
+    row.appendChild(modeLabel)
+    row.appendChild(modeSelect)
 
     row.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('text/plain', String(index))
@@ -434,6 +470,19 @@ export class SettingsPage {
     enabledRow.appendChild(enabledToggle)
     body.appendChild(enabledRow)
 
+    const modeRow = document.createElement('div')
+    modeRow.className = 'settings-dialog-row'
+    const modeLabel = document.createElement('label')
+    modeLabel.textContent = 'Режим Shift+Enter'
+    const modeSelect = this._createSelect([
+      { key: 'kitty', name: 'Kitty протокол' },
+      { key: 'newline', name: 'Перенос строки' },
+      { key: 'ctrl-j', name: 'Ctrl+J' }
+    ], this._config.agents.keyboardModes?.[item.id] || 'kitty', () => {})
+    modeRow.appendChild(modeLabel)
+    modeRow.appendChild(modeSelect)
+    body.appendChild(modeRow)
+
     const footer = document.createElement('div')
     footer.className = 'settings-dialog-footer'
 
@@ -470,7 +519,11 @@ export class SettingsPage {
       } else {
         items.push(newItem)
       }
+      if (!this._config.agents.keyboardModes) this._config.agents.keyboardModes = {}
+      this._config.agents.keyboardModes[item.id] = modeSelect.value
       this._saveCustomAgents()
+      this._bus.emit('settings.changed', { key: 'agents.keyboardModes', value: { ...this._config.agents.keyboardModes } })
+      this._scheduleSave()
       overlay.remove()
     })
 

@@ -104,6 +104,17 @@ async function init() {
   if (!config.agents) config.agents = {}
   if (typeof config.agents.proxy !== 'string') config.agents.proxy = ''
   if (typeof config.agents.proxyEnabled !== 'boolean') config.agents.proxyEnabled = false
+  if (!config.agents.keyboardModes || typeof config.agents.keyboardModes !== 'object') config.agents.keyboardModes = {}
+  for (const agent of SUPPORTED_AGENTS) {
+    if (!(agent.id in config.agents.keyboardModes)) {
+      config.agents.keyboardModes[agent.id] = 'kitty'
+    }
+  }
+  for (const agent of config.agents?.custom || []) {
+    if (agent?.id && !(agent.id in config.agents.keyboardModes)) {
+      config.agents.keyboardModes[agent.id] = 'kitty'
+    }
+  }
 
   // Initialize store with current settings
   appStore = new StateStore({
@@ -633,6 +644,10 @@ async function init() {
       config.agents.proxy = value
       statusBar.setProxyConfig({ proxy: config.agents.proxy, enabled: config.agents.proxyEnabled })
     }
+    if (key === 'agents.keyboardModes') {
+      if (!config.agents) config.agents = {}
+      config.agents.keyboardModes = value
+    }
     if (key === 'quickReplies.items') {
       if (!config.quickReplies) config.quickReplies = { items: [] }
       config.quickReplies.items = value
@@ -714,9 +729,15 @@ async function init() {
 
   function setupTabHandlers(tab) {
     // Keyboard handling
-    const keyboardHandler = new TerminalKeyboardHandler({
-      write: (pid, data) => api.ptyWrite(pid, data),
-    })
+    const keyboardHandler = new TerminalKeyboardHandler(
+      { write: (pid, data) => api.ptyWrite(pid, data) },
+      (pid) => {
+        const t = tabBar.tabs.find(t => t.pid === pid)
+        const agentId = t?.activeAgentId
+        if (!agentId) return 'kitty'
+        return config.agents?.keyboardModes?.[agentId] || 'kitty'
+      }
+    )
     keyboardHandler.attach(tab.term, tab.pid)
 
     // Terminal → PTY data

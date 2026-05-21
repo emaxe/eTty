@@ -9,9 +9,11 @@ const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform)
 export class TerminalKeyboardHandler {
   /**
    * @param {Object} ptyApi — object with `write(pid, data)` method
+   * @param {Function} getKeyboardMode — (pid) => 'kitty' | 'newline' | 'ctrl-j'
    */
-  constructor(ptyApi) {
+  constructor(ptyApi, getKeyboardMode) {
     this._ptyApi = ptyApi
+    this._getKeyboardMode = getKeyboardMode || (() => 'kitty')
     this._term = null
   }
 
@@ -39,7 +41,16 @@ export class TerminalKeyboardHandler {
     // Kitty keyboard protocol: intercept modifier+Enter before xterm.js
     if (event.key === 'Enter') {
       if (event.shiftKey && !event.ctrlKey) {
-        if (event.type === 'keydown') this._ptyApi.write(pid, '\x1b[13;2u')
+        if (event.type === 'keydown') {
+          const mode = this._getKeyboardMode(pid)
+          if (mode === 'newline') {
+            this._ptyApi.write(pid, '\n')
+          } else if (mode === 'ctrl-j') {
+            this._ptyApi.write(pid, '\x0A')
+          } else {
+            this._ptyApi.write(pid, '\x1b[13;2u')
+          }
+        }
         return false
       }
       if (event.ctrlKey && !event.shiftKey) {

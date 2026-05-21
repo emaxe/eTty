@@ -30,6 +30,13 @@ export function getConfigDefaults() {
         agent: false,
         opencode: false
       },
+      keyboardModes: {
+        claude: 'kitty',
+        codex: 'kitty',
+        copilot: 'kitty',
+        agent: 'kitty',
+        opencode: 'kitty'
+      },
       custom: [],
       lastDetected: {},
       proxy: '',
@@ -48,6 +55,12 @@ export function getConfigDefaults() {
   }
 }
 
+const DYNAMIC_KEY_PATHS = [
+  'agents.keyboardModes',
+  'agents.forceDisabled',
+  'agents.lastDetected'
+]
+
 function deepMergeConfig(defaults, saved, warnings, path = '') {
   if (saved === null || saved === undefined) return defaults
   if (typeof saved !== 'object' || Array.isArray(saved)) {
@@ -56,6 +69,7 @@ function deepMergeConfig(defaults, saved, warnings, path = '') {
   }
 
   const result = { ...defaults }
+  const allowUnknownKeys = DYNAMIC_KEY_PATHS.includes(path)
 
   for (const key of Object.keys(defaults)) {
     const currentPath = path ? `${path}.${key}` : key
@@ -104,10 +118,14 @@ function deepMergeConfig(defaults, saved, warnings, path = '') {
     }
   }
 
-  // Warn about unknown keys at the current level
+  // Handle unknown keys: preserve for dynamic-key objects, warn otherwise
   for (const key of Object.keys(saved)) {
     if (!(key in defaults)) {
-      warnings.push(`Unknown field ignored: ${path ? `${path}.${key}` : key}`)
+      if (allowUnknownKeys) {
+        result[key] = saved[key]
+      } else {
+        warnings.push(`Unknown field ignored: ${path ? `${path}.${key}` : key}`)
+      }
     }
   }
 

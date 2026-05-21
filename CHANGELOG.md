@@ -4,9 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Per-agent Shift+Enter mode** — configure how Shift+Enter behaves for each AI agent individually:
+  - **Kitty protocol** (default) — sends `\x1b[13;2u` sequence
+  - **Newline** — sends plain `\n` character
+  - **Ctrl+J** — sends `\x0A` (ASCII LF, equivalent to Ctrl+J)
+  - Useful for agents that don't understand Kitty keyboard sequences (e.g., Qwen)
+  - Supports both built-in and custom agents; settings persisted to config
+
 ### Fixed
 
 - **Agent edit dialog label contrast** — labels in the custom agent edit dialog now use `var(--text)` for proper contrast on both light and dark themes. Previously labels were rendered in a low-contrast gray that was hard to read.
+- **Custom agent keyboardModes not persisted** — `config-loader.js` now preserves unknown keys in `agents.keyboardModes`, `agents.forceDisabled`, and `agents.lastDetected` objects. Previously custom agent IDs (UUIDs) were treated as invalid fields and discarded during config merge.
+- **Keyboard mode changes not applied without restart** — `index.js` now subscribes to `settings.changed` for `agents.keyboardModes` and immediately updates the in-memory config.
 
 ### Changed
 
