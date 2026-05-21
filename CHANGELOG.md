@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **New AI agents: Qwen and Agento** — added to the built-in supported agents list with auto-detection and default Shift+Enter mode set to Ctrl+J (instead of Kitty protocol)
+
 - **Per-agent Shift+Enter mode** — configure how Shift+Enter behaves for each AI agent individually:
   - **Kitty protocol** (default) — sends `\x1b[13;2u` sequence
   - **Newline** — sends plain `\n` character
@@ -16,6 +18,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - **Agent edit dialog label contrast** — labels in the custom agent edit dialog now use `var(--text)` for proper contrast on both light and dark themes. Previously labels were rendered in a low-contrast gray that was hard to read.
+- **Agent launch buttons not working for Qwen and Agento** — added `qwen` and `agento` to `SUPPORTED_AGENTS` in `agent-service.js`, enabling auto-detection, `launchCommand` resolution, and button functionality.
 - **Custom agent keyboardModes not persisted** — `config-loader.js` now preserves unknown keys in `agents.keyboardModes`, `agents.forceDisabled`, and `agents.lastDetected` objects. Previously custom agent IDs (UUIDs) were treated as invalid fields and discarded during config merge.
 - **Keyboard mode changes not applied without restart** — `index.js` now subscribes to `settings.changed` for `agents.keyboardModes` and immediately updates the in-memory config.
 

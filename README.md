@@ -82,14 +82,14 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 ### AI Agents
 
 - **Status-bar launcher** — one-click launch of detected CLI agents
-- **Auto-detection** — Claude, Codex, Copilot, Cursor Agent, OpenCode
+- **Auto-detection** — Claude, Codex, Copilot, Cursor Agent, OpenCode, Qwen, Agento
 - **Busy lock** — agent buttons disabled while terminal is busy
 - **Active agent highlight** — launched agent button glows while running
 - **Force-disable** — toggle agents on/off in Settings
 - **Proxy support** — configure HTTP proxy for all agent commands
 - **Customizable quick replies** — define agent-specific quick commands (e.g., `/clear`, `Ok`, `Продолжай`) via Settings; drag-and-drop to reorder
 - **Double-click to select active agent** — when the terminal is busy but the active agent wasn't auto-detected (e.g., launched manually or via another app), double-click any agent button in the status bar to manually assign it as active. This enables that agent's quick-reply buttons.
-- **Per-agent Shift+Enter mode** — configure how Shift+Enter behaves for each AI agent (Kitty protocol, newline, or Ctrl+J). Useful for agents that don't understand Kitty sequences (e.g., Qwen).
+- **Per-agent Shift+Enter mode** — configure how Shift+Enter behaves for each AI agent (Kitty protocol, newline, or Ctrl+J). Qwen and Agento default to Ctrl+J mode; others default to Kitty protocol.
 
 ### Settings
 
