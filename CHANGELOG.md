@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-05-21
+
 ### Added
 
 - **New AI agents: Qwen and Agento** — added to the built-in supported agents list with auto-detection and default Shift+Enter mode set to Ctrl+J (instead of Kitty protocol)
