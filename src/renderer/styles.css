@@ -2092,6 +2092,7 @@ button svg {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  font-family: 'Roboto', sans-serif;
 }
 
 /* Header */

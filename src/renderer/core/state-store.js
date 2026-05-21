@@ -68,6 +68,26 @@ export class StateStore {
   }
 
   /**
+   * Apply multiple updates atomically. Notifies subscribers once
+   * with path === null to signal a batch change.
+   * @param {Array<{path: string, value: *}>} updates
+   */
+  batch(updates) {
+    let newState = this._state
+    for (const { path, value } of updates) {
+      newState = setPath(newState, path, value)
+    }
+    this._state = Object.freeze(newState)
+    for (const fn of this._listeners) {
+      try {
+        fn(this._state, null)
+      } catch (e) {
+        console.error('[StateStore] Error in batch subscriber:', e)
+      }
+    }
+  }
+
+  /**
    * Subscribe to all state changes.
    * @param {Function} fn — (state, changedPath) => void
    * @returns {Function} unsubscribe

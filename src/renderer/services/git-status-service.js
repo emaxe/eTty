@@ -71,12 +71,14 @@ export class GitStatusService {
     if (this._rootPath !== pollPath) return
 
     if (result.error || result.notARepo) {
-      this._store.set('git.isRepo', false)
-      this._store.set('git.rootPath', null)
-      this._store.set('git.fileStatuses', {})
-      this._store.set('git.branch', null)
-      this._store.set('git.totalAdditions', 0)
-      this._store.set('git.totalDeletions', 0)
+      this._store.batch([
+        { path: 'git.isRepo', value: false },
+        { path: 'git.rootPath', value: null },
+        { path: 'git.fileStatuses', value: {} },
+        { path: 'git.branch', value: null },
+        { path: 'git.totalAdditions', value: 0 },
+        { path: 'git.totalDeletions', value: 0 },
+      ])
       return
     }
 
@@ -91,12 +93,14 @@ export class GitStatusService {
       }
     }
 
-    this._store.set('git.fileStatuses', fileStatuses)
-    this._store.set('git.branch', result.branch || 'HEAD')
-    this._store.set('git.totalAdditions', result.totalAdditions || 0)
-    this._store.set('git.totalDeletions', result.totalDeletions || 0)
-    this._store.set('git.ignoredTracked', new Set(result.ignoredTracked || []))
-    this._store.set('git.ignoredPaths', result.ignoredPaths || [])
+    this._store.batch([
+      { path: 'git.fileStatuses', value: fileStatuses },
+      { path: 'git.branch', value: result.branch || 'HEAD' },
+      { path: 'git.totalAdditions', value: result.totalAdditions || 0 },
+      { path: 'git.totalDeletions', value: result.totalDeletions || 0 },
+      { path: 'git.ignoredTracked', value: new Set(result.ignoredTracked || []) },
+      { path: 'git.ignoredPaths', value: result.ignoredPaths || [] },
+    ])
     this._bus.emit('git.status-updated', { rootPath: this._rootPath, fileStatuses, ignoredPaths: result.ignoredPaths || [] })
   }
 

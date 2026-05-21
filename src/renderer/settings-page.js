@@ -193,7 +193,8 @@ export class SettingsPage {
     this._agentsCategory = this._buildCategory('ИИ-агенты', this._buildAgentRows())
     body.appendChild(this._agentsCategory)
 
-    body.appendChild(this._buildCustomAgentsCategory())
+    this._customAgentsCategory = this._buildCustomAgentsCategory()
+    body.appendChild(this._customAgentsCategory)
 
     this._quickRepliesCategory = this._buildQuickRepliesCategory()
     body.appendChild(this._quickRepliesCategory)
@@ -313,7 +314,6 @@ export class SettingsPage {
     category.appendChild(addBtn)
     category.appendChild(list)
 
-    this._customAgentsCategory = category
     return category
   }
 

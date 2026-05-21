@@ -234,7 +234,7 @@ export class FileTree {
     if (!this._store) return
 
     this._unsubGitStatus = this._store.subscribe((state, path) => {
-      if (path === 'git.fileStatuses' || path === 'git.isRepo' || path === 'git.ignoredPaths' || path === 'git.ignoredTracked') {
+      if (path === null || path === 'git.fileStatuses' || path === 'git.isRepo' || path === 'git.rootPath' || path === 'git.ignoredPaths' || path === 'git.ignoredTracked') {
         this._applyGitStatuses()
       }
     })
@@ -245,18 +245,21 @@ export class FileTree {
 
     const isRepo = this._store.get('git.isRepo')
     const rootPath = this._store.get('git.rootPath')
+    const rootPathLower = rootPath ? rootPath.toLowerCase() : null
     const fileStatuses = this._store.get('git.fileStatuses') || {}
     const ignoredTracked = this._store.get('git.ignoredTracked') || new Set()
     const ignoredPaths = this._store.get('git.ignoredPaths') || []
 
     const isPathIgnored = (relPath) => {
       if (!ignoredPaths.length) return false
+      const relPathLower = relPath.toLowerCase()
       for (const ip of ignoredPaths) {
-        if (ip === relPath) return true
-        if (ip.endsWith('/')) {
-          const ipDir = ip.slice(0, -1)
-          if (relPath === ipDir || relPath.startsWith(ip)) return true
-        } else if (relPath.startsWith(ip + '/')) return true
+        const ipLower = ip.toLowerCase()
+        if (ipLower === relPathLower) return true
+        if (ipLower.endsWith('/')) {
+          const ipDir = ipLower.slice(0, -1)
+          if (relPathLower === ipDir || relPathLower.startsWith(ipLower)) return true
+        } else if (relPathLower.startsWith(ipLower + '/')) return true
       }
       return false
     }
@@ -265,6 +268,12 @@ export class FileTree {
     const allFileRows = this._container.querySelectorAll('.tree-node-row[data-path]')
     for (const row of allFileRows) {
       row.classList.remove('git-status-new', 'git-status-modified', 'git-status-deleted', 'git-status-ignored')
+    }
+
+    // Убрать git-классы с корневой строки
+    const rootRow = this._container.querySelector('.tree-root-node-row')
+    if (rootRow) {
+      rootRow.classList.remove('git-status-new', 'git-status-modified', 'git-status-deleted', 'git-status-ignored')
     }
 
     // Убрать все git-dot с папок
@@ -280,7 +289,7 @@ export class FileTree {
       if (!absPath) continue
 
       let relPath = absPath
-      if (absPath.startsWith(rootPath)) {
+      if (rootPathLower && absPath.toLowerCase().startsWith(rootPathLower + '/')) {
         relPath = absPath.slice(rootPath.length)
         if (relPath.startsWith('/')) relPath = relPath.slice(1)
       }
@@ -302,12 +311,13 @@ export class FileTree {
 
     // Применить dot-индикаторы к папкам (только уже загруженным)
     const allDirLiNodes = this._container.querySelectorAll('li[data-path][data-is-dir="1"]')
+    const statusPriority = { deleted: 3, modified: 2, new: 1 }
     for (const li of allDirLiNodes) {
       const dirAbsPath = li.dataset.path
       if (!dirAbsPath) continue
 
       let dirRelPath = dirAbsPath
-      if (dirAbsPath.startsWith(rootPath)) {
+      if (rootPathLower && dirAbsPath.toLowerCase().startsWith(rootPathLower + '/')) {
         dirRelPath = dirAbsPath.slice(rootPath.length)
         if (dirRelPath.startsWith('/')) dirRelPath = dirRelPath.slice(1)
       }
@@ -326,7 +336,6 @@ export class FileTree {
       }
 
       // Найти наихудший статус среди дочерних файлов (исключая ignored)
-      const statusPriority = { deleted: 3, modified: 2, new: 1 }
       let worstStatus = null
       for (const [relPath, status] of Object.entries(fileStatuses)) {
         if (relPath.startsWith(dirRelPath + '/') || dirRelPath === '') {
@@ -341,11 +350,44 @@ export class FileTree {
         const dot = document.createElement('span')
         dot.className = `git-dot git-dot-${worstStatus}`
         nameEl.appendChild(dot)
-      } else if (ignoredPaths.some(ip => ip.startsWith(dirRelPath + '/'))) {
-        const dot = document.createElement('span')
-        dot.className = 'git-dot git-dot-ignored'
-        nameEl.appendChild(dot)
-        dirRow.classList.add('git-status-ignored')
+      }
+    }
+
+    // --- Корневая папка ---
+    if (rootRow) {
+      const rootAbsPath = this._cwd
+      let rootRelPath = rootAbsPath
+      if (rootPathLower && rootAbsPath.toLowerCase().startsWith(rootPathLower + '/')) {
+        rootRelPath = rootAbsPath.slice(rootPath.length)
+        if (rootRelPath.startsWith('/')) rootRelPath = rootRelPath.slice(1)
+      }
+
+      const rootLabelEl = rootRow.querySelector('.tree-root-label')
+      if (rootLabelEl) {
+        // Сама корневая папка в gitignore
+        if (isPathIgnored(rootRelPath)) {
+          const dot = document.createElement('span')
+          dot.className = 'git-dot git-dot-ignored'
+          rootLabelEl.appendChild(dot)
+          rootRow.classList.add('git-status-ignored')
+        } else {
+          // Найти наихудший статус среди дочерних файлов
+          let worstStatus = null
+          for (const [relPath, status] of Object.entries(fileStatuses)) {
+            if (relPath.startsWith(rootRelPath + '/') || rootRelPath === '') {
+              if (isPathIgnored(relPath) || ignoredTracked.has(relPath)) continue
+              if ((statusPriority[status] || 0) > (statusPriority[worstStatus] || 0)) {
+                worstStatus = status
+              }
+            }
+          }
+
+          if (worstStatus) {
+            const dot = document.createElement('span')
+            dot.className = `git-dot git-dot-${worstStatus}`
+            rootLabelEl.appendChild(dot)
+          }
+        }
       }
     }
   }
@@ -1000,6 +1042,7 @@ export class FileTree {
                 const depth = parseInt(childrenEl.closest('li')?.dataset.depth || '0', 10)
                 childrenEl.appendChild(this._buildList(entries, dirPath, depth + 1))
                 childrenEl.dataset.loaded = '1'
+                this._applyGitStatuses()
               }
             } else {
               this._api.fsWatchDir(dirPath)
