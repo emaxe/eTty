@@ -55,6 +55,7 @@ export class ElectronApiAdapter {
   tabsDeleteSavedState() { return this._api.tabsDeleteSavedState() }
   tabsShowRestoreDialog(count) { return this._api.tabsShowRestoreDialog(count) }
   tabsStateChanged() { this._api.tabsStateChanged() }
+  tabsAutoSave(tabs) { this._api.tabsAutoSave(tabs) }
   onTabsTriggerRestore(fn) { return this._on('tabsTriggerRestore', fn) }
 
   // — Git —

@@ -12,6 +12,10 @@ export const APP_CONFIG = Object.freeze({
   PTY_DATA_BATCH_MS: 8,
   RESIZE_OBSERVER_DEBOUNCE_MS: 150,
   FS_WATCH_DEBOUNCE_MS: 500,
+  TAB_STATE_AUTO_SAVE_DEBOUNCE_MS: 500,
+
+  // Auto-save intervals (ms)
+  TAB_STATE_AUTO_SAVE_INTERVAL_MS: 30000,
 
   // Sidebar resize constraints (px)
   SIDEBAR_MIN_WIDTH: 150,

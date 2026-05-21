@@ -798,6 +798,54 @@ async function init() {
     return tabs
   }
 
+  // Auto-save tab state on changes + periodic flush
+  let autoSaveTimeout = null
+  let lastAutoSaveAt = 0
+  const flushAutoSave = () => {
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout)
+      autoSaveTimeout = null
+    }
+    const tabs = window.__exportTabState()
+    if (tabs.length > 0) {
+      api.tabsAutoSave(tabs)
+      lastAutoSaveAt = Date.now()
+    }
+  }
+  const scheduleAutoSave = () => {
+    if (autoSaveTimeout) return
+    autoSaveTimeout = setTimeout(() => {
+      autoSaveTimeout = null
+      flushAutoSave()
+    }, APP_CONFIG.TAB_STATE_AUTO_SAVE_DEBOUNCE_MS)
+  }
+
+  appStore.subscribe((state, path) => {
+    if (
+      path === null ||
+      path.startsWith('tabs.') ||
+      path.startsWith('editor.') ||
+      path === 'ui.gitPanelVisible'
+    ) {
+      scheduleAutoSave()
+    }
+  })
+
+  // Periodic flush every 30s regardless of activity
+  const autoSaveInterval = setInterval(() => {
+    if (Date.now() - lastAutoSaveAt >= APP_CONFIG.TAB_STATE_AUTO_SAVE_INTERVAL_MS) {
+      flushAutoSave()
+    }
+  }, APP_CONFIG.TAB_STATE_AUTO_SAVE_INTERVAL_MS)
+
+  window.addEventListener('beforeunload', () => {
+    clearInterval(autoSaveInterval)
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout)
+      flushAutoSave()
+    }
+  })
+
   // Restore tabs from saved state (used by menu trigger)
   async function restoreTabs(savedTabs) {
     // Create new tabs first

@@ -12,6 +12,10 @@ export function registerTabsHandlers(ipcMain, { saveTabState, loadTabState, dele
     return saveTabState(tabs)
   })
 
+  ipcMain.on(IPC_CHANNELS.TABS_AUTO_SAVE, (event, tabs) => {
+    saveTabState(tabs).catch((e) => log.error('tab-state: auto-save failed', e.message))
+  })
+
   ipcMain.handle(IPC_CHANNELS.TABS_HAS_SAVED_STATE, () => hasTabState())
 
   ipcMain.handle(IPC_CHANNELS.TABS_LOAD_SAVED_STATE, async () => {

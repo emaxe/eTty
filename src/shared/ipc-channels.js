@@ -44,6 +44,7 @@ export const IPC_CHANNELS = Object.freeze({
   TABS_SHOW_RESTORE_DIALOG: 'tabs:show-restore-dialog',
   TABS_STATE_CHANGED: 'tabs:state-changed',
   TABS_TRIGGER_RESTORE: 'tabs:trigger-restore',
+  TABS_AUTO_SAVE: 'tabs:auto-save',
 
   // History
   HISTORY_CLEANUP: 'history:cleanup',
