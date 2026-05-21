@@ -28,14 +28,18 @@ export function getConfigDefaults() {
         codex: false,
         copilot: false,
         agent: false,
-        opencode: false
+        opencode: false,
+        qwen: false,
+        agento: false
       },
       keyboardModes: {
         claude: 'kitty',
         codex: 'kitty',
         copilot: 'kitty',
         agent: 'kitty',
-        opencode: 'kitty'
+        opencode: 'kitty',
+        qwen: 'ctrl-j',
+        agento: 'ctrl-j'
       },
       custom: [],
       lastDetected: {},
@@ -44,12 +48,12 @@ export function getConfigDefaults() {
     },
     quickReplies: {
       items: [
-        { id: 'qr-1', label: 'Ok', command: 'Ok', enabled: true, agents: ['claude', 'codex', 'copilot', 'agent', 'opencode'] },
-        { id: 'qr-2', label: 'Продолжай', command: 'Продолжай', enabled: true, agents: ['claude', 'codex', 'copilot', 'agent', 'opencode'] },
-        { id: 'qr-3', label: '/clear', command: '/clear', enabled: true, agents: ['claude', 'codex', 'copilot', 'agent', 'opencode'] },
-        { id: 'qr-4', label: '/model', command: '/model', enabled: true, agents: ['claude', 'codex', 'copilot', 'agent', 'opencode'] },
-        { id: 'qr-5', label: '/exit', command: '/exit', enabled: true, agents: ['claude', 'codex', 'copilot', 'agent'] },
-        { id: 'qr-6', label: '/new', command: '/new', enabled: true, agents: ['opencode'] }
+        { id: 'qr-1', label: 'Ok', command: 'Ok', enabled: true, agents: ['claude', 'codex', 'copilot', 'agent', 'opencode', 'qwen', 'agento'] },
+        { id: 'qr-2', label: 'Продолжай', command: 'Продолжай', enabled: true, agents: ['claude', 'codex', 'copilot', 'agent', 'opencode', 'qwen', 'agento'] },
+        { id: 'qr-3', label: '/clear', command: '/clear', enabled: true, agents: ['claude', 'codex', 'copilot', 'agent', 'opencode', 'qwen', 'agento'] },
+        { id: 'qr-4', label: '/model', command: '/model', enabled: true, agents: ['claude', 'codex', 'copilot', 'agent', 'opencode', 'qwen', 'agento'] },
+        { id: 'qr-5', label: '/exit', command: '/exit', enabled: true, agents: ['claude', 'codex', 'copilot', 'agent', 'qwen', 'agento'] },
+        { id: 'qr-6', label: '/new', command: '/new', enabled: true, agents: ['opencode', 'qwen', 'agento'] }
       ]
     }
   }

@@ -107,7 +107,7 @@ async function init() {
   if (!config.agents.keyboardModes || typeof config.agents.keyboardModes !== 'object') config.agents.keyboardModes = {}
   for (const agent of SUPPORTED_AGENTS) {
     if (!(agent.id in config.agents.keyboardModes)) {
-      config.agents.keyboardModes[agent.id] = 'kitty'
+      config.agents.keyboardModes[agent.id] = (agent.id === 'qwen' || agent.id === 'agento') ? 'ctrl-j' : 'kitty'
     }
   }
   for (const agent of config.agents?.custom || []) {
@@ -735,7 +735,7 @@ async function init() {
         const t = tabBar.tabs.find(t => t.pid === pid)
         const agentId = t?.activeAgentId
         if (!agentId) return 'kitty'
-        return config.agents?.keyboardModes?.[agentId] || 'kitty'
+        return config.agents?.keyboardModes?.[agentId] || ((agentId === 'qwen' || agentId === 'agento') ? 'ctrl-j' : 'kitty')
       }
     )
     keyboardHandler.attach(tab.term, tab.pid)

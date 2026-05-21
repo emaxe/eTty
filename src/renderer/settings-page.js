@@ -3,7 +3,9 @@ export const SUPPORTED_AGENTS = [
   { id: 'codex', label: 'Codex' },
   { id: 'copilot', label: 'Copilot' },
   { id: 'agent', label: 'Agent (Cursor)' },
-  { id: 'opencode', label: 'OpenCode' }
+  { id: 'opencode', label: 'OpenCode' },
+  { id: 'qwen', label: 'Qwen' },
+  { id: 'agento', label: 'Agento' }
 ]
 
 /**
@@ -261,7 +263,7 @@ export class SettingsPage {
       { key: 'kitty', name: 'Kitty протокол' },
       { key: 'newline', name: 'Перенос строки' },
       { key: 'ctrl-j', name: 'Ctrl+J' }
-    ], this._config.agents.keyboardModes?.[agentId] || 'kitty', (val) => {
+    ], this._config.agents.keyboardModes?.[agentId] || ((agentId === 'qwen' || agentId === 'agento') ? 'ctrl-j' : 'kitty'), (val) => {
       if (!this._config.agents.keyboardModes) this._config.agents.keyboardModes = {}
       this._config.agents.keyboardModes[agentId] = val
       this._bus.emit('settings.changed', { key: 'agents.keyboardModes', value: { ...this._config.agents.keyboardModes } })
@@ -375,7 +377,7 @@ export class SettingsPage {
       { key: 'kitty', name: 'Kitty протокол' },
       { key: 'newline', name: 'Перенос строки' },
       { key: 'ctrl-j', name: 'Ctrl+J' }
-    ], this._config.agents.keyboardModes?.[item.id] || 'kitty', (val) => {
+    ], this._config.agents.keyboardModes?.[item.id] || ((item.id === 'qwen' || item.id === 'agento') ? 'ctrl-j' : 'kitty'), (val) => {
       if (!this._config.agents.keyboardModes) this._config.agents.keyboardModes = {}
       this._config.agents.keyboardModes[item.id] = val
       this._bus.emit('settings.changed', { key: 'agents.keyboardModes', value: { ...this._config.agents.keyboardModes } })
@@ -478,7 +480,7 @@ export class SettingsPage {
       { key: 'kitty', name: 'Kitty протокол' },
       { key: 'newline', name: 'Перенос строки' },
       { key: 'ctrl-j', name: 'Ctrl+J' }
-    ], this._config.agents.keyboardModes?.[item.id] || 'kitty', () => {})
+    ], this._config.agents.keyboardModes?.[item.id] || ((item.id === 'qwen' || item.id === 'agento') ? 'ctrl-j' : 'kitty'), () => {})
     modeRow.appendChild(modeLabel)
     modeRow.appendChild(modeSelect)
     body.appendChild(modeRow)
