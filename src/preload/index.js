@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitPush: (rootPath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_PUSH, rootPath),
   gitDiscard: (rootPath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DISCARD, rootPath),
   nodeVersion: process.versions.node,
+  platform: process.platform,
   appOpenExternal: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_EXTERNAL, filePath),
   searchQuery: (dirPath, query, options) => ipcRenderer.invoke(IPC_CHANNELS.SEARCH_QUERY, { dirPath, query, options }),
 })

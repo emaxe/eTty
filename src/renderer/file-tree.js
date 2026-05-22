@@ -74,6 +74,12 @@ export class FileTree {
     copyBtn.innerHTML = Icons.copy
     btns.appendChild(copyBtn)
 
+    const runBtn = document.createElement('button')
+    runBtn.className = 'tree-hover-run'
+    runBtn.title = 'Запустить скрипт'
+    runBtn.innerHTML = Icons.play
+    btns.appendChild(runBtn)
+
     overlay.appendChild(btns)
 
     let _copyRevertTimer = null
@@ -107,6 +113,18 @@ export class FileTree {
       const escaped = path.replace(/'/g, "'\\''")
       this._bus.emit('filetree.shellCmd', `cd '${escaped}'\r`)
       this._bus.emit('terminal.focus')
+    })
+
+    runBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      e.preventDefault()
+      const path = overlay.dataset.currentPath
+      const name = path.split(/[\\/]/).pop()
+      const cmd = this._getRunCmd(path, name)
+      if (cmd) {
+        this._bus.emit('filetree.shellCmd', cmd)
+        this._bus.emit('terminal.focus')
+      }
     })
 
     overlay.addEventListener('mouseenter', () => {
@@ -145,6 +163,10 @@ export class FileTree {
     cdBtn.style.display = entry.isDirectory ? 'flex' : 'none'
     cdBtn.disabled = this._isBusy
 
+    const runBtn = this._hoverOverlay.querySelector('.tree-hover-run')
+    const fileName = entry.path.split(/[\\/]/).pop()
+    runBtn.style.display = (!entry.isDirectory && this._getRunCmd(entry.path, fileName)) ? 'flex' : 'none'
+
     this._positionHoverOverlay(row)
     this._hoverOverlay.style.display = 'flex'
     row.classList.add('hovered')
@@ -155,6 +177,21 @@ export class FileTree {
     this._hoverOverlay.style.display = 'none'
     this._hoverOverlay._currentRow = null
     row?.classList.remove('hovered')
+  }
+
+  _getRunCmd(filePath, fileName) {
+    const platform = this._api.platform || 'darwin'
+    const dot = fileName.lastIndexOf('.')
+    if (dot === -1) return null
+    const ext = fileName.slice(dot).toLowerCase()
+    const unix = { '.sh': 'sh', '.bash': 'bash', '.zsh': 'zsh', '.fish': 'fish' }
+    const win  = { '.bat': null, '.cmd': null, '.ps1': 'powershell -File' }
+    const runners = platform === 'win32' ? win : unix
+    if (!(ext in runners)) return null
+    const runner = runners[ext]
+    if (runner === null) return `"${filePath}"\r`
+    const escaped = filePath.replace(/'/g, "'\\''")
+    return `${runner} '${escaped}'\r`
   }
 
   _setupModKeyListeners(signal) {

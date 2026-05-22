@@ -82,6 +82,7 @@ export class ElectronApiAdapter {
   getCwd() { return this._api.getCwd() }
   getHomedir() { return this._api.getHomedir() }
   get nodeVersion() { return this._api.nodeVersion }
+  get platform() { return this._api.platform }
   openExternal(path) { return this._api.appOpenExternal(path) }
 
   // — Search —

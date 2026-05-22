@@ -25,4 +25,5 @@ export const Icons = {
   ok: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 9 7 13 13 4"/></svg>`,
   refresh: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="14 4 14 8 10 8"/><path d="M12.5 11a5.5 5.5 0 1 1 1.5-5.5"/></svg>`,
   search: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="5"/><line x1="15" y1="15" x2="11.5" y2="11.5"/></svg>`,
+  play: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><polygon points="4,2 13,8 4,14"/></svg>`,
 }
