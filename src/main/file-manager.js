@@ -3,6 +3,7 @@ import { watch } from 'fs'
 import path from 'path'
 import os from 'os'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
+import { BINARY_EXTENSIONS } from '../shared/binary-extensions.js'
 
 /**
  * Файловые операции с защитой от path traversal.
@@ -365,20 +366,9 @@ export class FileManager {
     const MAX_CONTENT_MATCHES = 500
     const MAX_FILE_SIZE = 1024 * 1024
 
-    const binaryExts = new Set([
-      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico', '.webp',
-      '.mp3', '.mp4', '.avi', '.mov', '.wav', '.ogg',
-      '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar',
-      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
-      '.exe', '.dll', '.so', '.dylib', '.bin',
-      '.ttf', '.otf', '.woff', '.woff2', '.eot',
-      '.sqlite', '.db', '.o', '.a', '.class', '.pyc',
-      '.node', '.wasm'
-    ])
-
     const isBinaryFile = (fileName) => {
       const ext = path.extname(fileName).toLowerCase()
-      return binaryExts.has(ext)
+      return BINARY_EXTENSIONS.has(ext)
     }
 
     const matchGlob = (str, globPattern) => {

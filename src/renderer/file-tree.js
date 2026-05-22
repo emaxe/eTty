@@ -1,5 +1,6 @@
 import { ContextMenu } from './components/base/context-menu/context-menu.js'
 import { Icons } from './icons.js'
+import { isBinaryPath } from '../shared/binary-extensions.js'
 
 /**
  * Дерево файлов в sidebar. Lazy-load поддиректорий, контекстные меню,
@@ -916,6 +917,10 @@ export class FileTree {
 
     if (!entry.isDirectory) {
       const openInEditor = () => {
+        if (isBinaryPath(entry.path)) {
+          this._api.openExternal(entry.path)
+          return
+        }
         if (this._bus) {
           this._bus.emit('filetree.openFile', entry.path)
         } else if (!this._isBusy) {

@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-05-22
+
+### Added
+
+- **Run-script button in file tree hover overlay** — hovering over a file row now shows a quick-action overlay with a "Run" (▶) button alongside the existing "cd" and "Copy path" buttons; clicking it executes the file in the active terminal using an appropriate command based on the file extension
+
+- **Binary files open with OS default application** — clicking images, videos, and executables in the file tree now opens them with the system default application (Preview, VLC, Finder, etc.) instead of attempting to load binary content into the code editor
+  - Covers: images (jpg, png, gif, bmp, webp, ico), audio (mp3, wav, ogg, flac), video (mp4, avi, mov, mkv, webm), archives (zip, tar, gz, 7z, rar), documents (pdf, doc, docx, xls, xlsx, ppt, pptx), executables and installers (exe, dmg, msi, dll, so, dylib), fonts (ttf, otf, woff, woff2), compiled/DB artifacts (sqlite, db, wasm, node, class, pyc)
+  - SVG and other XML-based formats are intentionally left as text files (editable in the code editor)
+  - Binary extension list extracted to `src/shared/binary-extensions.js` — reused by both renderer and project search
+
 ## [0.1.5] - 2026-05-21
 
 ### Added

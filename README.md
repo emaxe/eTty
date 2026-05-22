@@ -37,10 +37,12 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Quick navigation** — `cd ..` and `cd ~` buttons
 - **Live sync** — filesystem watcher with 500ms debounce
 - **Context menus** — new file/folder, rename, delete, copy, paste, open external, copy relative path
+- **Hover overlay** — quick-action buttons appear on hover: cd into directory, copy path, and run script (▶) to execute the file in the active terminal
 - **Multi-select** — Ctrl/Cmd+Click, Shift+Click range, Ctrl+A select all
 - **Bulk operations** — copy (`Ctrl+C` / `Cmd+C`), paste (`Ctrl+V` / `Cmd+V`), and delete (`Delete`) on the current selection
 - **Drag-and-drop** — move files/folders within the tree
 - **Undo** — Ctrl+Z to undo last move operation
+- **Binary file handling** — images, videos, executables (.dmg, .exe, etc.) open with the OS default application instead of the code editor
 - **Resizable** sidebar (150–600px)
 - **Path traversal protection** — all paths validated against CWD
 
