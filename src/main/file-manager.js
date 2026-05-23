@@ -62,20 +62,26 @@ export class FileManager {
   }
 
   async createFile(filePath) {
-    const resolved = await this.validatePath(filePath)
+    const parent = path.dirname(filePath)
+    await this.validatePath(parent)
+    const resolved = path.resolve(filePath)
     await fs.writeFile(resolved, '', { flag: 'wx' })
     return { success: true }
   }
 
   async createDir(dirPath) {
-    const resolved = await this.validatePath(dirPath)
+    const parent = path.dirname(dirPath)
+    await this.validatePath(parent)
+    const resolved = path.resolve(dirPath)
     await fs.mkdir(resolved, { recursive: true })
     return { success: true }
   }
 
   async rename(oldPath, newPath) {
     const resolvedOld = await this.validatePath(oldPath)
-    const resolvedNew = await this.validatePath(newPath)
+    const newParent = path.dirname(newPath)
+    await this.validatePath(newParent)
+    const resolvedNew = path.resolve(newPath)
     await fs.rename(resolvedOld, resolvedNew)
     return { success: true }
   }

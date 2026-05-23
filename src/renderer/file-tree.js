@@ -221,6 +221,10 @@ export class FileTree {
       const sidebar = document.getElementById('sidebar')
       if (!sidebar || !sidebar.contains(e.target)) return
 
+      // Ignore shortcuts when user is typing in an inline input inside the tree
+      const tag = e.target.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return
+
       if (e.key === 'a' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
         e.stopPropagation()
