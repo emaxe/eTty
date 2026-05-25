@@ -19,6 +19,8 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Shell directory tracking** via OSC 7 — file tree syncs automatically
 - **Command busy indicator** via OSC 133 — navigation buttons reflect shell state
 - **Tab drag-and-drop** — reorder tabs by dragging the grip handle
+- **Configurable new tab placement** — choose whether new tabs open adjacent to the active tab or at the end; hold Cmd/Ctrl while clicking "+" to toggle the behavior (configurable in Settings)
+- **Auto-open tab for busy terminal** — triggering a run-script or cd from the file tree while the active tab is occupied by an agent automatically opens a new tab for the command
 - **2,500 lines** scrollback buffer (performance-optimized)
 - **Scroll-to-bottom button** — floating button appears when you scroll up into history; click to jump back to the latest output
 
@@ -100,6 +102,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **File tree behavior** — collapse children on close, single/double-click to open
 - **Prompt style** — default (from `~/.zshrc`), short, minimal, arrow (for new tabs)
 - **Status bar size** — compact, standard, or large; adjustable in Settings → Appearance
+- **New tab placement** — `modifierAdjacent` (Cmd/Ctrl opens next to active tab) or `modifierEnd` (Cmd/Ctrl appends to end); configurable in Settings → Terminal
 - **AI agent quick replies** — CRUD editor with per-agent toggles; drag-and-drop reordering
 - **Auto-persisted** to disk with debounced saves
 

@@ -20,7 +20,8 @@ export function getConfigDefaults() {
       statusBarSize: 'compact'
     },
     terminal: {
-      promptStyle: 'default'
+      promptStyle: 'default',
+      newTabPlacement: 'modifierAdjacent'
     },
     agents: {
       forceDisabled: {

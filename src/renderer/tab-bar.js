@@ -22,7 +22,7 @@ export class TabBar {
     this._tabListEl = tabBarEl.querySelector('#tab-list')
     this._addBtn = tabBarEl.querySelector('#tab-add')
     this._cleanupController = new AbortController()
-    this._addBtn.addEventListener('click', () => this._bus.emit('tab.add'), { signal: this._cleanupController.signal })
+    this._addBtn.addEventListener('click', (e) => this._bus.emit('tab.add', { metaKey: e.metaKey, ctrlKey: e.ctrlKey }), { signal: this._cleanupController.signal })
 
     this._contextMenu = new ContextMenu()
 
@@ -43,7 +43,7 @@ export class TabBar {
     this._store.set('tabs.activeIndex', this.activeIndex)
   }
 
-  addTab({ pid, term, fitAddon, rootPath, tabId }) {
+  addTab({ pid, term, fitAddon, rootPath, tabId }, insertIndex = -1) {
     const folderName = rootPath.split('/').filter(Boolean).pop() || '/'
     const container = document.createElement('div')
     container.className = 'terminal-pane'
@@ -51,8 +51,6 @@ export class TabBar {
     term.open(container)
 
     const element = this._createTabEl(folderName, '')
-    this._tabListEl.appendChild(element)
-    this._draggable.observeElement(element)
 
     const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '', tabId,
       treeExpandedDirs: new Set(),
@@ -61,7 +59,18 @@ export class TabBar {
       _pendingDataSize: 0,
       _isActive: false,
     }
-    this.tabs.push(tab)
+
+    if (insertIndex >= 0 && insertIndex < this.tabs.length) {
+      const refEl = this.tabs[insertIndex].element
+      this._tabListEl.insertBefore(element, refEl)
+      this.tabs.splice(insertIndex, 0, tab)
+    } else {
+      this._tabListEl.appendChild(element)
+      this.tabs.push(tab)
+      insertIndex = this.tabs.length - 1
+    }
+
+    this._draggable.observeElement(element)
     this._syncStore()
 
     term.onTitleChange((title) => {
@@ -69,7 +78,7 @@ export class TabBar {
       this._updateTabLabel(tab)
     })
 
-    this.switchTo(this.tabs.length - 1)
+    this.switchTo(insertIndex)
     return tab
   }
 

@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Configurable new tab placement** — control where a new tab opens relative to the active one, with modifier-key support
+  - `modifierAdjacent` (default) — Cmd/Ctrl+click on "+" inserts the new tab right after the active tab; plain click appends to the end
+  - `modifierEnd` — plain click inserts next to the active tab; Cmd/Ctrl+click appends to the end
+  - Configurable in Settings → Terminal → "Новая вкладка рядом"
+
+- **Auto-open tab when terminal is busy** — if a shell command is triggered from the file tree hover overlay (run script, cd) while the active terminal is occupied by an AI agent, a new tab is automatically created and the command runs there instead of being dropped
+
 ## [0.1.6] - 2026-05-22
 
 ### Added

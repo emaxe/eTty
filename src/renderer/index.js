@@ -46,6 +46,7 @@ let appStore = null
 /** @type {ResizeObserver|null} */
 let resizeObserver = null
 let resizeDebounceTimer = null
+let newTabPlacement = 'modifierAdjacent'
 
 /** Применяет стиль индикатора фокуса через data-атрибут на корневом элементе. */
 function applyFocusIndicator(style) {
@@ -98,6 +99,7 @@ async function init() {
   // Загружаем настройки до инициализации всего остального
   const { config, themes, warnings } = await api.settingsLoad()
   loadedThemes = { ...THEMES, ...themes }
+  newTabPlacement = config.terminal?.newTabPlacement || 'modifierAdjacent'
   if (warnings && warnings.length > 0) {
     console.warn('Settings warnings:', ...warnings)
   }
@@ -129,6 +131,19 @@ async function init() {
     settings: {
       collapseChildrenOnClose: config.fileTree?.collapseChildrenOnClose ?? true,
       fileOpenMode: config.fileTree?.fileOpenMode || 'double',
+    },
+    terminal: {
+      newTabPlacement: config.terminal?.newTabPlacement || 'modifierAdjacent',
+    },
+    agents: {
+      keyboardModes: config.agents?.keyboardModes || {},
+      forceDisabled: config.agents?.forceDisabled || {},
+      custom: config.agents?.custom || [],
+      proxy: config.agents?.proxy || '',
+      proxyEnabled: config.agents?.proxyEnabled ?? false,
+    },
+    quickReplies: {
+      items: config.quickReplies?.items || [],
     },
     git: {
       isRepo: false,
@@ -394,7 +409,7 @@ async function init() {
     }
   })
 
-  bus.on('tab.add', async () => {
+  bus.on('tab.add', async (payload) => {
     if (settingsPage.isVisible()) return
     const active = tabBar.getActive()
     const cwd = active ? active.rootPath : startCwd
@@ -405,7 +420,15 @@ async function init() {
       console.error('[tab.add] Failed to create tab', cwd, e.message)
       return
     }
-    const tab = tabBar.addTab(tabData)
+    const modifierPressed = !!(payload?.metaKey || payload?.ctrlKey)
+    const placement = newTabPlacement
+    let insertIndex = -1
+    if (active && placement === 'modifierAdjacent') {
+      insertIndex = modifierPressed ? tabBar.activeIndex + 1 : -1
+    } else if (active && placement === 'modifierEnd') {
+      insertIndex = modifierPressed ? -1 : tabBar.activeIndex + 1
+    }
+    const tab = tabBar.addTab(tabData, insertIndex)
     tab.isBusy = false
     tab.activeAgentId = null
     setupTabHandlers(tab)
@@ -589,9 +612,18 @@ async function init() {
   })
 
   // — FileTree EventBus subscribers —
-  bus.on('filetree.shellCmd', (cmd) => {
+  bus.on('filetree.shellCmd', async (cmd) => {
     const tab = tabBar.getActive()
-    if (tab) {
+    if (!tab) return
+    if (tab.isBusy) {
+      const tabData = await createTab(api, tab.rootPath || startCwd)
+      const newTab = tabBar.addTab(tabData)
+      newTab.isBusy = false
+      newTab.activeAgentId = null
+      setupTabHandlers(newTab)
+      newTab.fitAddon.fit()
+      api.ptyWrite(newTab.pid, cmd)
+    } else {
       api.ptyWrite(tab.pid, '\x15' + cmd)
       tab.term.focus()
     }
@@ -647,6 +679,10 @@ async function init() {
     if (key === 'agents.keyboardModes') {
       if (!config.agents) config.agents = {}
       config.agents.keyboardModes = value
+    }
+    if (key === 'terminal.newTabPlacement') {
+      newTabPlacement = value
+      appStore.set('terminal.newTabPlacement', value)
     }
     if (key === 'quickReplies.items') {
       if (!config.quickReplies) config.quickReplies = { items: [] }

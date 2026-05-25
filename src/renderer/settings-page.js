@@ -189,6 +189,22 @@ export class SettingsPage {
             this._scheduleSave()
           }
         )
+      },
+      {
+        label: 'Новая вкладка рядом',
+        control: this._createSelect(
+          [
+            { key: 'modifierAdjacent', name: 'С зажатым Cmd/Ctrl' },
+            { key: 'modifierEnd', name: 'Без модификатора' }
+          ],
+          this._config.terminal?.newTabPlacement || 'modifierAdjacent',
+          (val) => {
+            if (!this._config.terminal) this._config.terminal = {}
+            this._config.terminal.newTabPlacement = val
+            this._bus.emit('settings.changed', { key: 'terminal.newTabPlacement', value: val })
+            this._scheduleSave()
+          }
+        )
       }
     ]))
 
