@@ -5,7 +5,7 @@ import path from 'path'
 import log from 'electron-log'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
-const SHELL_PATH = '/bin/zsh'
+const IS_WIN = process.platform === 'win32'
 
 const PROMPT_MAP = {
   short: '%1~ %% ',
@@ -79,21 +79,29 @@ export class PtyManager {
    * @returns {{pid: number}} — PID процесса для идентификации сессии
    */
   create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize, promptStyle }) {
-    const zdotdir = this._createZdotdir(historyFile, promptStyle)
-    const ptyProcess = spawn(SHELL_PATH, [], {
+    const shellPath = this._shellPathResolver.getDefaultShell()
+    const isWin = IS_WIN
+    const zdotdir = isWin ? null : this._createZdotdir(historyFile, promptStyle)
+
+    const env = {
+      ...process.env,
+      PATH: this._shellPathResolver.getResolvedPath()
+        || process.env.PATH
+        || (isWin ? '' : '/usr/bin:/bin:/usr/sbin:/sbin')
+    }
+
+    if (!isWin) {
+      env.ZDOTDIR = zdotdir
+      env.LANG = process.env.LANG || 'en_US.UTF-8'
+      env.LC_CTYPE = process.env.LC_CTYPE || 'en_US.UTF-8'
+    }
+
+    const ptyProcess = spawn(shellPath, [], {
       name: 'xterm-256color',
       cols: cols || 80,
       rows: rows || 24,
       cwd,
-      env: {
-        ...process.env,
-        ZDOTDIR: zdotdir,
-        LANG: process.env.LANG || 'en_US.UTF-8',
-        LC_CTYPE: process.env.LC_CTYPE || 'en_US.UTF-8',
-        PATH: this._shellPathResolver.getResolvedPath()
-          || process.env.PATH
-          || '/usr/bin:/bin:/usr/sbin:/sbin'
-      }
+      env
     })
 
     this.sessions.set(ptyProcess.pid, { pty: ptyProcess, webContents, tabId, historyFile, initialHistSize: initialHistSize || 0, zdotdir })

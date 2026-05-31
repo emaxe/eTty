@@ -35,6 +35,11 @@ export const IPC_CHANNELS = Object.freeze({
   WINDOW_GET_POSITION: 'window:get-position',
   WINDOW_MOVE: 'window:move',
   WINDOW_FULLSCREEN_CHANGE: 'window:fullscreen-change',
+  WINDOW_MINIMIZE: 'window:minimize',
+  WINDOW_MAXIMIZE: 'window:maximize',
+  WINDOW_CLOSE: 'window:close',
+  WINDOW_IS_MAXIMIZED: 'window:is-maximized',
+  WINDOW_MAXIMIZED_CHANGE: 'window:maximized-change',
 
   // Tabs / state
   TABS_EXPORT_STATE: 'tabs:export-state',

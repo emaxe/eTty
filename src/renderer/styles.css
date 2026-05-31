@@ -32,13 +32,55 @@ html, body {
   background: var(--surface);
   -webkit-user-select: none;
   user-select: none;
-  padding-left: 70px; /* пространство для macOS traffic lights */
+  padding-left: 0;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-.fullscreen #titlebar {
+body.platform-darwin #titlebar {
+  padding-left: 70px; /* пространство для macOS traffic lights */
+}
+
+.fullscreen body.platform-darwin #titlebar {
   padding-left: 0;
+}
+
+/* Window controls (Windows / Linux) */
+.window-controls {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  flex-shrink: 0;
+  padding-right: 4px;
+}
+
+body.platform-darwin .window-controls {
+  display: none;
+}
+
+.window-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  width: 34px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  margin-left: 2px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.window-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.window-btn-close:hover {
+  background: #e81123;
+  color: #fff;
 }
 
 /* Toolbar */

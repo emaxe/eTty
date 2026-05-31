@@ -5,21 +5,28 @@ import { IPC_CHANNELS } from '../../shared/ipc-channels.js'
  * @param {Electron.IpcMain} ipcMain
  * @param {{ ptyManager: import('../pty-manager').PtyManager, historyManager: import('../history-manager').HistoryManager }} deps
  */
+const IS_WIN = process.platform === 'win32'
+
 export function registerPtyHandlers(ipcMain, { ptyManager, historyManager }) {
   ipcMain.handle(IPC_CHANNELS.PTY_CREATE, async (event, options) => {
     const tabId = options.tabId || crypto.randomUUID()
-    await historyManager.ensureHistoryDir()
 
-    const historyFile = historyManager.getTabHistoryPath(tabId)
-    const isRestore = await historyManager.tabHistoryExists(tabId)
+    let historyFile = null
+    let initialHistSize = 0
 
-    if (isRestore) {
-      await historyManager.prepareHistoryForRestoredTab(tabId)
-    } else {
-      await historyManager.prepareHistoryForNewTab(tabId)
+    if (!IS_WIN) {
+      await historyManager.ensureHistoryDir()
+      historyFile = historyManager.getTabHistoryPath(tabId)
+      const isRestore = await historyManager.tabHistoryExists(tabId)
+
+      if (isRestore) {
+        await historyManager.prepareHistoryForRestoredTab(tabId)
+      } else {
+        await historyManager.prepareHistoryForNewTab(tabId)
+      }
+
+      initialHistSize = await historyManager.getFileSize(historyFile)
     }
-
-    const initialHistSize = await historyManager.getFileSize(historyFile)
 
     return ptyManager.create({
       ...options,

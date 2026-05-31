@@ -30,13 +30,14 @@ export class AppService {
   }
 
   createWindow() {
+    const isMac = process.platform === 'darwin'
     const mainWindow = new BrowserWindow({
       width: 900,
       height: 600,
       minWidth: 400,
       minHeight: 300,
       frame: false,
-      titleBarStyle: 'hiddenInset',
+      ...(isMac ? { titleBarStyle: 'hiddenInset' } : {}),
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,
@@ -64,6 +65,13 @@ export class AppService {
     })
     mainWindow.on('leave-full-screen', () => {
       mainWindow.webContents.send(IPC_CHANNELS.WINDOW_FULLSCREEN_CHANGE, false)
+    })
+
+    mainWindow.on('maximize', () => {
+      mainWindow.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZED_CHANGE, true)
+    })
+    mainWindow.on('unmaximize', () => {
+      mainWindow.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZED_CHANGE, false)
     })
 
     mainWindow.on('close', async (e) => {

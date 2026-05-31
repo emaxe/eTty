@@ -43,7 +43,12 @@ export class ElectronApiAdapter {
   // — Window —
   windowGetPosition() { return this._api.windowGetPosition() }
   windowMove(x, y) { this._api.windowMove(x, y) }
+  windowMinimize() { this._api.windowMinimize() }
+  windowMaximize() { this._api.windowMaximize() }
+  windowClose() { this._api.windowClose() }
+  windowIsMaximized() { return this._api.windowIsMaximized() }
   onFullscreenChange(fn) { return this._on('fullscreenChange', fn) }
+  onMaximizedChange(fn) { return this._on('maximizedChange', fn) }
 
   // — Settings —
   settingsLoad() { return this._api.settingsLoad() }

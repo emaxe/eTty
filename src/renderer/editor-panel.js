@@ -822,9 +822,7 @@ export class EditorPanel {
   _openExternal() {
     const filePath = this._activeFilePath
     if (!filePath) return
-    // Use shell 'open' command — works on macOS, Linux uses 'xdg-open'
-    const escaped = filePath.replace(/'/g, "'\\''")
-    this._bus.emit('editor.openExternal', `open '${escaped}'\r`)
+    this._api.openExternal(filePath)
   }
 
   async _handleFileLinkClick(pathText) {

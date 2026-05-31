@@ -77,4 +77,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   appOpenExternal: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_EXTERNAL, filePath),
   searchQuery: (dirPath, query, options) => ipcRenderer.invoke(IPC_CHANNELS.SEARCH_QUERY, { dirPath, query, options }),
+  windowMinimize: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_MINIMIZE),
+  windowMaximize: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_MAXIMIZE),
+  windowClose: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_CLOSE),
+  windowIsMaximized: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_IS_MAXIMIZED),
+  onMaximizedChange: (cb) => onIPC(IPC_CHANNELS.WINDOW_MAXIMIZED_CHANGE, (_, isMaximized) => cb(isMaximized)),
 })

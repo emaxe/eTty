@@ -351,6 +351,39 @@ async function init() {
   tabBar = container.resolve('tabBar')
   window.__tabBar = tabBar
 
+  // Platform class for CSS
+  document.body.classList.add(`platform-${api.platform}`)
+
+  // Window controls (Windows / Linux)
+  if (api.platform !== 'darwin') {
+    const btnMinimize = document.getElementById('btn-minimize')
+    const btnMaximize = document.getElementById('btn-maximize')
+    const btnRestore = document.getElementById('btn-restore')
+    const btnClose = document.getElementById('btn-close')
+
+    btnMinimize?.addEventListener('click', () => api.windowMinimize())
+    btnMaximize?.addEventListener('click', () => api.windowMaximize())
+    btnRestore?.addEventListener('click', () => api.windowMaximize())
+    btnClose?.addEventListener('click', () => api.windowClose())
+
+    api.windowIsMaximized().then(isMax => {
+      if (isMax) {
+        btnMaximize.style.display = 'none'
+        btnRestore.style.display = ''
+      }
+    })
+
+    api.onMaximizedChange((isMaximized) => {
+      if (isMaximized) {
+        btnMaximize.style.display = 'none'
+        btnRestore.style.display = ''
+      } else {
+        btnMaximize.style.display = ''
+        btnRestore.style.display = 'none'
+      }
+    })
+  }
+
   container.register('terminalScrollButton', (r) => new TerminalScrollButton({
     eventBus: r('bus'),
     container: terminalContainerEl,
@@ -603,14 +636,6 @@ async function init() {
       api.ptyWrite(tab.pid, '\x1b[200~' + lineRef + '\x1b[201~')
     }
   })
-  bus.on('editor.openExternal', (cmd) => {
-    const tab = tabBar.getActive()
-    if (tab) {
-      api.ptyWrite(tab.pid, '\x15' + cmd)
-      tab.term.focus()
-    }
-  })
-
   // — FileTree EventBus subscribers —
   bus.on('filetree.shellCmd', async (cmd) => {
     const tab = tabBar.getActive()

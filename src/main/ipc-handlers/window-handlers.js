@@ -15,4 +15,24 @@ export function registerWindowHandlers(ipcMain) {
     const win = BrowserWindow.fromWebContents(event.sender)
     win.setPosition(Math.round(x), Math.round(y))
   })
+
+  ipcMain.on(IPC_CHANNELS.WINDOW_MINIMIZE, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    win.minimize()
+  })
+
+  ipcMain.on(IPC_CHANNELS.WINDOW_MAXIMIZE, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    win.maximize()
+  })
+
+  ipcMain.on(IPC_CHANNELS.WINDOW_CLOSE, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    win.close()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WINDOW_IS_MAXIMIZED, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return win.isMaximized()
+  })
 }

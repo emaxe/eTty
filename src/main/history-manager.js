@@ -4,6 +4,7 @@ import { mkdir, copyFile, readFile, writeFile, access, readdir, unlink, stat } f
 import log from 'electron-log'
 
 const GLOBAL_LIMIT = 5000
+const IS_WIN = process.platform === 'win32'
 
 export class HistoryManager {
   constructor() {
@@ -47,6 +48,7 @@ export class HistoryManager {
    * Новая вкладка: копируем глобальную историю как стартовый HISTFILE
    */
   async prepareHistoryForNewTab(tabId) {
+    if (IS_WIN) return
     const tabPath = this.getTabHistoryPath(tabId)
     try {
       await access(this._globalFile)
@@ -64,6 +66,7 @@ export class HistoryManager {
    * Если файла нет — fallback на prepareHistoryForNewTab.
    */
   async prepareHistoryForRestoredTab(tabId) {
+    if (IS_WIN) return
     const tabPath = this.getTabHistoryPath(tabId)
     const exists = await this.tabHistoryExists(tabId)
 
@@ -103,6 +106,7 @@ export class HistoryManager {
    * Использует мьютекс для предотвращения гонок при записи в глобальный файл.
    */
   async mergeTabToGlobal(tabId, initialHistSize) {
+    if (IS_WIN) return
     this._writeLock = this._writeLock.then(() => this._doMerge(tabId, initialHistSize)).catch(() => {})
     return this._writeLock
   }
@@ -139,6 +143,7 @@ export class HistoryManager {
    * Мержит все активные вкладки в глобальную (при закрытии приложения)
    */
   async mergeAllTabsToGlobal(ptyManager) {
+    if (IS_WIN) return
     for (const [, session] of ptyManager.sessions) {
       if (session.tabId) {
         await this.mergeTabToGlobal(session.tabId, session.initialHistSize)
@@ -150,6 +155,7 @@ export class HistoryManager {
    * Удаляет файлы истории вкладок, которых нет в activeTabIds
    */
   async cleanupOrphanedHistories(activeTabIds) {
+    if (IS_WIN) return
     try {
       const files = await readdir(this._tabsDir)
       const activeSet = new Set(activeTabIds)
