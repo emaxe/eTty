@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-05-31
+
 ### Added
 
 - **Configurable new tab placement** — control where a new tab opens relative to the active one, with modifier-key support
