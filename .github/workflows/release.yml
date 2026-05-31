@@ -11,6 +11,12 @@ on:
         description: 'Optional release notes override'
         required: false
         type: string
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  actions: read
 
 jobs:
   build-win-x64:
@@ -51,8 +57,27 @@ jobs:
           name: app-mac-arm64
           path: dist/*.dmg
 
+  build-mac-x64:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx electron-vite build
+      - run: npx electron-builder --mac --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-mac-x64
+          path: dist/*.dmg
+
   release:
-    needs: [build-win-x64, build-mac-arm64]
+    needs: [build-win-x64, build-mac-arm64, build-mac-x64]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,10 +90,24 @@ jobs:
         with:
           name: app-mac-arm64
           path: dist/mac-arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-mac-x64
+          path: dist/mac-x64
 
-      - id: changelog
+      - name: Resolve version
+        id: version
         run: |
-          VERSION="${{ github.event.inputs.version }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract changelog
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
           VER="${VERSION#v}"
           BODY=$(awk "/^## \[$VER\]/ {flag=1; next} /^## \[/ {flag=0} flag" CHANGELOG.md)
           BODY=$(echo "$BODY" | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba')
@@ -76,12 +115,24 @@ jobs:
           echo "$BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - uses: softprops/action-gh-release@v2
+      - name: Upload to existing release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.version }}
-          name: eTty ${{ github.event.inputs.version }}
-          body: ${{ github.event.inputs.notes || steps.changelog.outputs.body }}
-          generate_release_notes: true
+          tag_name: ${{ steps.version.outputs.version }}
           files: |
             dist/win-x64/*
             dist/mac-arm64/*
+            dist/mac-x64/*
+
+      - name: Create or update release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: eTty ${{ steps.version.outputs.version }}
+          body: ${{ github.event.inputs.notes || steps.changelog.outputs.body }}
+          files: |
+            dist/win-x64/*
+            dist/mac-arm64/*
+            dist/mac-x64/*
