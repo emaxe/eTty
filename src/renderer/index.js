@@ -22,6 +22,7 @@ import { StatusBar } from './status-bar.js'
 import { GitPanel } from './git-panel.js'
 import { EditorPanel } from './editor-panel.js'
 import { ProjectSearchDialog } from './project-search.js'
+import { NodeVersionDialog } from './node-version-dialog.js'
 import { Icons } from './icons.js'
 import { TERMINAL_CONFIG } from './core/config/terminal-config.js'
 import { APP_CONFIG } from './core/config/app-config.js'
@@ -517,9 +518,25 @@ async function init() {
   }))
   const projectSearch = container.resolve('projectSearch')
 
+  container.register('nodeVersionDialog', (r) => new NodeVersionDialog({
+    api: r('api'),
+    getActiveCwd: () => container.resolve('tabBar').getActive()?.rootPath || startCwd,
+    onClose: () => focusActiveTerminal(),
+    onVersionChanged: (version) => {
+      const statusBar = container.resolve('statusBar')
+      statusBar.setNodeVersion(version, null)
+    },
+  }))
+  const nodeVersionDialog = container.resolve('nodeVersionDialog')
+
   bus.on('search.show', () => {
     if (settingsPage.isVisible() || gitPanel.isVisible()) return
     projectSearch.show()
+  })
+
+  bus.on('node-version:dialog:open', () => {
+    if (settingsPage.isVisible() || gitPanel.isVisible()) return
+    nodeVersionDialog.show()
   })
 
   const launchAgentInActiveTab = (agentId) => {
@@ -554,6 +571,7 @@ async function init() {
     cwdEl: document.getElementById('status-cwd'),
     nodeEl: document.getElementById('status-node'),
     onOpen: () => appStore.set('ui.gitPanelVisible', true),
+    onOpenNodeVersion: () => bus.emit('node-version:dialog:open'),
     agentsContainerEl: document.getElementById('status-agents'),
     onLaunchAgent: launchAgentInActiveTab,
     onSelectAgent: selectAgentAsActive,

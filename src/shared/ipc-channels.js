@@ -82,4 +82,14 @@ export const IPC_CHANNELS = Object.freeze({
   // Search
   SEARCH_QUERY: 'search:query',
   SEARCH_CANCEL: 'search:cancel',
+
+  // Node version management
+  NODE_VERSION_GET_CURRENT: 'node-version:get-current',
+  NODE_VERSION_LIST_INSTALLED: 'node-version:list-installed',
+  NODE_VERSION_LIST_REMOTE: 'node-version:list-remote',
+  NODE_VERSION_INSTALL: 'node-version:install',
+  NODE_VERSION_USE: 'node-version:use',
+  NODE_VERSION_UNINSTALL: 'node-version:uninstall',
+  NODE_VERSION_DETECT_MANAGER: 'node-version:detect-manager',
+  NODE_VERSION_INSTALL_MANAGER: 'node-version:install-manager',
 })

@@ -10,6 +10,7 @@ import { FileManager } from './file-manager'
 import { HistoryManager } from './history-manager'
 import { AgentService } from './agent-service.js'
 import { ShellPathResolver } from './shell-path-resolver.js'
+import { NodeVersionManager } from './services/node-version-manager.js'
 import {
   saveTabState, loadTabState, deleteTabState, hasTabState, validatePath
 } from './tab-state'
@@ -26,6 +27,7 @@ import {
   registerAgentsHandlers,
   registerGitHandlers,
   registerSearchHandlers,
+  registerNodeVersionHandlers,
 } from './ipc-handlers/index.js'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
@@ -35,6 +37,7 @@ const ptyManager = new PtyManager({ shellPathResolver })
 const fileManager = new FileManager()
 const historyManager = new HistoryManager()
 const agentService = new AgentService({ shellPathResolver })
+const nodeVersionManager = new NodeVersionManager({ shellPathResolver })
 
 const appService = new AppService({
   ptyManager,
@@ -65,6 +68,7 @@ app.whenReady().then(async () => {
   registerAgentsHandlers(ipcMain, { agentService })
   registerGitHandlers(ipcMain)
   registerSearchHandlers(ipcMain, { fileManager })
+  registerNodeVersionHandlers(ipcMain, { nodeVersionManager })
 
   ipcMain.on(IPC_CHANNELS.TABS_STATE_CHANGED, () => appService.rebuildMenu())
 

@@ -90,6 +90,16 @@ export class ElectronApiAdapter {
   get platform() { return this._api.platform }
   openExternal(path) { return this._api.appOpenExternal(path) }
 
+  // — Node Version Manager —
+  nodeVersionGetCurrent(cwd) { return this._api.nodeVersionGetCurrent(cwd) }
+  nodeVersionDetectManager() { return this._api.nodeVersionDetectManager() }
+  nodeVersionListInstalled() { return this._api.nodeVersionListInstalled() }
+  nodeVersionListRemote() { return this._api.nodeVersionListRemote() }
+  nodeVersionInstall(version) { return this._api.nodeVersionInstall(version) }
+  nodeVersionUse(version, cwd) { return this._api.nodeVersionUse(version, cwd) }
+  nodeVersionUninstall(version) { return this._api.nodeVersionUninstall(version) }
+  nodeVersionInstallManager() { return this._api.nodeVersionInstallManager() }
+
   // — Search —
   searchQuery(dirPath, query, options) { return this._api.searchQuery(dirPath, query, options) }
 

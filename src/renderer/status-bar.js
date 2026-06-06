@@ -15,11 +15,12 @@ import { APP_CONFIG } from './core/config/app-config.js'
  *   чтобы click-события доходили для double-click обработки.
  */
 export class StatusBar {
-  constructor({ btnEl, cwdEl, nodeEl, onOpen, agentsContainerEl = null, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [] }, api }) {
+  constructor({ btnEl, cwdEl, nodeEl, onOpen, onOpenNodeVersion, agentsContainerEl = null, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [] }, api }) {
     this._btnEl = btnEl
     this._cwdEl = cwdEl
     this._nodeEl = nodeEl
     this._onOpen = onOpen
+    this._onOpenNodeVersion = onOpenNodeVersion
     this._agentsContainerEl = agentsContainerEl
     this._agentConfigs = []
     this._agentButtons = agentButtons
@@ -47,6 +48,12 @@ export class StatusBar {
 
     this._btnEl.addEventListener('click', () => this._onOpen(), { signal })
 
+    if (this._nodeEl) {
+      this._nodeEl.addEventListener('click', () => this._onOpenNodeVersion?.(), { signal })
+      // Initial placeholder — will be updated by polling
+      this._nodeEl.innerHTML = `${Icons.hexagon} ...`
+    }
+
     for (const button of this._agentButtons) {
       this._attachAgentButtonHandler(button, signal)
     }
@@ -58,12 +65,6 @@ export class StatusBar {
         this._onToggleProxy?.(this._proxyEnabled)
         this._updateProxyButton()
       }, { signal })
-    }
-
-    // Версия Node — статическое значение из preload
-    if (this._nodeEl) {
-      const v = this._api.nodeVersion
-      if (v) this._nodeEl.innerHTML = `${Icons.hexagon} v${v}`
     }
 
     // Получаем домашнюю директорию для сокращения путей
@@ -139,6 +140,18 @@ export class StatusBar {
   setQuickReplies(quickReplies) {
     this._quickReplies = quickReplies || { items: [] }
     this._updateAgentCommandsPanel()
+  }
+
+  setNodeVersion(version, manager) {
+    if (!this._nodeEl) return
+    if (version) {
+      const managerLabel = manager ? ` (${manager})` : ''
+      this._nodeEl.innerHTML = `${Icons.hexagon} v${version}${managerLabel}`
+      this._nodeEl.classList.remove('hidden')
+    } else {
+      this._nodeEl.innerHTML = `${Icons.hexagon} N/A`
+      this._nodeEl.classList.remove('hidden')
+    }
   }
 
   _updateAgentButtons() {
@@ -293,6 +306,20 @@ export class StatusBar {
           this._cwdEl.classList.remove('hidden')
         } else {
           this._cwdEl.classList.add('hidden')
+        }
+      }
+
+      // Update Node version for current folder
+      if (this._nodeEl && rootPath) {
+        try {
+          const nv = await this._api.nodeVersionGetCurrent(rootPath)
+          if (nv) {
+            this.setNodeVersion(nv.version, nv.manager)
+          } else {
+            this.setNodeVersion(null, null)
+          }
+        } catch (e) {
+          this.setNodeVersion(null, null)
         }
       }
 
