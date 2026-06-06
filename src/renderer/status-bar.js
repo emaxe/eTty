@@ -145,8 +145,7 @@ export class StatusBar {
   setNodeVersion(version, manager) {
     if (!this._nodeEl) return
     if (version) {
-      const managerLabel = manager ? ` (${manager})` : ''
-      this._nodeEl.innerHTML = `${Icons.hexagon} v${version}${managerLabel}`
+      this._nodeEl.innerHTML = `${Icons.hexagon} v${version}`
       this._nodeEl.classList.remove('hidden')
     } else {
       this._nodeEl.innerHTML = `${Icons.hexagon} N/A`

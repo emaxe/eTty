@@ -136,7 +136,21 @@ do_clean() {
 do_rebuild() {
   if confirm "This will clean, reinstall, and rebuild. Proceed?"; then
     run_cmd "Cleaning..." rm -rf "$PROJECT_ROOT/out" "$PROJECT_ROOT/dist"
-    run_cmd "Installing dependencies..." npm install --prefix "$PROJECT_ROOT"
+    run_cmd "Installing dependencies..." npm install --prefix "$PROJECT_ROOT" --ignore-scripts
+    if [ -d "$PROJECT_ROOT/node_modules/node-pty" ]; then
+      echo ""
+      hr
+      printf "  ${CYAN}${BOLD}▸${RESET} ${BOLD}Rebuilding native modules (node-pty)...${RESET}\n"
+      printf "  ${DIM}\$ CPLUS_INCLUDE_PATH=... npx electron-rebuild -f -w node-pty${RESET}\n"
+      hr
+      echo ""
+      (cd "$PROJECT_ROOT" && CPLUS_INCLUDE_PATH="/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1" npx electron-rebuild -f -w node-pty) || {
+        echo ""
+        printf "  ${RED}▸ Native module rebuild failed. Try manually:${RESET}\n"
+        printf "  ${DIM}  CPLUS_INCLUDE_PATH=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1 npx electron-rebuild -f -w node-pty${RESET}\n"
+        echo ""
+      }
+    fi
     run_cmd "Building..." npx electron-vite build
     success
   else
@@ -145,7 +159,7 @@ do_rebuild() {
 }
 
 do_install() {
-  run_cmd "Installing dependencies..." npm install --prefix "$PROJECT_ROOT"
+  run_cmd "Installing dependencies..." npm install --prefix "$PROJECT_ROOT" --ignore-scripts
   success
 }
 
