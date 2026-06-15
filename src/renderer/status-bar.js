@@ -200,7 +200,7 @@ export class StatusBar {
       const btn = document.createElement('button')
       btn.className = 'agent-cmd-btn'
       btn.dataset.cmd = item.command
-      btn.textContent = item.label
+      btn.textContent = item.label || item.command
       btn.title = item.command ? `Отправить ${item.command}` : ''
       btn.addEventListener('click', () => {
         if (!this._onAgentCommand || !item.command) return

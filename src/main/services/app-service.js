@@ -94,38 +94,11 @@ export class AppService {
   }
 
   async startAgentAutoRefresh() {
-    this._agentService.refresh().then(async (result) => {
-      try {
-        const { config, warnings } = await this._loadSettings()
-        if (warnings.length > 0) log.warn('settings: warnings during load:', warnings)
-        if (!config.agents.lastDetected) config.agents.lastDetected = {}
-
-        let changed = false
-        for (const agent of result.agents) {
-          if (
-            agent.detected &&
-            config.agents.lastDetected[agent.id] === false &&
-            config.agents.forceDisabled[agent.id] === true
-          ) {
-            config.agents.forceDisabled[agent.id] = false
-            changed = true
-          }
-          if (config.agents.lastDetected[agent.id] !== agent.detected) {
-            config.agents.lastDetected[agent.id] = agent.detected
-            changed = true
-          }
-        }
-
-        if (changed) {
-          await this._saveSettings(config)
-          if (this._mainWindow && !this._mainWindow.isDestroyed()) {
-            this._mainWindow.webContents.send(IPC_CHANNELS.AGENTS_SETTINGS_UPDATED, {
-              forceDisabled: config.agents.forceDisabled
-            })
-          }
-        }
-      } catch {}
-    }).catch(() => {})
+    // Pre-warm the agent cache at startup.
+    // Manual agents.forceDisabled toggles must never be overwritten by detection.
+    try {
+      await this._agentService.refresh()
+    } catch {}
   }
 
   startAutoUpdater() {

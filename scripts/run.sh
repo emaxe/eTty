@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+trap 'printf "\n${RED}Interrupted by user${RESET}\n"; exit 130' INT
+
 # ─── Colors ───────────────────────────────────────────────────────
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -136,7 +138,7 @@ do_clean() {
 do_rebuild() {
   if confirm "This will clean, reinstall, and rebuild. Proceed?"; then
     run_cmd "Cleaning..." rm -rf "$PROJECT_ROOT/out" "$PROJECT_ROOT/dist"
-    run_cmd "Installing dependencies..." npm install --prefix "$PROJECT_ROOT" --ignore-scripts
+    run_cmd "Installing dependencies..." npm install --prefix "$PROJECT_ROOT" --ignore-scripts --no-audit --no-fund
     if [ -d "$PROJECT_ROOT/node_modules/node-pty" ]; then
       echo ""
       hr
@@ -159,7 +161,7 @@ do_rebuild() {
 }
 
 do_install() {
-  run_cmd "Installing dependencies..." npm install --prefix "$PROJECT_ROOT" --ignore-scripts
+  run_cmd "Installing dependencies..." npm install --prefix "$PROJECT_ROOT" --ignore-scripts --no-audit --no-fund
   success
 }
 

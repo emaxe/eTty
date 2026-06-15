@@ -775,18 +775,31 @@ export class SettingsPage {
     const body = document.createElement('div')
     body.className = 'settings-dialog-body'
 
-    // Text input (label = command)
+    // Label input
     const labelGroup = document.createElement('div')
     labelGroup.className = 'settings-dialog-field'
     const labelLabel = document.createElement('label')
-    labelLabel.textContent = 'Текст и команда'
+    labelLabel.textContent = 'Метка (кнопка в статусбаре)'
     const labelInput = document.createElement('input')
     labelInput.type = 'text'
     labelInput.className = 'settings-input'
-    labelInput.value = item.label || item.command || ''
-    labelInput.placeholder = 'Например: Ok'
+    labelInput.value = item.label || ''
+    labelInput.placeholder = 'Например: Ок'
     labelGroup.appendChild(labelLabel)
     labelGroup.appendChild(labelInput)
+
+    // Command input
+    const commandGroup = document.createElement('div')
+    commandGroup.className = 'settings-dialog-field'
+    const commandLabel = document.createElement('label')
+    commandLabel.textContent = 'Текст ответа (отправляется в терминал)'
+    const commandInput = document.createElement('input')
+    commandInput.type = 'text'
+    commandInput.className = 'settings-input'
+    commandInput.value = item.command || ''
+    commandInput.placeholder = 'Например: Ok'
+    commandGroup.appendChild(commandLabel)
+    commandGroup.appendChild(commandInput)
 
     // Enabled toggle
     const enabledRow = document.createElement('div')
@@ -823,6 +836,7 @@ export class SettingsPage {
     agentsBlock.appendChild(agentsGrid)
 
     body.appendChild(labelGroup)
+    body.appendChild(commandGroup)
     body.appendChild(enabledRow)
     body.appendChild(agentsBlock)
 
@@ -852,7 +866,8 @@ export class SettingsPage {
     saveBtn.className = 'settings-dialog-btn-primary'
     saveBtn.textContent = 'Сохранить'
     saveBtn.addEventListener('click', () => {
-      const value = labelInput.value.trim()
+      const labelValue = labelInput.value.trim()
+      const commandValue = commandInput.value.trim()
       const enabled = enabledToggle.querySelector('input').checked
       const selectedAgents = agentToggles
         .filter(({ toggle }) => toggle.querySelector('input').checked)
@@ -860,8 +875,8 @@ export class SettingsPage {
 
       const newItem = {
         id: item.id || crypto.randomUUID(),
-        label: value,
-        command: value,
+        label: labelValue,
+        command: commandValue,
         enabled,
         agents: selectedAgents
       }
