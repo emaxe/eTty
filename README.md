@@ -58,6 +58,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Unsaved changes** indicator
 - **Auto-features** — bracket closing, fold gutter, active line highlight, search
 - **Resizable** editor panel
+- **Scroll position preserved** — switching between open file tabs, or between terminal tabs, restores each file's exact scroll position (CodeMirror scroll snapshot)
 
 ### Git Integration
 

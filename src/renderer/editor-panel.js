@@ -320,6 +320,7 @@ export class EditorPanel {
         const scroller = active.view.scrollDOM
         active.savedScrollTop = scroller.scrollTop
         active.savedScrollLeft = scroller.scrollLeft
+        active.scrollSnapshot = active.view.scrollSnapshot()
       }
     }
 
@@ -569,6 +570,7 @@ export class EditorPanel {
         const scroller = prev.view.scrollDOM
         prev.savedScrollTop = scroller.scrollTop
         prev.savedScrollLeft = scroller.scrollLeft
+        prev.scrollSnapshot = prev.view.scrollSnapshot()
         prev.element.classList.remove('active')
         prev.view.dom.remove()
       }
@@ -588,8 +590,12 @@ export class EditorPanel {
       this._bodyEl.appendChild(tab.view.dom)
     }
 
-    // Restore scroll position after layout
-    if (tab.savedScrollTop != null) {
+    // Restore scroll position. Prefer the CodeMirror scroll snapshot — it survives
+    // the re-measure CM6 does after the view's DOM is re-attached. Fall back to the
+    // raw pixel offsets for views that never had a snapshot (e.g. just opened from disk).
+    if (tab.scrollSnapshot) {
+      tab.view.dispatch({ effects: tab.scrollSnapshot })
+    } else if (tab.savedScrollTop != null) {
       const top = tab.savedScrollTop
       const left = tab.savedScrollLeft || 0
       requestAnimationFrame(() => {

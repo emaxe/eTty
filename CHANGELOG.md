@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-07-06
+
+### Fixed
+
+- **Scroll position lost when switching tabs** — the code editor now restores the exact scroll position of each open file when switching between editor tabs or between terminal tabs, instead of jumping back to the top. Uses CodeMirror's `scrollSnapshot()` API so the restore survives the DOM re-measure that happens when a view is re-attached
+
 ## [0.1.9] - 2026-07-06
 
 ### Added
