@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-07-06
+
+### Added
+
+- **Keyboard shortcut to switch between adjacent tabs** — bind `Cmd+Option+←/→` or `Cmd+Shift+←/→` in Settings → Terminal to jump to the previous/next tab, wrapping around at the ends. Off by default
+- **Confirmation dialog when closing a busy tab** — closing a tab via the × button or context menu while an AI agent/process is still running now shows a confirmation dialog (`ConfirmDialog`) instead of silently killing the PTY
+
 ## [0.1.7] - 2026-05-31
 
 ### Added

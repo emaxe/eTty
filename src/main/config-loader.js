@@ -21,7 +21,8 @@ export function getConfigDefaults() {
     },
     terminal: {
       promptStyle: 'default',
-      newTabPlacement: 'modifierAdjacent'
+      newTabPlacement: 'modifierAdjacent',
+      tabSwitchHotkey: 'none'
     },
     agents: {
       forceDisabled: {

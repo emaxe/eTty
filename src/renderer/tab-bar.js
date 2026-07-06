@@ -134,6 +134,13 @@ export class TabBar {
     return this.tabs[this.activeIndex] ?? null
   }
 
+  /** Переключает активную вкладку на соседнюю с зацикливанием. delta: -1 (влево) / +1 (вправо). */
+  switchRelative(delta) {
+    const n = this.tabs.length
+    if (n <= 1) return
+    this.switchTo((this.activeIndex + delta + n) % n)
+  }
+
   updateRootPath(index, rootPath) {
     const tab = this.tabs[index]
     if (!tab) return
@@ -178,7 +185,7 @@ export class TabBar {
       if (this.disabled) return
       e.stopPropagation()
       const i = this.tabs.findIndex(t => t.element === el)
-      if (i >= 0) this._bus.emit('tab.close', { index: i, tab: this.tabs[i] })
+      if (i >= 0) this._bus.emit('tab.close.request', { tabs: [this.tabs[i]] })
     })
 
     // Context menu
@@ -206,23 +213,16 @@ export class TabBar {
   }
 
   _closeAll() {
-    for (let i = this.tabs.length - 1; i >= 0; i--) {
-      this._bus.emit('tab.close', { index: i, tab: this.tabs[i] })
-    }
+    this._bus.emit('tab.close.request', { tabs: [...this.tabs] })
   }
 
   _closeAllExcept(keepIndex) {
     const keepTab = this.tabs[keepIndex]
-    for (let i = this.tabs.length - 1; i >= 0; i--) {
-      if (this.tabs[i] === keepTab) continue
-      this._bus.emit('tab.close', { index: i, tab: this.tabs[i] })
-    }
+    this._bus.emit('tab.close.request', { tabs: this.tabs.filter(t => t !== keepTab) })
   }
 
   _closeRange(from, to) {
-    for (let i = to - 1; i >= from; i--) {
-      this._bus.emit('tab.close', { index: i, tab: this.tabs[i] })
-    }
+    this._bus.emit('tab.close.request', { tabs: this.tabs.slice(from, to) })
   }
 
   _handleReorder(fromIndex, toIndex) {

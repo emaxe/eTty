@@ -20,6 +20,8 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Command busy indicator** via OSC 133 — navigation buttons reflect shell state
 - **Tab drag-and-drop** — reorder tabs by dragging the grip handle
 - **Configurable new tab placement** — choose whether new tabs open adjacent to the active tab or at the end; hold Cmd/Ctrl while clicking "+" to toggle the behavior (configurable in Settings)
+- **Keyboard shortcut to switch tabs** — bind `Cmd+Option+←/→` or `Cmd+Shift+←/→` to jump to the adjacent tab (wraps around at the ends); off by default, configurable in Settings → Terminal
+- **Confirmation before closing a busy tab** — closing a tab (× button or context menu) while an AI agent/process is still running shows a confirmation dialog instead of silently killing it
 - **Auto-open tab for busy terminal** — triggering a run-script or cd from the file tree while the active tab is occupied by an agent automatically opens a new tab for the command
 - **2,500 lines** scrollback buffer (performance-optimized)
 - **Scroll-to-bottom button** — floating button appears when you scroll up into history; click to jump back to the latest output
@@ -103,6 +105,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Prompt style** — default (from `~/.zshrc`), short, minimal, arrow (for new tabs)
 - **Status bar size** — compact, standard, or large; adjustable in Settings → Appearance
 - **New tab placement** — `modifierAdjacent` (Cmd/Ctrl opens next to active tab) or `modifierEnd` (Cmd/Ctrl appends to end); configurable in Settings → Terminal
+- **Tab switch hotkey** — off, `Cmd+Option+←/→`, or `Cmd+Shift+←/→`; configurable in Settings → Terminal
 - **AI agent quick replies** — CRUD editor with per-agent toggles; drag-and-drop reordering
 - **Auto-persisted** to disk with debounced saves
 
@@ -125,6 +128,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 | `Ctrl+Shift+Enter` | Kitty protocol: `\x1b[13;6u` |
 | `Cmd+ArrowLeft` (macOS) | Home — `\x1b[H` |
 | `Cmd+ArrowRight` (macOS) | End — `\x1b[F` |
+| `Cmd+Option+←/→` or `Cmd+Shift+←/→` (configurable, off by default) | Switch to adjacent tab (wraps around) |
 
 ## Tech Stack
 

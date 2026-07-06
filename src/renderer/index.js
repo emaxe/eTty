@@ -23,6 +23,7 @@ import { GitPanel } from './git-panel.js'
 import { EditorPanel } from './editor-panel.js'
 import { ProjectSearchDialog } from './project-search.js'
 import { NodeVersionDialog } from './node-version-dialog.js'
+import { ConfirmDialog } from './confirm-dialog.js'
 import { Icons } from './icons.js'
 import { TERMINAL_CONFIG } from './core/config/terminal-config.js'
 import { APP_CONFIG } from './core/config/app-config.js'
@@ -48,6 +49,7 @@ let appStore = null
 let resizeObserver = null
 let resizeDebounceTimer = null
 let newTabPlacement = 'modifierAdjacent'
+let tabSwitchHotkey = 'none'
 
 /** Применяет стиль индикатора фокуса через data-атрибут на корневом элементе. */
 function applyFocusIndicator(style) {
@@ -101,6 +103,7 @@ async function init() {
   const { config, themes, warnings } = await api.settingsLoad()
   loadedThemes = { ...THEMES, ...themes }
   newTabPlacement = config.terminal?.newTabPlacement || 'modifierAdjacent'
+  tabSwitchHotkey = config.terminal?.tabSwitchHotkey || 'none'
   if (warnings && warnings.length > 0) {
     console.warn('Settings warnings:', ...warnings)
   }
@@ -469,9 +472,14 @@ async function init() {
     tab.fitAddon.fit()
   })
 
-  bus.on('tab.close', ({ index }) => {
-    if (settingsPage.isVisible()) return
-    const tab = tabBar.tabs[index]
+  container.register('confirmDialog', () => new ConfirmDialog())
+  const confirmDialog = container.resolve('confirmDialog')
+
+  // Закрывает конкретную вкладку (по ссылке — устойчиво к сдвигу индексов
+  // при закрытии нескольких вкладок подряд): cleanup + удаление из TabBar + kill PTY.
+  const closeTabByRef = (tab) => {
+    const index = tabBar.tabs.indexOf(tab)
+    if (index < 0) return
     if (tab._writeRaf) {
       cancelAnimationFrame(tab._writeRaf)
       tab._writeRaf = null
@@ -484,6 +492,45 @@ async function init() {
     }
     tabBar.removeTab(index)
     api.ptyKill(tab.pid)
+  }
+
+  // Низкоуровневый исполнитель закрытия (без подтверждения) — на случай прочих эмитентов.
+  bus.on('tab.close', ({ index }) => {
+    if (settingsPage.isVisible()) return
+    const tab = tabBar.tabs[index]
+    if (tab) closeTabByRef(tab)
+  })
+
+  // Пользовательские пути закрытия («×», контекстное меню) идут сюда: если среди
+  // закрываемых вкладок есть вкладка с активным процессом (tab.isBusy) — запрашиваем
+  // подтверждение перед тем, как убить PTY.
+  bus.on('tab.close.request', async ({ index, tabs } = {}) => {
+    if (settingsPage.isVisible()) return
+    const targets = (tabs && tabs.length ? tabs : [tabBar.tabs[index]]).filter(Boolean)
+    if (targets.length === 0) return
+
+    const busyTabs = targets.filter(t => t.isBusy)
+    if (busyTabs.length > 0) {
+      let message
+      if (targets.length === 1) {
+        const agentLabel = SUPPORTED_AGENTS.find(a => a.id === targets[0].activeAgentId)?.label
+        message = agentLabel
+          ? `В этой вкладке выполняется активный процесс (${agentLabel}). Закрыть вкладку?`
+          : 'В этой вкладке выполняется активный процесс. Закрыть вкладку?'
+      } else {
+        message = `Среди закрываемых вкладок ${busyTabs.length} с активным процессом. Закрыть всё равно?`
+      }
+      const confirmed = await confirmDialog.open({
+        title: targets.length === 1 ? 'Закрыть вкладку?' : 'Закрыть вкладки?',
+        message,
+      })
+      if (!confirmed) {
+        focusActiveTerminal()
+        return
+      }
+    }
+
+    for (const tab of targets) closeTabByRef(tab)
   })
 
   // Страница настроек
@@ -726,6 +773,9 @@ async function init() {
     if (key === 'terminal.newTabPlacement') {
       newTabPlacement = value
       appStore.set('terminal.newTabPlacement', value)
+    }
+    if (key === 'terminal.tabSwitchHotkey') {
+      tabSwitchHotkey = value
     }
     if (key === 'quickReplies.items') {
       if (!config.quickReplies) config.quickReplies = { items: [] }
@@ -1137,6 +1187,18 @@ async function init() {
       if (settingsPage.isVisible() || gitPanel.isVisible()) return
       e.preventDefault()
       bus.emit('search.show')
+    }
+    if (tabSwitchHotkey !== 'none' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      const modMatch =
+        (tabSwitchHotkey === 'cmd-option' && e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey) ||
+        (tabSwitchHotkey === 'cmd-shift' && e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey)
+      if (modMatch) {
+        // Не перехватываем в редакторе — там стрелки с модификатором двигают курсор
+        if (document.activeElement?.closest('#editor-body')) return
+        if (settingsPage.isVisible() || gitPanel.isVisible()) return
+        e.preventDefault()
+        tabBar.switchRelative(e.key === 'ArrowRight' ? 1 : -1)
+      }
     }
   }
   document.addEventListener('keydown', onKeyDown)

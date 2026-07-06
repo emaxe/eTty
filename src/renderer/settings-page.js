@@ -205,6 +205,23 @@ export class SettingsPage {
             this._scheduleSave()
           }
         )
+      },
+      {
+        label: 'Переключение вкладок с клавиатуры',
+        control: this._createSelect(
+          [
+            { key: 'none', name: 'Выкл' },
+            { key: 'cmd-option', name: 'Cmd + Option + ←/→' },
+            { key: 'cmd-shift', name: 'Cmd + Shift + ←/→' }
+          ],
+          this._config.terminal?.tabSwitchHotkey || 'none',
+          (val) => {
+            if (!this._config.terminal) this._config.terminal = {}
+            this._config.terminal.tabSwitchHotkey = val
+            this._bus.emit('settings.changed', { key: 'terminal.tabSwitchHotkey', value: val })
+            this._scheduleSave()
+          }
+        )
       }
     ]))
 
