@@ -66,14 +66,17 @@ export class ElectronApiAdapter {
   // — Git —
   gitGetRoot(cwd) { return this._api.gitGetRoot(cwd) }
   gitGetStatus(cwd) { return this._api.gitGetStatus(cwd) }
-  gitGetDiff(cwd, filePath) { return this._api.gitGetDiff(cwd, filePath) }
+  gitGetDiff(cwd, filePath, opts) { return this._api.gitGetDiff(cwd, filePath, opts) }
   gitGetBranches(cwd) { return this._api.gitGetBranches(cwd) }
   gitCheckout(cwd, branch) { return this._api.gitCheckout(cwd, branch) }
   gitCreateBranch(cwd, name) { return this._api.gitCreateBranch(cwd, name) }
   gitDeleteBranch(cwd, name) { return this._api.gitDeleteBranch(cwd, name) }
-  gitCommit(cwd, message) { return this._api.gitCommit(cwd, message) }
+  gitCommit(cwd, message, opts) { return this._api.gitCommit(cwd, message, opts) }
   gitPush(cwd) { return this._api.gitPush(cwd) }
-  gitDiscard(cwd, filePath) { return this._api.gitDiscard(cwd, filePath) }
+  gitDiscard(cwd) { return this._api.gitDiscard(cwd) }
+  gitStage(cwd, paths) { return this._api.gitStage(cwd, paths) }
+  gitUnstage(cwd, paths) { return this._api.gitUnstage(cwd, paths) }
+  gitDiscardFile(cwd, paths, opts) { return this._api.gitDiscardFile(cwd, paths, opts) }
 
   // — Agents —
   agentsGetStatus() { return this._api.agentsGetStatus() }

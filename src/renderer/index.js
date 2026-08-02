@@ -19,7 +19,7 @@ import { TabBar } from './tab-bar.js'
 import { THEMES } from './themes.js'
 import { SettingsPage, SUPPORTED_AGENTS } from './settings-page.js'
 import { StatusBar } from './status-bar.js'
-import { GitPanel } from './git-panel.js'
+import { GitPanel } from './features/git/git-panel.js'
 import { EditorPanel } from './editor-panel.js'
 import { ProjectSearchDialog } from './project-search.js'
 import { NodeVersionDialog } from './node-version-dialog.js'
@@ -183,6 +183,23 @@ async function init() {
       root.setProperty('--green', theme.ui.green)
       root.setProperty('--red', theme.ui.red)
       root.setProperty('--hover', theme.ui.hover)
+
+      // Git diff — токены подсветки синтаксиса (features/git/diff-highlighter.js)
+      if (theme.editor) {
+        const e = theme.editor
+        root.setProperty('--dt-keyword', e.keyword)
+        root.setProperty('--dt-string', e.string)
+        root.setProperty('--dt-number', e.number)
+        root.setProperty('--dt-comment', e.comment)
+        root.setProperty('--dt-function', e.function)
+        root.setProperty('--dt-type', e.type)
+        root.setProperty('--dt-variable', e.variable)
+        root.setProperty('--dt-operator', e.operator)
+        root.setProperty('--dt-property', e.property)
+        root.setProperty('--dt-tag', e.tag)
+        root.setProperty('--dt-attribute', e.attribute)
+        root.setProperty('--dt-bracket', e.bracket)
+      }
 
       // Обновить уже открытые терминалы
       if (tabBar) {
@@ -551,8 +568,12 @@ async function init() {
     onClose: () => {
       appStore.set('ui.gitPanelVisible', false)
       statusBar.updateNow()
+      focusActiveTerminal()
     },
+    eventBus: r('bus'),
+    store: r('store'),
     api: r('api'),
+    confirmDialog: r('confirmDialog'),
   }))
   const gitPanel = container.resolve('gitPanel')
 
@@ -1187,6 +1208,13 @@ async function init() {
       if (settingsPage.isVisible() || gitPanel.isVisible()) return
       e.preventDefault()
       bus.emit('search.show')
+    }
+    // Cmd+Shift+G / Ctrl+Shift+G — toggle git-панели (открыть/закрыть)
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'g') {
+      if (document.activeElement?.closest('#editor-body')) return
+      if (settingsPage.isVisible()) return
+      e.preventDefault()
+      appStore.set('ui.gitPanelVisible', !appStore.get('ui.gitPanelVisible'))
     }
     if (tabSwitchHotkey !== 'none' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       const modMatch =

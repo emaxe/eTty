@@ -56,7 +56,7 @@ const diffDataField = StateField.define({
 class DiffGutterMarker extends GutterMarker {
   constructor(type) {
     super()
-    this.type = type // 'added' | 'modified'
+    this.type = type // 'added' | 'modified' | 'deleted'
   }
   toDOM() {
     const bar = document.createElement('div')
@@ -71,11 +71,14 @@ const diffGutterExtension = [
     class: 'cm-diff-gutter',
     markers(view) {
       const data = view.state.field(diffDataField)
+      const doc = view.state.doc
       const builder = new RangeSetBuilder()
       for (const { line, type } of data) {
-        const doc = view.state.doc
-        if (line >= 1 && line <= doc.lines) {
-          const lineObj = doc.line(line)
+        // A trailing pure deletion (removed lines at EOF) has no surviving
+        // line to anchor to — clamp it to the last line instead of dropping it.
+        const clamped = type === 'deleted' && line > doc.lines ? doc.lines : line
+        if (clamped >= 1 && clamped <= doc.lines) {
+          const lineObj = doc.line(clamped)
           builder.add(lineObj.from, lineObj.from, new DiffGutterMarker(type))
         }
       }
@@ -474,6 +477,10 @@ export class EditorPanel {
         // Language (static per file)
         ...langExts,
 
+        // Diff gutter — declared before lineNumbers() so it renders to its
+        // left (VS Code convention), not squeezed between numbers and text.
+        ...diffGutterExtension,
+
         // Core extensions
         lineNumbers(),
         highlightActiveLineGutter(),
@@ -514,10 +521,7 @@ export class EditorPanel {
             self._updateStatusBar()
             self._updateSendButton()
           }
-        }),
-
-        // Diff gutter
-        ...diffGutterExtension
+        })
       ]
     })
 
@@ -1435,7 +1439,7 @@ export class EditorPanel {
       if (relPath.startsWith('/')) relPath = relPath.slice(1)
     }
 
-    const diffStr = await this._api.gitGetDiff(rootPath, relPath)
+    const diffStr = await this._api.gitGetDiff(rootPath, relPath, { compareTo: 'head' })
 
     // Проверить, что файл всё ещё актуален после async операции
     if (this._activeFilePath !== filePath || !this._tabs.has(filePath)) return
@@ -1467,6 +1471,15 @@ export class EditorPanel {
         if (line.type === 'add') {
           const hasNeighborDel = hunkLines.slice(Math.max(0, i - 2), i + 3).some(l => l.type === 'del')
           result.push({ line: line.lineNum, type: hasNeighborDel ? 'modified' : 'added' })
+        } else if (line.type === 'del') {
+          // Mark once per contiguous deletion run, anchored on the surviving
+          // line right after it. Skip when an adjacent 'add' already covers
+          // the spot with a 'modified' marker (replace, not pure deletion).
+          const isRunStart = i === 0 || hunkLines[i - 1].type !== 'del'
+          const hasNeighborAdd = hunkLines.slice(Math.max(0, i - 2), i + 3).some(l => l.type === 'add')
+          if (isRunStart && !hasNeighborAdd) {
+            result.push({ line: line.lineNum, type: 'deleted' })
+          }
         }
         i++
       }

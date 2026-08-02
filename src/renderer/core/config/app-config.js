@@ -5,7 +5,6 @@
 export const APP_CONFIG = Object.freeze({
   // Polling intervals (ms)
   STATUS_POLL_INTERVAL_MS: 5000,
-  GIT_PANEL_POLL_INTERVAL_MS: 3000,
   GIT_STATUS_POLL_INTERVAL_MS: 5000,
 
   // Debounce / batch delays (ms)
@@ -35,4 +34,13 @@ export const APP_CONFIG = Object.freeze({
   SEARCH_MAX_FILE_SIZE: 1024 * 1024,
   SEARCH_MAX_CONTENT_RESULTS: 500,
   SEARCH_DOUBLE_SHIFT_TIMEOUT_MS: 300,
+
+  // Git panel sidebar resize constraints (px)
+  GIT_SIDEBAR_DEFAULT_WIDTH: 280,
+  GIT_SIDEBAR_MIN_WIDTH: 200,
+  GIT_SIDEBAR_MAX_WIDTH: 560,
+
+  // Git diff rendering limits (line count)
+  GIT_DIFF_MAX_HIGHLIGHT_LINES: 2000,
+  GIT_DIFF_MAX_RENDER_LINES: 20000,
 })

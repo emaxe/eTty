@@ -74,6 +74,9 @@ export const IPC_CHANNELS = Object.freeze({
   GIT_COMMIT: 'git:commit',
   GIT_PUSH: 'git:push',
   GIT_DISCARD: 'git:discard',
+  GIT_STAGE: 'git:stage',
+  GIT_UNSTAGE: 'git:unstage',
+  GIT_DISCARD_FILE: 'git:discard-file',
 
   // App
   APP_HOMEDIR: 'app:homedir',
