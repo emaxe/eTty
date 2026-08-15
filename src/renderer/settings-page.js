@@ -1,3 +1,15 @@
+import { Icons } from './icons.js'
+import { buildQuickReplyTree, normalizeQuickReplies } from './features/quick-replies/quick-replies-model.js'
+import { APP_CONFIG } from './core/config/app-config.js'
+
+function pluralizeReplies(n) {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return 'ответ'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'ответа'
+  return 'ответов'
+}
+
 export const SUPPORTED_AGENTS = [
   { id: 'claude', label: 'Claude Code' },
   { id: 'codex', label: 'Codex' },
@@ -12,10 +24,11 @@ export const SUPPORTED_AGENTS = [
  * Страница настроек (overlay). Категории: оформление, дерево файлов, терминал, ИИ-агенты.
  */
 export class SettingsPage {
-  constructor({ eventBus, onClose, api }) {
+  constructor({ eventBus, onClose, api, confirmDialog }) {
     this._bus = eventBus
     this._onClose = onClose
     this._api = api
+    this._confirmDialog = confirmDialog
     this._config = null
     this._themes = null
     this._overlay = null
@@ -23,6 +36,9 @@ export class SettingsPage {
     this._agentsCategory = null
     this._quickRepliesCategory = null
     this._agentStatusById = new Map()
+    this._collapsedGroupIds = new Set()
+    this._dragState = null
+    this._dropTarget = null
   }
 
   async init() {
@@ -589,8 +605,14 @@ export class SettingsPage {
   }
 
   _ensureQuickRepliesSettings() {
-    if (!this._config.quickReplies) this._config.quickReplies = { items: [] }
+    if (!this._config.quickReplies) this._config.quickReplies = { items: [], groups: [] }
     if (!Array.isArray(this._config.quickReplies.items)) this._config.quickReplies.items = []
+    if (!Array.isArray(this._config.quickReplies.groups)) this._config.quickReplies.groups = []
+    // Self-heal a manually-edited or drag-mangled config: drop orphan groupIds,
+    // dedupe groups, re-collapse each group's items into a contiguous run
+    const { items, groups } = normalizeQuickReplies(this._config.quickReplies)
+    this._config.quickReplies.items = items
+    this._config.quickReplies.groups = groups
   }
 
   _findAgentById(id) {
@@ -621,69 +643,84 @@ export class SettingsPage {
     const list = document.createElement('div')
     list.className = 'settings-quick-replies-list'
 
-    const items = this._config.quickReplies?.items || []
-    for (let i = 0; i < items.length; i++) {
-      list.appendChild(this._buildQuickReplyCompactRow(items[i], i, list))
+    const { items, groups } = this._config.quickReplies || { items: [], groups: [] }
+    const nodes = buildQuickReplyTree({ items, groups, includeEmptyGroups: true })
+    for (const node of nodes) {
+      if (node.kind === 'item') {
+        list.appendChild(this._buildQuickReplyCompactRow(node.item, node.index, false, null))
+        continue
+      }
+      list.appendChild(this._buildQuickReplyGroupRow(node))
+      if (this._collapsedGroupIds.has(node.group.id)) continue
+      for (const child of node.children) {
+        list.appendChild(this._buildQuickReplyCompactRow(child.item, child.index, true, node.group.id))
+      }
     }
 
-    // Drag & drop on the list
+    // Drag & drop on the list — see _applyQuickReplyDrop for the index/grouping math
     list.addEventListener('dragover', (e) => {
       e.preventDefault()
-      const dragging = list.querySelector('.settings-quick-reply-compact-row.dragging')
-      if (!dragging) return
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+      if (!this._dragState) return
 
-      // Remove previous drop-target
-      for (const el of list.querySelectorAll('.settings-quick-reply-compact-row')) {
-        el.classList.remove('drop-target')
+      for (const el of list.querySelectorAll('.settings-qr-row')) {
+        el.classList.remove('drop-target', 'drop-into')
       }
 
-      const afterElement = this._getDragAfterElement(list, e.clientY)
-      if (afterElement) {
-        afterElement.classList.add('drop-target')
-      } else if (list.lastElementChild) {
-        list.lastElementChild.classList.add('drop-target')
+      const afterEl = this._getDragAfterElement(list, e.clientY, '.settings-qr-row:not(.dragging):not(.dragging-child)')
+      const prevEl = afterEl ? afterEl.previousElementSibling : list.lastElementChild
+      const itemsLength = this._config.quickReplies.items.length
+      let beforeIndex = afterEl ? Number(afterEl.dataset.index) : itemsLength
+      let targetGroupId = null
+
+      if (this._dragState.kind === 'item') {
+        if (prevEl?.dataset.kind === 'group' && !this._collapsedGroupIds.has(prevEl.dataset.groupId)) {
+          targetGroupId = prevEl.dataset.groupId
+        } else if (prevEl?.classList.contains('is-child')) {
+          const listRect = list.getBoundingClientRect()
+          if (e.clientX >= listRect.left + APP_CONFIG.QUICK_REPLY_TREE_INDENT_PX) {
+            targetGroupId = prevEl.dataset.groupId
+          }
+        }
+      } else {
+        // Whole group being dragged — top-level only; pin to the nearest foreign block boundary
+        beforeIndex = this._snapGroupDropIndex(beforeIndex, this._dragState.groupId)
       }
+
+      this._dropTarget = { beforeIndex, targetGroupId }
+
+      if (targetGroupId) {
+        list.querySelector(`.settings-quick-reply-group-row[data-group-id="${targetGroupId}"]`)?.classList.add('drop-into')
+        return
+      }
+      const indicatorRow = [...list.querySelectorAll('.settings-qr-row:not(.dragging):not(.dragging-child)')]
+        .find(r => Number(r.dataset.index) === beforeIndex)
+      if (indicatorRow) indicatorRow.classList.add('drop-target')
+      else if (list.lastElementChild) list.lastElementChild.classList.add('drop-target')
     })
 
     list.addEventListener('dragleave', (e) => {
       // If leaving the list entirely, clear targets
       if (!list.contains(e.relatedTarget)) {
-        for (const el of list.querySelectorAll('.settings-quick-reply-compact-row')) {
-          el.classList.remove('drop-target')
+        for (const el of list.querySelectorAll('.settings-qr-row')) {
+          el.classList.remove('drop-target', 'drop-into')
         }
       }
     })
 
     list.addEventListener('drop', (e) => {
       e.preventDefault()
-      const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'), 10)
-      if (Number.isNaN(draggedIndex)) return
-
-      // Find target position
-      const rows = [...list.querySelectorAll('.settings-quick-reply-compact-row')]
-      const targetRow = rows.find(r => r.classList.contains('drop-target'))
-      let targetIndex = rows.length - 1
-      if (targetRow) {
-        targetIndex = parseInt(targetRow.dataset.index, 10)
-        targetRow.classList.remove('drop-target')
+      const dragState = this._dragState
+      const dropTarget = this._dropTarget
+      for (const el of list.querySelectorAll('.settings-qr-row')) {
+        el.classList.remove('drop-target', 'drop-into')
       }
-
-      if (draggedIndex === targetIndex) return
-
-      this._ensureQuickRepliesSettings()
-      const items = this._config.quickReplies.items
-      const [moved] = items.splice(draggedIndex, 1)
-      // After removing dragged item, elements after it shift down by 1.
-      // If we dragged forward (draggedIndex < target), the target position
-      // in the shortened array is one less than the original index.
-      const newTargetIndex = parseInt(targetRow?.dataset.index || String(items.length), 10)
-      const adjustedIndex = draggedIndex < newTargetIndex ? newTargetIndex - 1 : newTargetIndex
-      items.splice(adjustedIndex, 0, moved)
-
-      this._bus.emit('settings.changed', { key: 'quickReplies.items', value: this._config.quickReplies.items })
-      this._scheduleSave()
-      this._rerenderQuickRepliesCategory()
+      if (!dragState || !dropTarget) return
+      this._applyQuickReplyDrop(dragState, dropTarget)
     })
+
+    const actions = document.createElement('div')
+    actions.className = 'settings-quick-replies-actions'
 
     const addBtn = document.createElement('button')
     addBtn.className = 'settings-btn-add'
@@ -692,13 +729,23 @@ export class SettingsPage {
       this._openQuickReplyDialog({ id: crypto.randomUUID(), label: '', command: '', enabled: true, agents: [] }, -1)
     })
 
+    const addGroupBtn = document.createElement('button')
+    addGroupBtn.className = 'settings-btn-add'
+    addGroupBtn.textContent = 'Добавить группу'
+    addGroupBtn.addEventListener('click', () => {
+      this._openQuickReplyGroupDialog({ id: crypto.randomUUID(), label: '' }, true)
+    })
+
+    actions.appendChild(addBtn)
+    actions.appendChild(addGroupBtn)
+
     category.appendChild(list)
-    category.appendChild(addBtn)
+    category.appendChild(actions)
     return category
   }
 
   _getDragAfterElement(container, y, selector) {
-    const sel = selector || '.settings-quick-reply-compact-row:not(.dragging)'
+    const sel = selector || '.settings-qr-row:not(.dragging):not(.dragging-child)'
     const draggableElements = [...container.querySelectorAll(sel)]
     return draggableElements.reduce((closest, child) => {
       const box = child.getBoundingClientRect()
@@ -710,10 +757,85 @@ export class SettingsPage {
     }, { offset: Number.NEGATIVE_INFINITY }).element
   }
 
-  _buildQuickReplyCompactRow(item, index, listEl) {
+  /**
+   * When a whole group is being dragged, it can only land at the top level.
+   * If the raw drop index would land inside another group's contiguous block,
+   * snap to whichever end of that block (start/end) the cursor is closer to.
+   */
+  _snapGroupDropIndex(rawIndex, draggedGroupId) {
+    const { items, groups } = this._config.quickReplies
+    const tree = buildQuickReplyTree({ items, groups })
+    for (const node of tree) {
+      if (node.kind !== 'group' || node.group.id === draggedGroupId || node.children.length === 0) continue
+      const indices = node.children.map(c => c.index)
+      const start = Math.min(...indices)
+      const end = Math.max(...indices) + 1
+      if (rawIndex > start && rawIndex < end) {
+        return (rawIndex - start) <= (end - rawIndex) ? start : end
+      }
+    }
+    return rawIndex
+  }
+
+  _clearQuickReplyDragVisuals(rowEl) {
+    const list = rowEl.closest('.settings-quick-replies-list')
+    if (list) {
+      for (const el of list.querySelectorAll('.settings-qr-row')) {
+        el.classList.remove('dragging', 'dragging-child', 'drop-target', 'drop-into')
+      }
+    }
+    this._dragState = null
+    this._dropTarget = null
+  }
+
+  /**
+   * Applies a completed drag: removes the dragged item(s) (a single item, or
+   * every item belonging to a dragged group), reassigns groupId for a single
+   * moved item, splices the result back in at the drop position, then
+   * normalizes to restore group contiguity. No-op (no emit/save) if the
+   * resulting order is unchanged.
+   */
+  _applyQuickReplyDrop(drag, drop) {
+    const { items, groups } = this._config.quickReplies
+    const movedIndices = drag.kind === 'group'
+      ? items.reduce((acc, it, i) => { if (it.groupId === drag.groupId) acc.push(i); return acc }, [])
+      : [drag.index]
+    if (movedIndices.length === 0) return
+
+    const movedSet = new Set(movedIndices)
+    const moved = movedIndices.map(i => items[i])
+    const rest = items.filter((_, i) => !movedSet.has(i))
+
+    let removedBefore = 0
+    for (const i of movedIndices) if (i < drop.beforeIndex) removedBefore++
+    const insertAt = drop.beforeIndex - removedBefore
+
+    if (drag.kind === 'item') {
+      if (drop.targetGroupId) moved[0].groupId = drop.targetGroupId
+      else delete moved[0].groupId
+    }
+
+    const next = [...rest.slice(0, insertAt), ...moved, ...rest.slice(insertAt)]
+    const { items: normalizedItems, groups: normalizedGroups } = normalizeQuickReplies({ items: next, groups })
+
+    const noop = normalizedItems.length === items.length && normalizedItems.every((it, i) => it === items[i])
+    if (noop) return
+
+    // Dropping into a collapsed group would otherwise make the moved item vanish from view
+    if (drop.targetGroupId) this._collapsedGroupIds.delete(drop.targetGroupId)
+
+    this._config.quickReplies.items = normalizedItems
+    this._config.quickReplies.groups = normalizedGroups
+    this._emitQuickRepliesChanged()
+  }
+
+  _buildQuickReplyCompactRow(item, index, isChild, groupId) {
     const row = document.createElement('div')
-    row.className = 'settings-quick-reply-compact-row'
+    row.className = 'settings-qr-row settings-quick-reply-compact-row'
+    if (isChild) row.classList.add('is-child')
+    row.dataset.kind = 'item'
     row.dataset.index = String(index)
+    if (groupId) row.dataset.groupId = groupId
     row.draggable = true
 
     // Drag handle (grip icon)
@@ -758,22 +880,94 @@ export class SettingsPage {
     // Drag events
     row.addEventListener('dragstart', (e) => {
       e.dataTransfer.effectAllowed = 'move'
-      e.dataTransfer.setData('text/plain', String(index))
+      e.dataTransfer.setData('text/plain', item.id || String(index))
+      this._dragState = { kind: 'item', index, groupId: item.groupId || null }
       row.classList.add('dragging')
       // Hide drag ghost image to avoid rendering the whole row
       const emptyImage = document.createElement('canvas')
       e.dataTransfer.setDragImage(emptyImage, 0, 0)
     })
 
-    row.addEventListener('dragend', () => {
-      row.classList.remove('dragging')
-      // Remove any drop-target classes
-      if (listEl) {
-        for (const el of listEl.querySelectorAll('.settings-quick-reply-compact-row')) {
-          el.classList.remove('drop-target')
+    row.addEventListener('dragend', () => this._clearQuickReplyDragVisuals(row))
+
+    return row
+  }
+
+  _buildQuickReplyGroupRow(node) {
+    const { group, children } = node
+    const row = document.createElement('div')
+    row.className = 'settings-qr-row settings-quick-reply-group-row'
+    row.dataset.kind = 'group'
+    row.dataset.groupId = group.id
+    row.dataset.index = String(children.length > 0 ? children[0].index : this._config.quickReplies.items.length)
+    row.draggable = true
+
+    const collapsed = this._collapsedGroupIds.has(group.id)
+    const toggleBtn = document.createElement('button')
+    toggleBtn.className = 'settings-qr-group-toggle'
+    toggleBtn.title = collapsed ? 'Развернуть' : 'Свернуть'
+    toggleBtn.innerHTML = collapsed ? Icons.chevronRight : Icons.chevronDown
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      if (this._collapsedGroupIds.has(group.id)) this._collapsedGroupIds.delete(group.id)
+      else this._collapsedGroupIds.add(group.id)
+      this._rerenderQuickRepliesCategory()
+    })
+
+    const dragHandle = document.createElement('div')
+    dragHandle.className = 'settings-quick-reply-drag-handle'
+    dragHandle.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg>'
+    dragHandle.title = 'Перетащить'
+
+    const text = document.createElement('div')
+    text.className = 'settings-quick-reply-text'
+    text.textContent = group.label || '(без названия)'
+    if (!group.label) text.classList.add('empty')
+    const badge = document.createElement('span')
+    badge.className = 'settings-qr-group-badge'
+    badge.textContent = 'группа'
+    text.appendChild(badge)
+
+    const countEl = document.createElement('div')
+    countEl.className = 'settings-quick-reply-agents-text'
+    if (children.length === 0) {
+      countEl.textContent = 'пусто'
+      countEl.classList.add('empty')
+    } else {
+      countEl.textContent = `${children.length} ${pluralizeReplies(children.length)}`
+    }
+
+    const editBtn = document.createElement('button')
+    editBtn.className = 'settings-quick-reply-edit-btn'
+    editBtn.title = 'Редактировать'
+    editBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5L13.5 4.5L5 13L2.5 13.5L3 11L11.5 2.5Z"/><path d="M10 4L12 6"/></svg>'
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this._openQuickReplyGroupDialog(group, false)
+    })
+
+    row.appendChild(toggleBtn)
+    row.appendChild(dragHandle)
+    row.appendChild(text)
+    row.appendChild(countEl)
+    row.appendChild(editBtn)
+
+    row.addEventListener('dragstart', (e) => {
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', group.id)
+      this._dragState = { kind: 'group', groupId: group.id }
+      row.classList.add('dragging')
+      const list = row.closest('.settings-quick-replies-list')
+      if (list) {
+        for (const child of list.querySelectorAll(`.settings-quick-reply-compact-row.is-child[data-group-id="${group.id}"]`)) {
+          child.classList.add('dragging-child')
         }
       }
+      const emptyImage = document.createElement('canvas')
+      e.dataTransfer.setDragImage(emptyImage, 0, 0)
     })
+
+    row.addEventListener('dragend', () => this._clearQuickReplyDragVisuals(row))
 
     return row
   }
@@ -865,11 +1059,8 @@ export class SettingsPage {
     deleteBtn.textContent = 'Удалить'
     deleteBtn.addEventListener('click', () => {
       if (index >= 0) {
-        const items = this._config.quickReplies?.items || []
-        items.splice(index, 1)
-        this._bus.emit('settings.changed', { key: 'quickReplies.items', value: items })
-        this._scheduleSave()
-        this._rerenderQuickRepliesCategory()
+        this._config.quickReplies.items.splice(index, 1)
+        this._emitQuickRepliesChanged()
       }
       overlay.remove()
     })
@@ -897,6 +1088,8 @@ export class SettingsPage {
         enabled,
         agents: selectedAgents
       }
+      // Preserve group membership — this dialog has no group field of its own
+      if (item.groupId) newItem.groupId = item.groupId
 
       this._ensureQuickRepliesSettings()
       if (index >= 0) {
@@ -905,9 +1098,7 @@ export class SettingsPage {
         this._config.quickReplies.items.push(newItem)
       }
 
-      this._bus.emit('settings.changed', { key: 'quickReplies.items', value: this._config.quickReplies.items })
-      this._scheduleSave()
-      this._rerenderQuickRepliesCategory()
+      this._emitQuickRepliesChanged()
       overlay.remove()
     })
 
@@ -922,6 +1113,106 @@ export class SettingsPage {
     document.body.appendChild(overlay)
 
     setTimeout(() => labelInput.focus(), 0)
+  }
+
+  _openQuickReplyGroupDialog(group, isNew) {
+    const overlay = document.createElement('div')
+    overlay.className = 'settings-dialog-overlay'
+
+    const dialog = document.createElement('div')
+    dialog.className = 'settings-dialog'
+
+    const header = document.createElement('div')
+    header.className = 'settings-dialog-header'
+    header.textContent = isNew ? 'Новая группа' : 'Редактировать группу'
+
+    const body = document.createElement('div')
+    body.className = 'settings-dialog-body'
+
+    const labelGroup = document.createElement('div')
+    labelGroup.className = 'settings-dialog-field'
+    const labelLabel = document.createElement('label')
+    labelLabel.textContent = 'Название группы'
+    const labelInput = document.createElement('input')
+    labelInput.type = 'text'
+    labelInput.className = 'settings-input'
+    labelInput.value = group.label || ''
+    labelInput.placeholder = 'Например: Команды'
+    labelGroup.appendChild(labelLabel)
+    labelGroup.appendChild(labelInput)
+    body.appendChild(labelGroup)
+
+    const footer = document.createElement('div')
+    footer.className = 'settings-dialog-footer'
+
+    const deleteBtn = document.createElement('button')
+    deleteBtn.className = 'settings-dialog-btn-delete'
+    deleteBtn.textContent = 'Удалить'
+    if (isNew) deleteBtn.style.visibility = 'hidden'
+    deleteBtn.addEventListener('click', async () => {
+      const confirmed = await this._confirmDialog.open({
+        title: `Удалить группу «${group.label || '(без названия)'}»?`,
+        message: 'Быстрые ответы внутри группы останутся в общем списке.',
+        confirmText: 'Удалить',
+        cancelText: 'Отмена'
+      })
+      if (!confirmed) return
+      this._ensureQuickRepliesSettings()
+      this._config.quickReplies.groups = this._config.quickReplies.groups.filter(g => g.id !== group.id)
+      for (const item of this._config.quickReplies.items) {
+        if (item.groupId === group.id) delete item.groupId
+      }
+      this._collapsedGroupIds.delete(group.id)
+      this._emitQuickRepliesChanged()
+      overlay.remove()
+    })
+
+    const cancelBtn = document.createElement('button')
+    cancelBtn.className = 'settings-dialog-btn-secondary'
+    cancelBtn.textContent = 'Отмена'
+    cancelBtn.addEventListener('click', () => overlay.remove())
+
+    const saveBtn = document.createElement('button')
+    saveBtn.className = 'settings-dialog-btn-primary'
+    saveBtn.textContent = 'Сохранить'
+    saveBtn.addEventListener('click', () => {
+      const labelValue = labelInput.value.trim()
+      if (!labelValue) return
+
+      this._ensureQuickRepliesSettings()
+      const groups = this._config.quickReplies.groups
+      const existing = groups.find(g => g.id === group.id)
+      if (existing) {
+        existing.label = labelValue
+      } else {
+        groups.push({ id: group.id, label: labelValue })
+      }
+
+      this._emitQuickRepliesChanged()
+      overlay.remove()
+    })
+
+    footer.appendChild(deleteBtn)
+    footer.appendChild(cancelBtn)
+    footer.appendChild(saveBtn)
+
+    dialog.appendChild(header)
+    dialog.appendChild(body)
+    dialog.appendChild(footer)
+    overlay.appendChild(dialog)
+    document.body.appendChild(overlay)
+
+    setTimeout(() => labelInput.focus(), 0)
+  }
+
+  _emitQuickRepliesChanged() {
+    const { items, groups } = this._config.quickReplies
+    this._bus.emit('settings.changed', {
+      key: 'quickReplies',
+      value: { items: items.map(i => ({ ...i })), groups: groups.map(g => ({ ...g })) }
+    })
+    this._scheduleSave()
+    this._rerenderQuickRepliesCategory()
   }
 
   _rerenderQuickRepliesCategory() {
@@ -1049,11 +1340,15 @@ export class SettingsPage {
     this._bus = null
     this._onClose = null
     this._api = null
+    this._confirmDialog = null
     this._config = null
     this._themes = null
     this._agentsCategory = null
     this._quickRepliesCategory = null
     this._agentStatusById = null
+    this._collapsedGroupIds = null
+    this._dragState = null
+    this._dropTarget = null
   }
 
   _scheduleSave() {

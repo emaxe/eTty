@@ -171,7 +171,7 @@ docs/                        — спецификации, планы, чекл�
 - Double-click — ручное назначение активного агента, когда busy без авто-детекта
 - Force-disable агентов в настройках
 - Прокси URL для ИИ-агентов (с toggle в статус-баре)
-- Quick replies — настраиваемые быстрые команды per-agent, drag-and-drop reorder
+- Quick replies — настраиваемые быстрые команды per-agent, drag-and-drop reorder, группировка (дерево с DnD в настройках, группа — кнопка с выпадающим меню в статус-баре, видимость наследуется от ответов)
 - Per-agent режим Shift+Enter: Kitty protocol / newline / Ctrl+J
 
 ### Менеджер версий Node.js
@@ -344,7 +344,7 @@ electron-builder делает это автоматически через `"npm
 - `checklist.md` — прогресс
 - `starter-prompt.md` — промпт для новой сессии
 
-Текущие фичи: `init`, `sidebar-file-tree`, `tab-persistence`, `git-panel`, `app-packaging`, `config`, `fs-watch-recursive`, `file-tree-dnd`, `quick-reply-settings`, `project-search`, `git-diff-highlight`, `custom-ai-agents`, `editor-file-sync`, `statusbar-size`.
+Текущие фичи: `init`, `sidebar-file-tree`, `tab-persistence`, `git-panel`, `app-packaging`, `config`, `fs-watch-recursive`, `file-tree-dnd`, `quick-reply-settings`, `project-search`, `git-diff-highlight`, `custom-ai-agents`, `editor-file-sync`, `statusbar-size`, `quick-reply-groups`.
 
 ## Хранилище данных
 

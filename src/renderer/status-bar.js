@@ -1,5 +1,7 @@
 import { Icons } from './icons.js'
 import { APP_CONFIG } from './core/config/app-config.js'
+import { ContextMenu } from './components/base/context-menu/context-menu.js'
+import { buildQuickReplyTree } from './features/quick-replies/quick-replies-model.js'
 
 /**
  * Статус-бар. Показывает текущую директорию, версию Node.js и Git-статистику.
@@ -15,7 +17,7 @@ import { APP_CONFIG } from './core/config/app-config.js'
  *   чтобы click-события доходили для double-click обработки.
  */
 export class StatusBar {
-  constructor({ btnEl, cwdEl, nodeEl, onOpen, onOpenNodeVersion, agentsContainerEl = null, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [] }, api }) {
+  constructor({ btnEl, cwdEl, nodeEl, onOpen, onOpenNodeVersion, agentsContainerEl = null, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [], groups: [] }, api }) {
     this._btnEl = btnEl
     this._cwdEl = cwdEl
     this._nodeEl = nodeEl
@@ -43,6 +45,8 @@ export class StatusBar {
     this._proxy = ''
     this._proxyEnabled = false
     this._customAgentsCategory = null
+    this._contextMenu = new ContextMenu()
+    this._openMenuGroupId = null
     this._cleanupController = new AbortController()
     const signal = this._cleanupController.signal
 
@@ -138,7 +142,7 @@ export class StatusBar {
   }
 
   setQuickReplies(quickReplies) {
-    this._quickReplies = quickReplies || { items: [] }
+    this._quickReplies = quickReplies || { items: [], groups: [] }
     this._updateAgentCommandsPanel()
   }
 
@@ -189,25 +193,71 @@ export class StatusBar {
 
   _updateAgentCommandsPanel() {
     if (!this._agentCommandsPanelEl) return
+    // Buttons about to be wiped by innerHTML='' below — close any menu anchored to them first
+    this._contextMenu?.hide()
+    this._openMenuGroupId = null
+
     const busy = this._activeTabBusy && this._activeAgentId
     this._agentCommandsPanelEl.classList.toggle('hidden', !busy)
     if (!busy) return
 
     this._agentCommandsPanelEl.innerHTML = ''
-    const items = this._quickReplies?.items || []
-    const filtered = items.filter(i => i.enabled && i.agents?.includes(this._activeAgentId))
-    for (const item of filtered) {
-      const btn = document.createElement('button')
-      btn.className = 'agent-cmd-btn'
-      btn.dataset.cmd = item.command
-      btn.textContent = item.label || item.command
-      btn.title = item.command ? `Отправить ${item.command}` : ''
-      btn.addEventListener('click', () => {
-        if (!this._onAgentCommand || !item.command) return
-        this._onAgentCommand(item.command, false)
-      })
-      this._agentCommandsPanelEl.appendChild(btn)
+    const nodes = buildQuickReplyTree({
+      items: this._quickReplies?.items || [],
+      groups: this._quickReplies?.groups || [],
+      filter: (i) => i.enabled && i.agents?.includes(this._activeAgentId)
+    })
+    for (const node of nodes) {
+      this._agentCommandsPanelEl.appendChild(
+        node.kind === 'group' ? this._createGroupButton(node) : this._createQuickReplyButton(node.item)
+      )
     }
+  }
+
+  _createQuickReplyButton(item) {
+    const btn = document.createElement('button')
+    btn.className = 'agent-cmd-btn'
+    btn.dataset.cmd = item.command
+    btn.textContent = item.label || item.command
+    btn.title = item.command ? `Отправить ${item.command}` : ''
+    btn.addEventListener('click', () => {
+      if (!this._onAgentCommand || !item.command) return
+      this._onAgentCommand(item.command, false)
+    })
+    return btn
+  }
+
+  _createGroupButton(node) {
+    const btn = document.createElement('button')
+    btn.className = 'agent-cmd-btn agent-cmd-group-btn'
+    btn.dataset.groupId = node.group.id
+    const label = document.createElement('span')
+    label.className = 'agent-cmd-group-label'
+    label.textContent = node.group.label || 'Группа'
+    btn.appendChild(label)
+    btn.insertAdjacentHTML('beforeend', Icons.chevronDown)
+    btn.title = `Быстрые ответы: ${node.group.label || 'Группа'}`
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      if (this._openMenuGroupId === node.group.id) {
+        this._contextMenu.hide()
+        return
+      }
+      const rect = btn.getBoundingClientRect()
+      this._openMenuGroupId = node.group.id
+      this._contextMenu.show(
+        node.children.map(({ item }) => ({
+          label: item.label || item.command,
+          disabled: !item.command,
+          action: () => this._onAgentCommand?.(item.command, false)
+        })),
+        Math.round(rect.left),
+        Math.round(rect.top - 4),
+        { placement: 'above', onClose: () => { this._openMenuGroupId = null } }
+      )
+    })
+    return btn
   }
 
   _attachAgentButtonHandler(button, signal) {
@@ -267,6 +317,8 @@ export class StatusBar {
 
   destroy() {
     this.stop()
+    this._contextMenu?.destroy()
+    this._contextMenu = null
     this._cleanupController?.abort()
     this._cleanupController = null
     this._btnEl = null

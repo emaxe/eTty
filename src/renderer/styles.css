@@ -1001,11 +1001,13 @@ body.platform-darwin .window-controls {
   height: 34px;
 }
 #status-bar[data-size="standard"] .status-item,
-#status-bar[data-size="standard"] .status-bar-btn {
+#status-bar[data-size="standard"] .status-bar-btn,
+#status-bar[data-size="standard"] .agent-cmd-btn {
   font-size: 13px;
 }
 #status-bar[data-size="large"] .status-item,
-#status-bar[data-size="large"] .status-bar-btn {
+#status-bar[data-size="large"] .status-bar-btn,
+#status-bar[data-size="large"] .agent-cmd-btn {
   font-size: 15px;
 }
 
@@ -1095,6 +1097,13 @@ body.platform-darwin .window-controls {
   border-color: color-mix(in srgb, var(--text) 35%, transparent);
   box-shadow: 0 0 6px color-mix(in srgb, var(--text) 15%, transparent);
 }
+
+.agent-cmd-group-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.agent-cmd-group-btn svg { width: 10px; height: 10px; }
 
 .stat-add { color: var(--green); }
 .stat-del { color: var(--red); }
@@ -2093,7 +2102,8 @@ button svg {
   flex-direction: column;
 }
 
-.settings-quick-reply-compact-row {
+.settings-quick-reply-compact-row,
+.settings-quick-reply-group-row {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2102,15 +2112,20 @@ button svg {
   position: relative;
 }
 
-.settings-quick-reply-compact-row:last-child {
+.settings-qr-row:last-child {
   border-bottom: none;
 }
 
-.settings-quick-reply-compact-row.dragging {
+.settings-qr-row.is-child {
+  padding-left: 26px;
+}
+
+.settings-qr-row.dragging,
+.settings-qr-row.dragging-child {
   opacity: 0.25;
 }
 
-.settings-quick-reply-compact-row.drop-target::before {
+.settings-qr-row.drop-target::before {
   content: '';
   position: absolute;
   top: -2px;
@@ -2121,6 +2136,47 @@ button svg {
   border-radius: 1px;
   z-index: 1;
   pointer-events: none;
+}
+
+.settings-quick-reply-group-row.drop-into {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 4px;
+}
+
+.settings-qr-group-toggle {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.settings-qr-group-toggle:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.settings-qr-group-toggle svg {
+  width: 12px;
+  height: 12px;
+}
+
+.settings-qr-group-badge {
+  margin-left: 8px;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.settings-quick-replies-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .settings-quick-reply-drag-handle {

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Quick reply groups** — bundle related quick replies under a named group in Settings → Быстрые ответы, editable as a drag-and-drop tree (replies can be dragged into/out of/between groups, groups collapse/expand and can be reordered as a block). In the status bar, a group collapses into a single button that opens an upward dropdown menu listing only the replies matching the active agent — the group itself is only shown when it has at least one matching reply, and its position follows its first reply in the flat list
+
 ## [0.1.10] - 2026-07-06
 
 ### Fixed

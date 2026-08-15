@@ -49,6 +49,7 @@ export function getConfigDefaults() {
       proxyEnabled: false
     },
     quickReplies: {
+      groups: [],
       items: [
         { id: 'qr-1', label: 'Ok', command: 'Ok', enabled: true, agents: ['claude', 'codex', 'copilot', 'agent', 'opencode', 'qwen', 'agento'] },
         { id: 'qr-2', label: 'Продолжай', command: 'Продолжай', enabled: true, agents: ['claude', 'codex', 'copilot', 'agent', 'opencode', 'qwen', 'agento'] },

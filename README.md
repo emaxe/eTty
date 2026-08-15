@@ -97,6 +97,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Force-disable** — toggle agents on/off in Settings
 - **Proxy support** — configure HTTP proxy for all agent commands
 - **Customizable quick replies** — define agent-specific quick commands (e.g., `/clear`, `Ok`, `Продолжай`) via Settings; drag-and-drop to reorder
+- **Quick reply groups** — bundle related replies under a named group; the group collapses into a single status-bar button that opens a dropdown menu with the matching replies
 - **Double-click to select active agent** — when the terminal is busy but the active agent wasn't auto-detected (e.g., launched manually or via another app), double-click any agent button in the status bar to manually assign it as active. This enables that agent's quick-reply buttons.
 - **Per-agent Shift+Enter mode** — configure how Shift+Enter behaves for each AI agent (Kitty protocol, newline, or Ctrl+J). Qwen and Agento default to Ctrl+J mode; others default to Kitty protocol.
 
@@ -109,7 +110,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Status bar size** — compact, standard, or large; adjustable in Settings → Appearance
 - **New tab placement** — `modifierAdjacent` (Cmd/Ctrl opens next to active tab) or `modifierEnd` (Cmd/Ctrl appends to end); configurable in Settings → Terminal
 - **Tab switch hotkey** — off, `Cmd+Option+←/→`, or `Cmd+Shift+←/→`; configurable in Settings → Terminal
-- **AI agent quick replies** — CRUD editor with per-agent toggles; drag-and-drop reordering
+- **AI agent quick replies** — CRUD editor with per-agent toggles; drag-and-drop reordering and grouping into a tree
 - **Auto-persisted** to disk with debounced saves
 
 ### Session Persistence

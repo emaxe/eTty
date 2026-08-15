@@ -43,4 +43,7 @@ export const APP_CONFIG = Object.freeze({
   // Git diff rendering limits (line count)
   GIT_DIFF_MAX_HIGHLIGHT_LINES: 2000,
   GIT_DIFF_MAX_RENDER_LINES: 20000,
+
+  // Quick replies settings tree (px)
+  QUICK_REPLY_TREE_INDENT_PX: 26,
 })

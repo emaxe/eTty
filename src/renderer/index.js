@@ -148,6 +148,7 @@ async function init() {
     },
     quickReplies: {
       items: config.quickReplies?.items || [],
+      groups: config.quickReplies?.groups || [],
     },
     git: {
       isRepo: false,
@@ -558,7 +559,8 @@ async function init() {
       tabBar.disabled = false
       focusActiveTerminal()
     },
-    api: r('api')
+    api: r('api'),
+    confirmDialog: r('confirmDialog')
   }))
   const settingsPage = container.resolve('settingsPage')
   await settingsPage.init()
@@ -656,7 +658,7 @@ async function init() {
       config.agents.proxyEnabled = enabled
       r('api').settingsSave(config)
     },
-    quickReplies: config.quickReplies || { items: [] },
+    quickReplies: config.quickReplies || { items: [], groups: [] },
     api: r('api'),
   }))
   const statusBar = container.resolve('statusBar')
@@ -798,10 +800,10 @@ async function init() {
     if (key === 'terminal.tabSwitchHotkey') {
       tabSwitchHotkey = value
     }
-    if (key === 'quickReplies.items') {
-      if (!config.quickReplies) config.quickReplies = { items: [] }
-      config.quickReplies.items = value
-      statusBar.setQuickReplies({ items: value })
+    if (key === 'quickReplies') {
+      config.quickReplies = { items: value.items || [], groups: value.groups || [] }
+      appStore.set('quickReplies', config.quickReplies)
+      statusBar.setQuickReplies(config.quickReplies)
     }
   })
 
