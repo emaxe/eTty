@@ -1,6 +1,6 @@
 {
   "name": "etty",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Terminal wrapper application",
   "main": "./out/main/index.js",
   "scripts": {
