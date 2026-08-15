@@ -39,12 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fsStatFile: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.FS_STAT_FILE, { filePath }),
   getCwd: () => ipcRenderer.invoke(IPC_CHANNELS.FS_GET_CWD),
   fsSetRoot: (dirPath) => ipcRenderer.invoke(IPC_CHANNELS.FS_SET_ROOT, { dirPath }),
-  fsWatchDir: async (dirPath) => {
-    console.log('[Preload] fsWatchDir called:', dirPath)
-    const result = await ipcRenderer.invoke(IPC_CHANNELS.FS_WATCH_DIR, { dirPath })
-    console.log('[Preload] fsWatchDir result:', dirPath, result)
-    return result
-  },
+  fsWatchDir: (dirPath) => ipcRenderer.invoke(IPC_CHANNELS.FS_WATCH_DIR, { dirPath }),
   fsUnwatchDir: (dirPath) => ipcRenderer.invoke(IPC_CHANNELS.FS_UNWATCH_DIR, { dirPath }),
   onFsDirChanged: (cb) => onIPC(IPC_CHANNELS.FS_DIR_CHANGED, (_, data) => cb(data)),
   windowGetPosition: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_GET_POSITION),

@@ -41,7 +41,7 @@ language: any
 | Терминал | `src/renderer/index.js`, `src/main/pty-manager.js`, `features/terminal/` |
 | Файловое дерево | `src/renderer/file-tree.js`, `src/main/file-manager.js` |
 | Редактор | `src/renderer/editor-panel.js`, `src/renderer/editor-languages.js` |
-| Git-панель | `src/renderer/git-panel.js`, `src/main/git-service.js`, `src/main/ipc-handlers/git-handlers.js` |
+| Git-панель | `src/renderer/features/git/`, `src/main/ipc-handlers/git-handlers.js` |
 | Вкладки | `src/renderer/tab-bar.js`, `src/main/tab-state.js` |
 | Настройки | `src/renderer/settings-page.js`, `src/main/settings-store.js` |
 | AI-агенты | `src/renderer/status-bar.js`, `src/main/agent-service.js` |

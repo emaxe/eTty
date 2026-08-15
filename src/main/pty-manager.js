@@ -15,7 +15,9 @@ const PROMPT_MAP = {
 
 /**
  * Управляет PTY-сессиями (псевдотерминалами) для вкладок.
- * Каждая вкладка получает изолированную zsh-сессию с собственными ZDOTDIR и HISTFILE.
+ * На macOS/Linux каждая вкладка получает изолированную zsh-сессию с собственными
+ * ZDOTDIR и HISTFILE (история, OSC 7/133 хуки). На Windows — сессия cmd.exe без
+ * ZDOTDIR/истории/OSC-хуков (zsh-специфичны).
  */
 export class PtyManager {
   constructor({ shellPathResolver }) {
@@ -75,7 +77,7 @@ export class PtyManager {
   }
 
   /**
-   * Запускает новую zsh-сессию в изолированном PTY.
+   * Запускает новую сессию shell'а (zsh на macOS/Linux, cmd.exe на Windows) в изолированном PTY.
    * @returns {{pid: number}} — PID процесса для идентификации сессии
    */
   create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize, promptStyle }) {

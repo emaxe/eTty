@@ -10,23 +10,8 @@ Electron-терминал с файловым деревом, редакторо
 ## Правила
 
 ### Правила проекта
-Основные правила и описание проекта.
+Стек, структура директорий, IPC-каналы, реализованные фичи, архитектурные инварианты, стиль кода и чеклисты.
 [Подробности](.agents/rules/project-rules.md)
-
-## Архитектурный контекст
-
-Проект прошёл масштабный рефакторинг (Блоки 1–4):
-- **Блок 1:** UI-Kit, константы, keyboard/OSC handlers
-- **Блок 2:** Event Bus + State Store + DraggableTabs
-- **Блок 3:** DI Container, полная миграция на EventBus, God Object split (renderer)
-- **Блок 4:** IPC handlers split + AppService (main process)
-
-Актуальная структура описана в `project-rules.md`.
-
-### Новые сервисы и компоненты (после рефакторинга)
-
-- `GitStatusService` (`renderer/services/git-status-service.js`) — polling git-статуса (5 сек), публикует `git:status-updated`, хранит данные в `StateStore` (`git.isRepo`, `git.rootPath`, `git.fileStatuses`). Используется `FileTree` и `EditorPanel` для подсветки diff.
-- `ProjectSearchDialog` (`renderer/project-search.js`) — модальный диалог поиска по проекту. Открывается по `Cmd+F` / double-tap `Shift`. Работает через IPC `SEARCH_QUERY` / `SEARCH_CANCEL` и адаптер `ElectronApiAdapter`.
 
 ## Правила реализации
 
@@ -45,14 +30,8 @@ Electron-терминал с файловым деревом, редакторо
 Прочитай [.agents/rules/release-process.md](.agents/rules/release-process.md) и следуй процедуре обновления CHANGELOG.
 
 ### Архитектурные инварианты (всегда)
-
-- **DI:** зависимости — через DI Container (constructor injection), не через глобалы
-- **EventBus:** коммуникация между компонентами — через EventBus, не прямые вызовы
-- **StateStore:** shared state — через StateStore, не private fields
-- **IPC_CHANNELS:** все IPC-каналы — только через `shared/ipc-channels.js`, нет строковых литералов
-- **Config:** магические числа и интервалы — в `core/config/`, не инлайн
-- **Cleanup:** каждый компонент имеет `destroy()` для отписки от EventBus, StateStore, очистки таймеров и DOM
-- **Адаптер:** не обращаться к `window.electronAPI` напрямую — через `core/adapters/electron-api.js`
+Обязательны при любом изменении кода: DI, EventBus, StateStore, IPC_CHANNELS, Config, Cleanup, Адаптер.
+[Полная таблица с описанием каждого инварианта](.agents/rules/project-rules.md#архитектурные-инварианты)
 
 ## Скиллы
 

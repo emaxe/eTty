@@ -16,6 +16,26 @@ All notable changes to this project will be documented in this file.
 
 - **Keyboard shortcut to switch between adjacent tabs** — bind `Cmd+Option+←/→` or `Cmd+Shift+←/→` in Settings → Terminal to jump to the previous/next tab, wrapping around at the ends. Off by default
 - **Confirmation dialog when closing a busy tab** — closing a tab via the × button or context menu while an AI agent/process is still running now shows a confirmation dialog (`ConfirmDialog`) instead of silently killing the PTY
+- **Node version selector dialog** — status bar's Node version indicator is now a clickable button opening a dialog to list/install/switch/uninstall Node versions. Detects the active manager (nvm, fnm, asdf) via `NodeVersionManager`; polls and updates the current version for the active folder
+- **`.nvmrc`** added to the repo (Node 20.17.0) for consistent dev environment
+
+### Fixed
+
+- **Manual AI agent toggles reset by detection checks** — force-enabled/disabled agent state in settings no longer gets overwritten by the next auto-detection poll
+- **Quick reply label/command split** — settings UI now edits quick-reply label and command as separate fields instead of one combined string
+- `run.sh` rebuild step now uses `--ignore-scripts` on install with an explicit manual `node-pty` rebuild; `node-pty` bumped to `^1.1.0` with `node-addon-api ^8.8.0`
+- Simplified status-bar Node version display (dropped the manager-name label)
+
+## [0.1.8] - 2026-05-31
+
+### Added
+
+- **Cross-platform support (Windows, Linux)** — packaged builds now run on Windows and Linux, not just macOS
+  - `ShellPathResolver` resolves the default shell and PATH per platform (zsh/bash on macOS/Linux, `cmd.exe` on Windows), with fallback PATHs when launched outside a terminal (Dock/Start Menu)
+  - `PtyManager` skips zsh-only setup (`ZDOTDIR`, `LC_CTYPE`) on Windows and uses the resolved shell instead
+  - Command history merging (`HistoryManager`) is disabled on non-Unix platforms (zsh-specific)
+  - Native window controls (minimize/maximize/close) on Windows/Linux instead of the macOS-only frameless titlebar; new `window:minimize`/`window:maximize`/`window:close`/`window:maximized-change` IPC channels
+  - Editor "open file" action uses Electron's `shell.openExternal` instead of shelling out to macOS's `open` command
 
 ## [0.1.7] - 2026-05-31
 

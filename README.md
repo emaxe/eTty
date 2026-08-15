@@ -12,7 +12,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 
 ### Terminal
 
-- **Multiple tabs** with independent zsh sessions
+- **Multiple tabs** with independent shell sessions (zsh on macOS/Linux, `cmd.exe` on Windows)
 - **WebGL-accelerated** rendering (canvas fallback)
 - **Kitty keyboard protocol** — Shift+Enter, Ctrl+Enter, Ctrl+Shift+Enter sequences
 - **Full Unicode support** — Cyrillic, accented characters, emoji
@@ -57,6 +57,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Send to terminal** — select code and send it to the active shell (Cmd+Enter)
 - **Unsaved changes** indicator
 - **Auto-features** — bracket closing, fold gutter, active line highlight, search
+- **Clickable file paths** — Cmd/Ctrl+Click a path in the editor (backtick-wrapped, markdown link, `./relative`, or absolute) to open it
 - **Resizable** editor panel
 - **Scroll position preserved** — switching between open file tabs, or between terminal tabs, restores each file's exact scroll position (CodeMirror scroll snapshot)
 
@@ -90,6 +91,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 
 - **Status-bar launcher** — one-click launch of detected CLI agents
 - **Auto-detection** — Claude, Codex, Copilot, Cursor Agent, OpenCode, Qwen, Agento
+- **Custom agents** — add your own CLI agent (label, launch command, optional detect command) alongside the built-ins; available in quick replies too
 - **Busy lock** — agent buttons disabled while terminal is busy
 - **Active agent highlight** — launched agent button glows while running
 - **Force-disable** — toggle agents on/off in Settings
@@ -115,6 +117,18 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Tab state** saved on quit, restored on next launch (with confirmation dialog)
 - **Per-tab tree state** — expanded directories and scroll position remembered when switching tabs
 - **Menu option** to manually restore tabs
+
+### Node Version Manager
+
+- **Detects nvm, fnm, and asdf** — reads the manager already installed on your system
+- **Switch, install, uninstall** Node.js versions from a dialog, no manual shell commands
+- **Current version** shown per-project, respecting `.nvmrc` where present
+- **Status bar indicator** — click to open the version dialog
+
+### Cross-Platform
+
+- **macOS, Windows, Linux** — native window controls and shell resolution per platform
+- **Shell auto-detection** — resolves the login shell and its `PATH` correctly even when launched from a GUI (Dock/Start Menu), not just from a terminal
 
 ## Keyboard Shortcuts
 
@@ -151,7 +165,10 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 ### Prerequisites
 
 - **Node.js 18+**
-- **macOS**: Xcode Command Line Tools — `xcode-select --install`
+- Native module toolchain for `node-pty` (rebuilt automatically via `postinstall`):
+  - **macOS**: Xcode Command Line Tools — `xcode-select --install`
+  - **Windows**: Visual Studio Build Tools with the "Desktop development with C++" workload, plus Python 3
+  - **Linux**: `build-essential`, `python3`
 
 ### Development
 
@@ -204,22 +221,28 @@ spctl -a -vvv -t install dist/mac-arm64/eTty.app
 │  │PtyManager│ │FileManager│ │   HistoryManager        │              │
 │  │ node-pty │ │ fs ops   │ │   global + per-tab      │              │
 │  └──────────┘ └──────────┘ └──────────────────────────┘              │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐               │
-│  │GitService│ │ TabState │ │SettingsStore│ │AgentService│              │
-│  │ countDiff│ │ persist  │ │ JSON config  │ │ detect CLI │              │
-│  └──────────┘ └──────────┘ └──────────────┘ └────────────┘               │
+│  ┌──────────┐ ┌──────────────┐ ┌────────────┐                       │
+│  │ TabState │ │SettingsStore │ │AgentService│                       │
+│  │ persist  │ │ = ConfigLoader│ │detect CLI │                       │
+│  │          │ │ + ThemeLoader │ │            │                       │
+│  └──────────┘ └──────────────┘ └────────────┘                       │
+│  ┌────────────────────┐ ┌──────────────────────────────────────┐    │
+│  │ShellPathResolver    │ │ NodeVersionManager                    │    │
+│  │login shell + PATH   │ │ nvm / fnm / asdf detect, switch       │    │
+│  │(GUI-launch fix)     │ │                                        │    │
+│  └────────────────────┘ └──────────────────────────────────────┘    │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │ AppService — window, menu, auto-updater, state save on quit       │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐        │
-│  │pty-handl│ │fs-handl │ │git-handl│ │tabs-hand│ │settings │ ...    │
-│  │ ers     │ │ ers     │ │ ers     │ │ ers     │ │-handlers│        │
-│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘        │
+│  ┌────────┐┌────────┐┌────────┐┌────────┐┌────────┐┌────────┐┌──────┐│
+│  │pty     ││fs      ││git     ││tabs    ││settings││agents  ││...   ││
+│  │-handl. ││-handl. ││-handl. ││-handl. ││-handl. ││-handl. ││search││
+│  └────────┘└────────┘└────────┘└────────┘└────────┘└────────┘└──────┘│
 └──────────────────────────┬───────────────────────────────────────────┘
-                           │ IPC (~50 channels, constants in shared/)
+                           │ IPC (70+ channels, constants in shared/)
 ┌──────────────────────────┴───────────────────────────────────────────┐
 │                    Preload (contextBridge)                             │
-│                ~50 methods on window.electronAPI                     │
+│              ~90 methods on window.electronAPI                       │
 └──────────────────────────┴───────────────────────────────────────────┘
                            │
 ┌──────────────────────────┴───────────────────────────────────────────┐
@@ -229,15 +252,15 @@ spctl -a -vvv -t install dist/mac-arm64/eTty.app
 │  │  EventBus  │  StateStore  │  DI Container  │  ElectronApiAdapter │  │
 │  │  GitStatusService (polling)                                      │  │
 │  └─────────────────────────────────────────────────────────────────┘  │
-│  ┌────────┐ ┌────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐  │
-│  │Terminal│ │FileTree│ │EditorPanel│ │ GitPanel │ │SettingsPage  │  │
-│  │xterm.js│ │ lazy   │ │CodeMirror │ │  diff    │ │ overlay    │  │
-│  │ tabs   │ │ DnD    │ │ 20+ langs │ │ branches │ │ themes     │  │
-│  └────────┘ └────────┘ └──────────┘ └──────────┘ └──────────────┘  │
-│  ┌────────┐ ┌────────────────┐ ┌─────────────────────────────────┐  │
-│  │ TabBar │ │ ProjectSearch  │ │            StatusBar            │  │
-│  │reorder │ │  dialog        │ │  git ±  │  cwd  │  AI agents   │  │
-│  └────────┘ └────────────────┘ └─────────────────────────────────┘  │
+│  ┌────────┐ ┌────────┐ ┌──────────┐ ┌──────────────────┐ ┌────────┐  │
+│  │Terminal│ │FileTree│ │EditorPanel│ │ GitPanel (master/ │ │Settings│  │
+│  │xterm.js│ │ lazy   │ │CodeMirror │ │ detail, features/ │ │Page    │  │
+│  │ tabs   │ │ DnD    │ │ 20+ langs │ │ git/*)            │ │overlay │  │
+│  └────────┘ └────────┘ └──────────┘ └──────────────────┘ └────────┘  │
+│  ┌────────┐ ┌────────────────┐ ┌────────────────┐ ┌─────────────┐   │
+│  │ TabBar │ │ ProjectSearch  │ │NodeVersionDialog│ │  StatusBar  │   │
+│  │reorder │ │  dialog        │ │ nvm/fnm/asdf UI │ │git±│cwd│AI  │   │
+│  └────────┘ └────────────────┘ └────────────────┘ └─────────────┘   │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -258,7 +281,8 @@ All user data is stored in `~/.config/eTty/` (Electron `userData`):
 
 | File | Purpose |
 |------|---------|
-| `settings.json` | App settings (theme, focus indicator, file tree behavior, prompt style, agent proxy, force-disabled agents, quick replies) |
+| `config.json` | App settings (theme, focus indicator, file tree behavior, prompt style, agent proxy, force-disabled agents, custom agents, quick replies); versioned, deep-merged with defaults on load |
+| `themes/*.json` | User-defined custom themes, loaded alongside the 7 built-ins |
 | `tabs-state.json` | Saved tab state for session restore |
 | `history/global.zsh_history` | Shared command history (5000 lines) |
 | `history/tabs/<id>.zsh_history` | Per-tab command history |

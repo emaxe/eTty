@@ -15,67 +15,89 @@ eTty — Electron-приложение-обёртка терминала. Stack:
 ```
 src/
   main/                      — main-процесс Electron
-    index.js                 — bootstrap: сервисы, IPC handlers, запуск AppService (~58 строк)
+    index.js                 — bootstrap: сервисы, IPC handlers, запуск AppService
     services/
       app-service.js         — жизненный цикл: окно, меню, автообновление, сохранение состояния
+      node-version-manager.js — nvm/fnm/asdf: детект менеджера, list/switch/install/uninstall версий Node
     ipc-handlers/            — регистрация IPC-обработчиков по доменам
-      index.js             — barrel export всех register*Handlers
-      pty-handlers.js      — PTY create/write/resize/kill
-      fs-handlers.js       — файловые операции
-      window-handlers.js   — окно: position/move
-      app-handlers.js      — системные: homedir, open external
-      tabs-handlers.js     — вкладки: save/load/restore dialog
-      settings-handlers.js — настройки: load/save
-      agents-handlers.js   — агенты: status/refresh
-      history-handlers.js  — история: cleanup
-      git-handlers.js      — Git операции (из git-service.js)
-    pty-manager.js           — управление PTY-сессиями (node-pty + zsh)
-    file-manager.js          — файловые операции с path traversal защитой
-    git-service.js           — чистая утилита countDiffLines (IPC убран)
-    history-manager.js       — история команд (глобальная + per-tab, мержинг, мьютекс)
-    tab-state.js             — сохранение/восстановление вкладок между сессиями
-    settings-store.js        — настройки приложения (JSON, deep merge)
-    agent-service.js         — авто-детект CLI ИИ-агентов (Claude, Codex, Copilot, Cursor, OpenCode)
-  preload/                   — contextBridge API (~50 методов)
-    index.js                 — IPC-мост: pty, fs, window, tabs, settings, git, agents
-  renderer/                  — UI
-    index.js                 — bootstrap: DI Container, EventBus, State Store, компоненты
-    core/                    — инфраструктура renderer
-      event-bus.js           — централизованная шина событий
-      state-store.js         — глобальное состояние с подписками
-      container.js           — DI-контейнер
+      index.js               — barrel export всех register*Handlers
+      pty-handlers.js        — PTY create/write/resize/kill
+      fs-handlers.js         — файловые операции
+      window-handlers.js     — окно: position/move
+      app-handlers.js        — системные: homedir, open external
+      tabs-handlers.js       — вкладки: save/load/restore dialog
+      settings-handlers.js   — настройки: load/save
+      agents-handlers.js     — агенты: status/refresh
+      history-handlers.js    — история: cleanup
+      git-handlers.js        — Git операции: status/diff/branches/commit/push/stage/discard
+      search-handlers.js     — поиск по проекту: query/cancel
+      node-version-handlers.js — менеджер версий Node: list/switch/install/uninstall
+    pty-manager.js            — управление PTY-сессиями (node-pty + shell)
+    file-manager.js           — файловые операции с path traversal защитой
+    history-manager.js        — история команд (глобальная + per-tab, мержинг, мьютекс)
+    tab-state.js               — сохранение/восстановление вкладок между сессиями
+    settings-store.js         — оркестратор настроек: агрегирует config-loader.js + theme-loader.js
+    config-loader.js          — чтение/запись `config.json` (версионирование, deep merge с дефолтами)
+    theme-loader.js           — встроенные темы + загрузка пользовательских тем из `themes/*.json`
+    agent-service.js          — авто-детект CLI ИИ-агентов (Claude, Codex, Copilot, Cursor, OpenCode, Qwen, Agento) + кастомные
+    shell-path-resolver.js    — резолв логин-шелла и его PATH кроссплатформенно (фикс запуска из GUI/Dock)
+  preload/                    — contextBridge API (~90 методов)
+    index.js                  — IPC-мост: pty, fs, window, tabs, settings, git, agents, search, node-version
+  renderer/                   — UI
+    index.js                  — bootstrap: DI Container, EventBus, State Store, компоненты
+    core/                     — инфраструктура renderer
+      event-bus.js            — централизованная шина событий
+      state-store.js          — глобальное состояние с подписками
+      container.js             — DI-контейнер
+      diagnostics.js          — perf-диагностика (выкл. по умолчанию, `window.__diagnostics.start()`)
       adapters/
-        electron-api.js      — адаптер window.electronAPI
+        electron-api.js       — адаптер window.electronAPI
       config/
-        app-config.js        — константы приложения (debounce, интервалы, размеры)
-        terminal-config.js   — константы терминала (font, scrollback)
-        ui-dimensions.js     — размеры UI элементов
-    features/terminal/         — терминальные фичи
+        app-config.js         — константы приложения (debounce, интервалы, размеры)
+        terminal-config.js    — константы терминала (font, scrollback)
+        ui-dimensions.js      — размеры UI элементов
+    features/terminal/          — терминальные фичи
       terminal-keyboard-handler.js — Kitty protocol + кириллица
       terminal-osc-handler.js      — OSC 7 (cwd), OSC 133 (busy)
-    components/base/           — UI-kit
+      terminal-scroll-button.js    — плавающая кнопка "прокрутить вниз"
+    features/git/                — модульная Git-панель (мастер/деталь)
+      git-panel.js               — оркестратор: overlay, ветки, commit/push/discard
+      git-file-list.js           — левая панель: список файлов по группам, staging, контекстное меню
+      git-diff-view.js           — правая панель: unified diff, номера строк, word-diff
+      diff-parser.js             — чистый парсинг unified diff (без DOM)
+      diff-highlighter.js        — статическая подсветка синтаксиса diff-строк (Lezer)
+      git-status.js              — общая метадата статус-букв (M/A/D/R/U/?/I)
+    services/
+      git-status-service.js     — polling git-статуса (5с), пишет в StateStore (`git.*`)
+    components/base/            — UI-kit
       button/button.js
       context-menu/context-menu.js
-      tabs/draggable-tabs.js   — generic drag-and-drop для вкладок
-    tab-bar.js               — вкладки терминала (на DraggableTabs)
-    file-tree.js             — дерево файлов с lazy-load, DnD, multi-select, undo
-    editor-panel.js          — CodeMirror 6 редактор с подсветкой (20+ языков)
+      tabs/draggable-tabs.js    — generic drag-and-drop для вкладок
+    tab-bar.js                — вкладки терминала (на DraggableTabs)
+    file-tree.js               — дерево файлов с lazy-load, DnD, multi-select, undo
+    editor-panel.js            — CodeMirror 6 редактор с подсветкой (20+ языков)
     editor-languages.js        — динамическая загрузка языков (code-splitting)
     editor-theme.js            — построение темы CodeMirror из THEMES
-    git-panel.js             — UI Git: ветки, diff, commit, push, discard
-    status-bar.js            — статус-бар: Git ±, cwd, node, AI-агенты, proxy toggle
-    settings-page.js         — страница настроек (overlay)
-    context-menu.js            — legacy контекстное меню (deprecated, используй base/)
-    themes.js                  — 7 тем (Catppuccin Mocha, Monokai, Dracula, One Dark, Nord, Solarized, Gruvbox)
+    editor-file-links.js       — CodeMirror-расширение: кликабельные пути к файлам (Cmd/Ctrl+Click)
+    status-bar.js              — статус-бар: Git ±, cwd, node-версия, AI-агенты, proxy toggle
+    settings-page.js           — страница настроек (overlay)
+    project-search.js          — модальный диалог поиска по проекту (файлы + содержимое)
+    node-version-dialog.js     — диалог менеджера версий Node (nvm/fnm/asdf)
+    confirm-dialog.js          — универсальный диалог подтверждения (напр. закрытие занятой вкладки)
+    icons.js                   — inline SVG-иконки
+    themes.js                  — 7 встроенных тем (Catppuccin Mocha, Monokai, Dracula, One Dark, Nord, Solarized, Gruvbox)
     styles.css                 — CSS variables + стили всех компонентов
     index.html                 — HTML-разметка
   shared/
     ipc-channels.js          — константы имён IPC каналов (единый источник истины)
+    binary-extensions.js     — расширения файлов, открываемых во внешнем приложении вместо редактора
 out/                         — артефакты electron-vite build (НЕ редактировать вручную)
 dist/                        — артефакты electron-builder (НЕ коммитить)
 build/                       — ресурсы для сборки (иконки, entitlements)
 docs/                        — спецификации, планы, чеклисты по фичам
 ```
+
+`src/renderer/components/base/context-menu/context-menu.js` — единственная реализация контекстного меню в проекте; отдельного legacy `context-menu.js` в корне `renderer/` больше нет.
 
 ## Архитектурные принципы (после рефакторинга Блоков 1–4)
 
@@ -89,15 +111,18 @@ docs/                        — спецификации, планы, чекл�
 ## Реализованные фичи
 
 ### Терминал
-- Множественные вкладки с независимыми PTY-сессиями (zsh)
+- Множественные вкладки с независимыми PTY-сессиями (zsh на macOS/Linux, cmd.exe на Windows — см. `shell-path-resolver.js`)
 - WebGL-ускорение рендеринга (fallback на canvas)
-- Kitty keyboard protocol (Shift+Enter, Ctrl+Enter, Ctrl+Shift+Enter)
+- Kitty keyboard protocol (Shift+Enter, Ctrl+Enter, Ctrl+Shift+Enter), per-agent режим (Kitty / newline / Ctrl+J)
 - Корректная обработка кириллицы и non-ASCII символов
-- OSC 7 — синхронизация директории shell → UI
-- OSC 133 — отслеживание занятости (preexec/precmd)
-- Scrollback **2500** строк (было 10000, снижено для performance)
+- OSC 7 — синхронизация директории shell → UI (только zsh)
+- OSC 133 — отслеживание занятости (preexec/precmd, только zsh)
+- Scrollback **2500** строк
+- Хоткей переключения соседних вкладок (`Cmd+Option+←/→` / `Cmd+Shift+←/→`, выкл. по умолчанию) — `TabBar.switchRelative()`
+- Подтверждение перед закрытием занятой вкладки (`tab.close.request` → `ConfirmDialog`, если `tab.isBusy`)
+- Кнопка «прокрутить вниз» при скролле в историю (`TerminalScrollButton`)
 
-### История команд
+### История команд (zsh, macOS/Linux)
 - Глобальная история (5000 строк, `~/.config/eTty/history/global.zsh_history`)
 - Per-tab история: при создании — копия глобальной, при закрытии — мержинг новых команд
 - Мьютекс для предотвращения race conditions при записи
@@ -121,31 +146,54 @@ docs/                        — спецификации, планы, чекл�
 - Подсветка синтаксиса: JS/TS, Python, Go, Rust, HTML, CSS/SCSS, JSON, YAML, Markdown, Vue, C#
 - Cmd+S — сохранение, Cmd+E — toggle панели
 - Отправка выделенного кода в терминал (Cmd+Enter)
+- Кликабельные пути к файлам (Cmd/Ctrl+Click) — `editor-file-links.js`
 - Индикация несохранённых изменений
 - Resizable панель
+- Сохранение позиции скролла per-file при переключении вкладок редактора/терминала (CodeMirror `scrollSnapshot()`)
 
 ### Git-интеграция
-- Статус-бар: `± +N -N` с polling каждые 5s
-- Git panel: ветки (switch/create/delete), diff, commit, push, discard
+- Статус-бар: `± +N -N` с polling каждые 5s (`GitStatusService`), клик по статистике открывает панель
+- Git panel (`Cmd+Shift+G`, master/detail, `features/git/*`): ветки (switch/create/delete), diff, commit, push, discard, staging
 - Подсчёт additions/deletions per file
-- Поддержка untracked, modified, staged, deleted, renamed файлов
+- Поддержка untracked, modified, staged, deleted, renamed, ignored файлов
+- Git diff highlighting — gutter bars в дереве файлов и редакторе, автообновление по polling + на `Cmd+S`
+
+### Поиск по проекту
+- Модальный диалог (`Cmd+F` / double-tap `Shift`), поиск по именам файлов и содержимому одновременно
+- Опции: case sensitive, whole word, regex, include/exclude glob
+- Отменяемые запросы: `SEARCH_QUERY` / `SEARCH_CANCEL`, live-превью с подсветкой совпадений
 
 ### ИИ-агенты
-- Авто-детект CLI агентов в статус-баре (Claude Code, Codex, Copilot, Cursor Agent, OpenCode)
+- Авто-детект CLI агентов в статус-баре (Claude Code, Codex, Copilot, Cursor Agent, OpenCode, Qwen, Agento)
+- Кастомные агенты (label, launchCommand, опциональный checkCommand) — доступны наравне со встроенными
 - Запуск агента в активный терминал одним кликом
 - Подсветка активного агента и блокировка кнопок при busy
+- Double-click — ручное назначение активного агента, когда busy без авто-детекта
 - Force-disable агентов в настройках
 - Прокси URL для ИИ-агентов (с toggle в статус-баре)
-- Quick replies — настраиваемые быстрые команды per-agent
-- **Double-click** для ручного назначения активного агента
+- Quick replies — настраиваемые быстрые команды per-agent, drag-and-drop reorder
+- Per-agent режим Shift+Enter: Kitty protocol / newline / Ctrl+J
+
+### Менеджер версий Node.js
+- Определение установленного менеджера: nvm, fnm, asdf (`NodeVersionManager`)
+- List/switch/install/uninstall версий из диалога (`NodeVersionDialog`)
+- Индикатор текущей версии в статус-баре, клик открывает диалог
+
+### Кроссплатформенность
+- macOS, Windows, Linux — нативные оконные контролы (frameless на macOS, min/max/close на Windows/Linux)
+- `ShellPathResolver` — резолв логин-шелла и его PATH независимо от способа запуска (Dock/Start Menu, а не только из терминала)
+- Сборка: `npm run dist` (macOS), `dist:win` (NSIS), `dist:linux` (AppImage/deb)
 
 ### Настройки
-- Тема оформления (7 встроенных)
+- Тема оформления (7 встроенных + пользовательские из `themes/*.json`, `theme-loader.js`)
+- Roboto — глобальный шрифт приложения (не настраивается пользователем)
 - Индикатор фокуса: glow, border, line, none
 - Collapse children on close (file tree)
 - File open mode: double-click / single-click
-- Стиль промпта zsh для новых вкладок: default, short, minimal, arrow
-- Сохранение в `~/.config/eTty/settings.json`
+- Стиль промпта для новых вкладок (zsh): default, short, minimal, arrow
+- Размер статус-бара: compact / standard / large
+- Размещение новой вкладки: `modifierAdjacent` / `modifierEnd`
+- Сохранение в `~/.config/eTty/config.json` (версионируется, deep merge с дефолтами — `config-loader.js`)
 
 ### Сохранение состояния
 - Tab state: сохранение при закрытии, диалог восстановления при запуске
@@ -155,24 +203,28 @@ docs/                        — спецификации, планы, чекл�
 - Версионирование формата (backward compat v1 → v2)
 
 ### Окно
-- Frameless с кастомным drag titlebar
+- Frameless с кастомным drag titlebar (macOS), нативные контролы на Windows/Linux
 - hiddenInset на macOS
 - Минимальные размеры 400x300
 - Перетаскивание окна за titlebar даже когда табы занимают всю ширину
 
 ## IPC-каналы
 
+Полный список констант — `src/shared/ipc-channels.js` (единственный источник истины, не дублировать строковыми литералами).
+
 | Префикс | Каналы | Назначение |
 |---------|--------|-----------|
 | `pty:*` | create, write, resize, kill, data, exit | PTY-сессии |
-| `fs:*` | read-dir, create-file, create-dir, rename, delete, copy, move, read-file, write-file, get-cwd, set-root, watch-dir, unwatch-dir, dir-changed | Файловые операции |
-| `git:*` | get-status, get-root, get-diff, get-branches, checkout, create-branch, delete-branch, commit, push, discard | Git |
-| `tabs:*` | export-state, has-saved-state, load-saved-state, delete-saved-state, show-restore-dialog, trigger-restore, state-changed | Вкладки |
-| `agents:*` | get-status, refresh, settings-updated | AI-агенты (детект, кэш) |
-| `settings:*` | load, save | Настройки |
+| `fs:*` | read-dir, create-file, create-dir, rename, delete, delete-many, copy, copy-many, move, read-file, write-file, stat-file, get-cwd, set-root, watch-dir, unwatch-dir, dir-changed | Файловые операции |
+| `git:*` | get-status, get-root, get-diff, get-branches, checkout, create-branch, delete-branch, commit, push, discard, stage, unstage, discard-file | Git |
+| `tabs:*` | export-state, has-saved-state, load-saved-state, delete-saved-state, show-restore-dialog, trigger-restore, state-changed, auto-save | Вкладки |
+| `agents:*` | get-status, refresh, settings-updated | AI-агенты (детект, кэш, кастомные) |
+| `settings:*` | load, save | Настройки (`config.json` + темы) |
 | `history:*` | cleanup | История |
-| `window:*` | get-position, move, fullscreen-change | Окно |
+| `window:*` | get-position, move, fullscreen-change, minimize, maximize, close, is-maximized, maximized-change | Окно |
 | `app:*` | homedir, open-external | Системные |
+| `search:*` | query, cancel | Поиск по проекту |
+| `node-version:*` | get-current, list-installed, list-remote, install, use, uninstall, detect-manager, install-manager | Менеджер версий Node.js |
 
 ## Команды
 
@@ -268,6 +320,22 @@ electron-builder делает это автоматически через `"npm
 - **Новые компоненты** используют DI Container + EventBus, не зависят напрямую от `window.electronAPI`
 - **Новые IPC handlers** добавляются в `main/ipc-handlers/` с `register*Handlers(ipcMain, deps)` сигнатурой
 
+## Стиль кода
+
+Нет ESLint/Prettier — соблюдай стиль вручную по образцу соседних файлов.
+
+- **ES modules:** `import`/`export`, относительные импорты с явным расширением `.js` (`from '../file-manager.js'`)
+- **Без точек с запятой** — ни в main, ни в renderer
+- **Одинарные кавычки** для строк
+- **2 пробела** отступ
+- **JSDoc** — выборочно: обязателен на `register*Handlers(ipcMain, deps)` (описывает форму `deps`), необязателен на приватных методах компонентов
+- **Комментарии** объясняют WHY (неочевидный инвариант, обходной путь, причина решения), не WHAT — не пересказывай то, что уже понятно из кода
+- **Язык комментариев** в коде смешанный (RU/EN) — новый комментарий пиши на языке, преобладающем в файле, который редактируешь
+- **Обработка ошибок в IPC handlers** — единого паттерна нет, соответствуй соседним хендлерам в том же файле:
+  - `fs-handlers.js`, `search-handlers.js` — `try { return await ... } catch (e) { return { success: false, error: e.message } }`
+  - `git-handlers.js` — `try { ... } catch (err) { return { error: err.message } }` или доменный fallback (`{ notARepo: true }`, `null`, `''`) для операций чтения
+  - остальные домены — без try/catch, ошибка пробрасывается как rejected promise `ipcRenderer.invoke()`
+
 ## Документация фич
 
 Каждая фича имеет директорию `docs/features/<slug>/` с файлами:
@@ -276,14 +344,15 @@ electron-builder делает это автоматически через `"npm
 - `checklist.md` — прогресс
 - `starter-prompt.md` — промпт для новой сессии
 
-Текущие фичи: `init`, `sidebar-file-tree`, `tab-persistence`, `git-panel`, `app-packaging`, `config`, `fs-watch-recursive`, `file-tree-dnd`, `quick-reply-settings`.
+Текущие фичи: `init`, `sidebar-file-tree`, `tab-persistence`, `git-panel`, `app-packaging`, `config`, `fs-watch-recursive`, `file-tree-dnd`, `quick-reply-settings`, `project-search`, `git-diff-highlight`, `custom-ai-agents`, `editor-file-sync`, `statusbar-size`.
 
 ## Хранилище данных
 
 | Файл | Путь | Назначение |
 |------|------|-----------|
 | tabs-state.json | `~/.config/eTty/` | Состояние вкладок |
-| settings.json | `~/.config/eTty/` | Настройки |
+| config.json | `~/.config/eTty/` | Настройки (версионируется, см. `config-loader.js`) |
+| themes/*.json | `~/.config/eTty/themes/` | Пользовательские темы (см. `theme-loader.js`) |
 | global.zsh_history | `~/.config/eTty/history/` | Глобальная история команд |
 | `<tabId>.zsh_history` | `~/.config/eTty/history/tabs/` | Per-tab история |
 
