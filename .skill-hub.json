@@ -12,6 +12,24 @@
       "name": "feature-planning",
       "version": "1.0.0",
       "scope": "project"
+    },
+    {
+      "type": "skill",
+      "name": "awa",
+      "version": "1.0.0",
+      "scope": "project"
+    },
+    {
+      "type": "skill",
+      "name": "bro",
+      "version": "1.0.0",
+      "scope": "project"
+    },
+    {
+      "type": "skill",
+      "name": "code-review",
+      "version": "1.0.0",
+      "scope": "project"
     }
   ],
   "project": "etty",

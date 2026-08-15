@@ -20,3 +20,9 @@ release/
 
 # Documentation
 docs/
+
+# AI agent directories (skill-hub)
+.claude/
+.cursor/
+.codex/
+.agents/
