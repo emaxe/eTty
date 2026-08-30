@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-08-30
+
+### Fixed
+
+- **Git status update performance on tab switch and large repositories** — eliminated UI freezes and delayed status updates when switching tabs in repositories with large numbers of changed or ignored files:
+  - Switched git status `--ignored=matching` to `--ignored=traditional` to avoid recursive traversal into massive ignored directories (`node_modules`, `dist`, `.cache`)
+  - Batch `diff --numstat` calls for staged and unstaged changes, with unified rename parsing directly from numstat output without spawning individual child processes
+  - Removed disk stream reading for untracked files during status polling
+  - Replaced $O(D \times F \times I)$ nested file-tree directory status calculation with single-pass $O(F + D)$ bottom-up status aggregation, using fast prefix lookups for ignored paths
+  - Made `StatusBar` reactive via `StateStore` (`git.branch`, `git.totalAdditions`, `git.totalDeletions`) and eliminated redundant parallel `git:get-status` IPC calls
+
 ## [0.1.11] - 2026-08-15
 
 ### Added

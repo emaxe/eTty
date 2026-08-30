@@ -1,11 +1,7 @@
 import simpleGit from 'simple-git'
 import fs from 'fs/promises'
-import { createReadStream } from 'fs'
 import path from 'path'
 import { IPC_CHANNELS } from '../../shared/ipc-channels.js'
-
-const MAX_UNTRACKED_SIZE = 50 * 1024 * 1024 // 50 MB
-const MAX_UNTRACKED_COUNT = 200
 
 // Maps a porcelain status letter (index or working_dir column) to the badge
 // letter shown in the UI. 'C' (copy) and 'T' (typechange) fold into the
@@ -29,25 +25,16 @@ export function registerGitHandlers(ipcMain) {
       if (parts.length < 3) continue
       const additions = parts[0] === '-' ? 0 : (parseInt(parts[0], 10) || 0)
       const deletions = parts[1] === '-' ? 0 : (parseInt(parts[1], 10) || 0)
-      const filePath = parts.slice(2).join('\t')
-      map.set(filePath, { additions, deletions })
+      const rawPath = parts.slice(2).join('\t')
+      const normPath = rawPath.includes('=>')
+        ? rawPath.replace(/\{.*? => (.*?)\}/g, '$1').replace(/^.*? => /, '')
+        : rawPath
+      map.set(rawPath, { additions, deletions })
+      if (normPath !== rawPath) {
+        map.set(normPath, { additions, deletions })
+      }
     }
     return map
-  }
-
-  /** Stream-count newlines in a file without loading it fully into memory. */
-  async function countLines(filePath) {
-    return new Promise((resolve, reject) => {
-      let count = 0
-      const stream = createReadStream(filePath)
-      stream.on('data', (chunk) => {
-        for (let i = 0; i < chunk.length; i++) {
-          if (chunk[i] === 0x0A) count++
-        }
-      })
-      stream.on('end', () => resolve(count))
-      stream.on('error', reject)
-    })
   }
 
   ipcMain.handle(IPC_CHANNELS.GIT_GET_STATUS, async (_event, rootPath) => {
@@ -78,7 +65,7 @@ export function registerGitHandlers(ipcMain) {
 
       let ignoredPaths = []
       try {
-        const porcelain = await git.raw(['status', '--porcelain', '--ignored=matching'])
+        const porcelain = await git.raw(['status', '--porcelain', '--ignored=traditional'])
         ignoredPaths = porcelain
           .split('\n')
           .filter(line => line.startsWith('!! '))
@@ -87,112 +74,76 @@ export function registerGitHandlers(ipcMain) {
         ignoredPaths = []
       }
 
-      // Renames need a per-file diff (numstat can't be reliably batch-parsed for
-      // "old => new" rows); everything else is batched into two numstat calls —
-      // one against the index (staged) and one against the working tree (unstaged).
-      const isRenameEntry = (f) => f.index === 'R' || f.index === 'C' || f.working_dir === 'R' || f.working_dir === 'C'
-      const renameEntries = trackedFiles.filter(isRenameEntry)
-      const simpleEntries = trackedFiles.filter(f => !isRenameEntry(f))
-
-      const stagedSimplePaths = simpleEntries.filter(f => f.index !== ' ' && f.index !== '?').map(f => f.path)
-      const unstagedSimplePaths = simpleEntries.filter(f => f.working_dir !== ' ' && f.working_dir !== '?').map(f => f.path)
-
       let stagedNumstatMap = new Map()
-      if (stagedSimplePaths.length > 0) {
-        const out = await git.raw(['diff', '--numstat', '--cached', '--', ...stagedSimplePaths])
-        stagedNumstatMap = parseNumstat(out)
-      }
       let unstagedNumstatMap = new Map()
-      if (unstagedSimplePaths.length > 0) {
-        const out = await git.raw(['diff', '--numstat', '--', ...unstagedSimplePaths])
-        unstagedNumstatMap = parseNumstat(out)
-      }
+
+      const hasStaged = trackedFiles.some(f => f.index !== ' ' && f.index !== '?')
+      const hasUnstaged = trackedFiles.some(f => f.working_dir !== ' ' && f.working_dir !== '?')
+
+      const [stagedOut, unstagedOut] = await Promise.all([
+        hasStaged ? git.raw(['diff', '--numstat', '--cached', '-M']).catch(() => '') : Promise.resolve(''),
+        hasUnstaged ? git.raw(['diff', '--numstat', '-M']).catch(() => '') : Promise.resolve('')
+      ])
+
+      if (stagedOut) stagedNumstatMap = parseNumstat(stagedOut)
+      if (unstagedOut) unstagedNumstatMap = parseNumstat(unstagedOut)
 
       const staged = []
       const unstaged = []
       let totalAdditions = 0
       let totalDeletions = 0
 
-      for (const f of simpleEntries) {
+      for (const f of trackedFiles) {
         const isIgnored = ignoredTracked.includes(f.path)
+        const isRename = f.index === 'R' || f.index === 'C' || f.working_dir === 'R' || f.working_dir === 'C'
+
         if (f.index !== ' ' && f.index !== '?') {
           const stats = stagedNumstatMap.get(f.path) || { additions: 0, deletions: 0 }
           totalAdditions += stats.additions
           totalDeletions += stats.deletions
-          staged.push({ path: f.path, status: STATUS_LETTER_MAP[f.index] || 'M', additions: stats.additions, deletions: stats.deletions, isIgnored })
+          const entry = {
+            path: f.path,
+            status: STATUS_LETTER_MAP[f.index] || (isRename ? 'R' : 'M'),
+            additions: stats.additions,
+            deletions: stats.deletions,
+            isIgnored
+          }
+          if (f.from) entry.from = f.from
+          staged.push(entry)
         }
         if (f.working_dir !== ' ' && f.working_dir !== '?') {
           const stats = unstagedNumstatMap.get(f.path) || { additions: 0, deletions: 0 }
           totalAdditions += stats.additions
           totalDeletions += stats.deletions
-          unstaged.push({ path: f.path, status: STATUS_LETTER_MAP[f.working_dir] || 'M', additions: stats.additions, deletions: stats.deletions, isIgnored })
+          const entry = {
+            path: f.path,
+            status: STATUS_LETTER_MAP[f.working_dir] || (isRename ? 'R' : 'M'),
+            additions: stats.additions,
+            deletions: stats.deletions,
+            isIgnored
+          }
+          if (f.from) entry.from = f.from
+          unstaged.push(entry)
         }
       }
 
-      // Renamed files: rare, keep per-file accuracy
-      await Promise.all(renameEntries.map(async (f) => {
-        const isIgnored = ignoredTracked.includes(f.path)
-
-        if (f.index !== ' ' && f.index !== '?') {
-          let stats = { additions: 0, deletions: 0 }
-          try {
-            const out = await git.raw(['diff', '--numstat', '--cached', '-M', '--', f.path])
-            const parsed = parseNumstat(out)
-            stats = parsed.get(f.path) || [...parsed.values()][0] || stats
-          } catch {
-            // ignore
-          }
-          totalAdditions += stats.additions
-          totalDeletions += stats.deletions
-          staged.push({ path: f.path, from: f.from, status: 'R', additions: stats.additions, deletions: stats.deletions, isIgnored })
-        }
-
-        if (f.working_dir !== ' ' && f.working_dir !== '?') {
-          let stats = { additions: 0, deletions: 0 }
-          try {
-            const out = await git.raw(['diff', '--numstat', '-M', '--', f.path])
-            const parsed = parseNumstat(out)
-            stats = parsed.get(f.path) || [...parsed.values()][0] || stats
-          } catch {
-            // ignore
-          }
-          totalAdditions += stats.additions
-          totalDeletions += stats.deletions
-          unstaged.push({ path: f.path, from: f.from, status: 'R', additions: stats.additions, deletions: stats.deletions, isIgnored })
-        }
+      const untracked = untrackedFiles.map(f => ({
+        path: f.path,
+        additions: 0,
+        deletions: 0,
+        status: '?'
       }))
-
-      // Untracked files — stream-count lines, capped by size/count to avoid OOM/hang
-      const untracked = []
-      const cappedUntracked = untrackedFiles.slice(0, MAX_UNTRACKED_COUNT)
-      await Promise.all(cappedUntracked.map(async (f) => {
-        const fullPath = path.join(rootPath, f.path)
-        try {
-          const st = await fs.stat(fullPath)
-          if (!st.isFile() || st.size > MAX_UNTRACKED_SIZE) {
-            untracked.push({ path: f.path, additions: 0, deletions: 0, status: '?' })
-            return
-          }
-          const additions = await countLines(fullPath)
-          totalAdditions += additions
-          untracked.push({ path: f.path, additions, deletions: 0, status: '?' })
-        } catch {
-          untracked.push({ path: f.path, additions: 0, deletions: 0, status: '?' })
-        }
-      }))
-
-      if (untrackedFiles.length > MAX_UNTRACKED_COUNT) {
-        console.warn(`[git-panel] Truncated untracked files: ${untrackedFiles.length} > ${MAX_UNTRACKED_COUNT}`)
-      }
 
       let ahead = 0
       let behind = 0
       try {
-        const trackingInfo = await git.raw(['rev-list', '--left-right', '--count', `${branch.current}...@{u}`])
-        const parts = trackingInfo.trim().split('\t')
-        if (parts.length === 2) {
-          ahead = parseInt(parts[0], 10) || 0
-          behind = parseInt(parts[1], 10) || 0
+        if (branch.current) {
+          const trackingInfo = await git.raw(['rev-list', '--left-right', '--count', `${branch.current}...@{u}`])
+          const parts = trackingInfo.trim().split('\t')
+          if (parts.length === 2) {
+            ahead = parseInt(parts[0], 10) || 0
+            behind = parseInt(parts[1], 10) || 0
+          }
         }
       } catch {
         // no upstream tracking

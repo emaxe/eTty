@@ -292,16 +292,24 @@ export class FileTree {
     const ignoredTracked = this._store.get('git.ignoredTracked') || new Set()
     const ignoredPaths = this._store.get('git.ignoredPaths') || []
 
+    const ignoredExact = new Set()
+    const ignoredPrefixes = []
+    for (const ip of ignoredPaths) {
+      const ipLower = ip.toLowerCase()
+      if (ipLower.endsWith('/')) {
+        ignoredPrefixes.push(ipLower)
+      } else {
+        ignoredExact.add(ipLower)
+        ignoredPrefixes.push(ipLower + '/')
+      }
+    }
+
     const isPathIgnored = (relPath) => {
-      if (!ignoredPaths.length) return false
+      if (ignoredExact.size === 0 && ignoredPrefixes.length === 0) return false
       const relPathLower = relPath.toLowerCase()
-      for (const ip of ignoredPaths) {
-        const ipLower = ip.toLowerCase()
-        if (ipLower === relPathLower) return true
-        if (ipLower.endsWith('/')) {
-          const ipDir = ipLower.slice(0, -1)
-          if (relPathLower === ipDir || relPathLower.startsWith(ipLower)) return true
-        } else if (relPathLower.startsWith(ipLower + '/')) return true
+      if (ignoredExact.has(relPathLower)) return true
+      for (let i = 0; i < ignoredPrefixes.length; i++) {
+        if (relPathLower.startsWith(ignoredPrefixes[i])) return true
       }
       return false
     }
@@ -351,9 +359,35 @@ export class FileTree {
       }
     }
 
+    // Предрассчитываем худший статус директорий за один O(F) проход
+    const statusPriority = { deleted: 3, modified: 2, new: 1 }
+    const dirWorstStatus = new Map()
+
+    for (const [relPath, status] of Object.entries(fileStatuses)) {
+      if (isPathIgnored(relPath) || ignoredTracked.has(relPath)) continue
+      const prio = statusPriority[status] || 0
+      if (prio === 0) continue
+
+      let currentDir = relPath
+      while (true) {
+        const lastSlash = currentDir.lastIndexOf('/')
+        if (lastSlash === -1) {
+          const currentRootWorst = dirWorstStatus.get('')
+          if (prio > (statusPriority[currentRootWorst] || 0)) {
+            dirWorstStatus.set('', status)
+          }
+          break
+        }
+        currentDir = currentDir.slice(0, lastSlash)
+        const currentWorst = dirWorstStatus.get(currentDir)
+        if (prio > (statusPriority[currentWorst] || 0)) {
+          dirWorstStatus.set(currentDir, status)
+        }
+      }
+    }
+
     // Применить dot-индикаторы к папкам (только уже загруженным)
     const allDirLiNodes = this._container.querySelectorAll('li[data-path][data-is-dir="1"]')
-    const statusPriority = { deleted: 3, modified: 2, new: 1 }
     for (const li of allDirLiNodes) {
       const dirAbsPath = li.dataset.path
       if (!dirAbsPath) continue
@@ -377,17 +411,7 @@ export class FileTree {
         continue
       }
 
-      // Найти наихудший статус среди дочерних файлов (исключая ignored)
-      let worstStatus = null
-      for (const [relPath, status] of Object.entries(fileStatuses)) {
-        if (relPath.startsWith(dirRelPath + '/') || dirRelPath === '') {
-          if (isPathIgnored(relPath) || ignoredTracked.has(relPath)) continue
-          if ((statusPriority[status] || 0) > (statusPriority[worstStatus] || 0)) {
-            worstStatus = status
-          }
-        }
-      }
-
+      const worstStatus = dirWorstStatus.get(dirRelPath)
       if (worstStatus) {
         const dot = document.createElement('span')
         dot.className = `git-dot git-dot-${worstStatus}`
@@ -413,17 +437,7 @@ export class FileTree {
           rootLabelEl.appendChild(dot)
           rootRow.classList.add('git-status-ignored')
         } else {
-          // Найти наихудший статус среди дочерних файлов
-          let worstStatus = null
-          for (const [relPath, status] of Object.entries(fileStatuses)) {
-            if (relPath.startsWith(rootRelPath + '/') || rootRelPath === '') {
-              if (isPathIgnored(relPath) || ignoredTracked.has(relPath)) continue
-              if ((statusPriority[status] || 0) > (statusPriority[worstStatus] || 0)) {
-                worstStatus = status
-              }
-            }
-          }
-
+          const worstStatus = dirWorstStatus.get(rootRelPath) || (rootRelPath === '' ? dirWorstStatus.get('') : null)
           if (worstStatus) {
             const dot = document.createElement('span')
             dot.className = `git-dot git-dot-${worstStatus}`

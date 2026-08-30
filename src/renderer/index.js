@@ -154,6 +154,9 @@ async function init() {
       isRepo: false,
       rootPath: null,
       fileStatuses: {},
+      branch: null,
+      totalAdditions: 0,
+      totalDeletions: 0,
       ignoredTracked: new Set(),
       ignoredPaths: [],
     }
@@ -660,6 +663,7 @@ async function init() {
     },
     quickReplies: config.quickReplies || { items: [], groups: [] },
     api: r('api'),
+    store: r('store'),
   }))
   const statusBar = container.resolve('statusBar')
 

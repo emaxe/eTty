@@ -13,6 +13,7 @@ export class GitStatusService {
 
     this._rootPath = null
     this._pollTimer = null
+    this._isPolling = false
     this._unsubFileSaved = null  // для отписки от editor.file-saved
 
     this._unsubFileSaved = eventBus.on('editor.file-saved', () => {
@@ -31,46 +32,6 @@ export class GitStatusService {
     this._stopPolling()
 
     if (rootPath === null) {
-      this._store.set('git.isRepo', false)
-      this._store.set('git.rootPath', null)
-      this._store.set('git.fileStatuses', {})
-      this._store.set('git.branch', null)
-      this._store.set('git.totalAdditions', 0)
-      this._store.set('git.totalDeletions', 0)
-      return
-    }
-
-    const repoRoot = await this._api.gitGetRoot(rootPath)
-    const isRepo = Boolean(repoRoot && repoRoot.length > 0)
-
-    this._store.set('git.isRepo', isRepo)
-    this._store.set('git.rootPath', isRepo ? repoRoot : null)
-
-    if (isRepo) {
-      this._startPolling()
-      await this._poll()
-    } else {
-      this._store.set('git.fileStatuses', {})
-      this._store.set('git.branch', null)
-      this._store.set('git.totalAdditions', 0)
-      this._store.set('git.totalDeletions', 0)
-    }
-  }
-
-  /**
-   * Немедленно один раз опрашивает git:get-status и обновляет store + EventBus.
-   */
-  async _poll() {
-    if (!this._rootPath || !this._store.get('git.isRepo')) return
-
-    const pollPath = this._rootPath
-    const repoRoot = this._store.get('git.rootPath')
-    const result = await this._api.gitGetStatus(repoRoot || this._rootPath)
-
-    // Guard: discard stale result if rootPath changed while awaiting
-    if (this._rootPath !== pollPath) return
-
-    if (result.error || result.notARepo) {
       this._store.batch([
         { path: 'git.isRepo', value: false },
         { path: 'git.rootPath', value: null },
@@ -78,30 +39,92 @@ export class GitStatusService {
         { path: 'git.branch', value: null },
         { path: 'git.totalAdditions', value: 0 },
         { path: 'git.totalDeletions', value: 0 },
+        { path: 'git.ignoredTracked', value: new Set() },
+        { path: 'git.ignoredPaths', value: [] },
       ])
       return
     }
 
-    const fileStatuses = {}
-    for (const file of result.files) {
-      if (file.status === '?' || file.status === 'A') {
-        fileStatuses[file.path] = 'new'
-      } else if (file.status === 'D') {
-        fileStatuses[file.path] = 'deleted'
-      } else {
-        fileStatuses[file.path] = 'modified'
-      }
+    const repoRoot = await this._api.gitGetRoot(rootPath)
+    if (this._rootPath !== rootPath) return // switched while awaiting
+
+    const isRepo = Boolean(repoRoot && repoRoot.length > 0)
+    if (!isRepo) {
+      this._store.batch([
+        { path: 'git.isRepo', value: false },
+        { path: 'git.rootPath', value: null },
+        { path: 'git.fileStatuses', value: {} },
+        { path: 'git.branch', value: null },
+        { path: 'git.totalAdditions', value: 0 },
+        { path: 'git.totalDeletions', value: 0 },
+        { path: 'git.ignoredTracked', value: new Set() },
+        { path: 'git.ignoredPaths', value: [] },
+      ])
+      return
     }
 
     this._store.batch([
-      { path: 'git.fileStatuses', value: fileStatuses },
-      { path: 'git.branch', value: result.branch || 'HEAD' },
-      { path: 'git.totalAdditions', value: result.totalAdditions || 0 },
-      { path: 'git.totalDeletions', value: result.totalDeletions || 0 },
-      { path: 'git.ignoredTracked', value: new Set(result.ignoredTracked || []) },
-      { path: 'git.ignoredPaths', value: result.ignoredPaths || [] },
+      { path: 'git.isRepo', value: true },
+      { path: 'git.rootPath', value: repoRoot },
     ])
-    this._bus.emit('git.status-updated', { rootPath: this._rootPath, fileStatuses, ignoredPaths: result.ignoredPaths || [] })
+
+    this._startPolling()
+    await this._poll()
+  }
+
+  /**
+   * Немедленно один раз опрашивает git:get-status и обновляет store + EventBus.
+   */
+  async _poll() {
+    if (!this._rootPath || !this._store.get('git.isRepo') || this._isPolling) return
+
+    const pollPath = this._rootPath
+    const repoRoot = this._store.get('git.rootPath')
+    this._isPolling = true
+
+    try {
+      const result = await this._api.gitGetStatus(repoRoot || this._rootPath)
+
+      // Guard: discard stale result if rootPath changed while awaiting
+      if (this._rootPath !== pollPath) return
+
+      if (result.error || result.notARepo) {
+        this._store.batch([
+          { path: 'git.isRepo', value: false },
+          { path: 'git.rootPath', value: null },
+          { path: 'git.fileStatuses', value: {} },
+          { path: 'git.branch', value: null },
+          { path: 'git.totalAdditions', value: 0 },
+          { path: 'git.totalDeletions', value: 0 },
+          { path: 'git.ignoredTracked', value: new Set() },
+          { path: 'git.ignoredPaths', value: [] },
+        ])
+        return
+      }
+
+      const fileStatuses = {}
+      for (const file of result.files) {
+        if (file.status === '?' || file.status === 'A') {
+          fileStatuses[file.path] = 'new'
+        } else if (file.status === 'D') {
+          fileStatuses[file.path] = 'deleted'
+        } else {
+          fileStatuses[file.path] = 'modified'
+        }
+      }
+
+      this._store.batch([
+        { path: 'git.fileStatuses', value: fileStatuses },
+        { path: 'git.branch', value: result.branch || 'HEAD' },
+        { path: 'git.totalAdditions', value: result.totalAdditions || 0 },
+        { path: 'git.totalDeletions', value: result.totalDeletions || 0 },
+        { path: 'git.ignoredTracked', value: new Set(result.ignoredTracked || []) },
+        { path: 'git.ignoredPaths', value: result.ignoredPaths || [] },
+      ])
+      this._bus.emit('git.status-updated', { rootPath: this._rootPath, fileStatuses, ignoredPaths: result.ignoredPaths || [] })
+    } finally {
+      this._isPolling = false
+    }
   }
 
   /**

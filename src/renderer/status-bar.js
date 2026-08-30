@@ -17,7 +17,7 @@ import { buildQuickReplyTree } from './features/quick-replies/quick-replies-mode
  *   чтобы click-события доходили для double-click обработки.
  */
 export class StatusBar {
-  constructor({ btnEl, cwdEl, nodeEl, onOpen, onOpenNodeVersion, agentsContainerEl = null, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [], groups: [] }, api }) {
+  constructor({ btnEl, cwdEl, nodeEl, onOpen, onOpenNodeVersion, agentsContainerEl = null, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [], groups: [] }, api, store = null }) {
     this._btnEl = btnEl
     this._cwdEl = cwdEl
     this._nodeEl = nodeEl
@@ -34,6 +34,7 @@ export class StatusBar {
     this._onToggleProxy = onToggleProxy
     this._quickReplies = quickReplies
     this._api = api
+    this._store = store
     this._getRootPath = null
     this._intervalId = null
     this._homeDir = null
@@ -75,6 +76,15 @@ export class StatusBar {
     this._api.getHomedir().then(h => { this._homeDir = h })
 
     this._updateAgentButtons()
+
+    if (this._store) {
+      this._unsubStore = this._store.subscribe((state, path) => {
+        if (path === null || path === 'git.branch' || path === 'git.totalAdditions' || path === 'git.totalDeletions' || path === 'git.isRepo' || path === 'git.rootPath') {
+          this._updateGitButton(state)
+        }
+      })
+      this._updateGitButton(this._store.get())
+    }
   }
 
   start(getRootPath) {
@@ -317,6 +327,11 @@ export class StatusBar {
 
   destroy() {
     this.stop()
+    if (this._unsubStore) {
+      this._unsubStore()
+      this._unsubStore = null
+    }
+    this._store = null
     this._contextMenu?.destroy()
     this._contextMenu = null
     this._cleanupController?.abort()
@@ -336,6 +351,23 @@ export class StatusBar {
     this._homeDir = null
     this._agentsById = null
     this._forceDisabled = null
+  }
+
+  _updateGitButton(state) {
+    if (!this._btnEl) return
+    const git = state?.git
+    if (!git || !git.isRepo || !git.rootPath) {
+      this._btnEl.classList.add('hidden')
+      return
+    }
+
+    const branch = (git.branch || 'HEAD').replace(/[<>&"]/g, c =>
+      ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]))
+    const adds = git.totalAdditions || 0
+    const dels = git.totalDeletions || 0
+    this._btnEl.innerHTML =
+      `${Icons.gitBranch}${branch}<span class="stat-add">+${adds}</span><span class="stat-del">-${dels}</span>`
+    this._btnEl.classList.remove('hidden')
   }
 
   async _poll() {
@@ -373,26 +405,6 @@ export class StatusBar {
           this.setNodeVersion(null, null)
         }
       }
-
-      if (!rootPath) {
-        this._btnEl.classList.add('hidden')
-        return
-      }
-
-      const result = await this._api.gitGetStatus(rootPath)
-
-      if (result.notARepo) {
-        this._btnEl.classList.add('hidden')
-        return
-      }
-
-      const branch = (result.branch || 'HEAD').replace(/[<>&"]/g, c =>
-        ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]))
-      this._btnEl.innerHTML =
-        `${Icons.gitBranch}${branch}<span class="stat-add">+${result.totalAdditions}</span><span class="stat-del">-${result.totalDeletions}</span>`
-      this._btnEl.classList.remove('hidden')
-    } catch (e) {
-      this._btnEl.classList.add('hidden')
     } finally {
       this._polling = false
     }
