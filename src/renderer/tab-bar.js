@@ -7,6 +7,7 @@
 import { ContextMenu } from './components/base/context-menu/context-menu.js'
 import { DraggableTabs } from './components/base/tabs/draggable-tabs.js'
 import { APP_CONFIG } from './core/config/app-config.js'
+import { Icons } from './icons.js'
 
 export class TabBar {
   constructor({ tabBarEl, terminalContainerEl, eventBus, store }) {
@@ -32,7 +33,7 @@ export class TabBar {
     })
   }
 
-  _syncStore() {
+  syncStore() {
     this._store.set('tabs.items', this.tabs.map(t => ({
       pid: t.pid,
       rootPath: t.rootPath,
@@ -43,16 +44,16 @@ export class TabBar {
     this._store.set('tabs.activeIndex', this.activeIndex)
   }
 
-  addTab({ pid, term, fitAddon, rootPath, tabId }, insertIndex = -1) {
-    const folderName = rootPath.split('/').filter(Boolean).pop() || '/'
+  addTab({ pid, term, fitAddon, rootPath, tabId, ssh }, insertIndex = -1) {
+    const folderName = ssh ? ssh.label : (rootPath.split('/').filter(Boolean).pop() || '/')
     const container = document.createElement('div')
     container.className = 'terminal-pane'
     this.terminalContainerEl.appendChild(container)
     term.open(container)
 
-    const element = this._createTabEl(folderName, '')
+    const element = this._createTabEl(folderName, '', !!ssh)
 
-    const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '', tabId,
+    const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '', tabId, ssh: ssh || null,
       treeExpandedDirs: new Set(),
       treeScrollTop: 0,
       _pendingData: [],
@@ -71,7 +72,7 @@ export class TabBar {
     }
 
     this._draggable.observeElement(element)
-    this._syncStore()
+    this.syncStore()
 
     term.onTitleChange((title) => {
       tab.termTitle = title
@@ -88,7 +89,7 @@ export class TabBar {
     tab.container.remove()
     tab.element.remove()
     this.tabs.splice(index, 1)
-    this._syncStore()
+    this.syncStore()
 
     if (this.tabs.length === 0) {
       window.close()
@@ -101,6 +102,9 @@ export class TabBar {
 
   switchTo(index) {
     if (this.disabled) return
+    // Защита от пустого/невалидного индекса — например, если все вкладки не удалось
+    // восстановить (см. createTab() catch в index.js) и tabs остался пустым.
+    if (!this.tabs[index]) return
     const prevTab = this.activeIndex >= 0 ? this.tabs[this.activeIndex] : null
     if (prevTab) {
       prevTab.container.classList.remove('active')
@@ -109,7 +113,7 @@ export class TabBar {
     }
 
     this.activeIndex = index
-    this._syncStore()
+    this.syncStore()
 
     const tab = this.tabs[index]
     tab.container.classList.add('active')
@@ -143,19 +147,28 @@ export class TabBar {
 
   updateRootPath(index, rootPath) {
     const tab = this.tabs[index]
-    if (!tab) return
+    if (!tab || tab.ssh) return // SSH-вкладки хранят локальный rootPath, но не переименовываются по нему
     tab.rootPath = rootPath
     tab.folderName = rootPath.split('/').filter(Boolean).pop() || '/'
     this._updateTabLabel(tab)
   }
 
-  _createTabEl(folderName, termTitle) {
+  _createTabEl(folderName, termTitle, isSsh = false) {
     const el = document.createElement('div')
-    el.className = 'tab'
+    el.className = isSsh ? 'tab tab-ssh' : 'tab'
 
     const handle = document.createElement('span')
     handle.className = 'tab-drag-handle'
     handle.innerHTML = '<svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="6" r="1.2"/><circle cx="6" cy="6" r="1.2"/><circle cx="2" cy="10" r="1.2"/><circle cx="6" cy="10" r="1.2"/></svg>'
+
+    el.appendChild(handle)
+
+    if (isSsh) {
+      const icon = document.createElement('span')
+      icon.className = 'tab-icon'
+      icon.innerHTML = Icons.ssh
+      el.appendChild(icon)
+    }
 
     const folder = document.createElement('span')
     folder.className = 'tab-folder'
@@ -169,7 +182,6 @@ export class TabBar {
     closeBtn.className = 'tab-close'
     closeBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>'
 
-    el.appendChild(handle)
     el.appendChild(folder)
     el.appendChild(title)
     el.appendChild(closeBtn)
@@ -238,7 +250,7 @@ export class TabBar {
     } else if (fromIndex > this.activeIndex && toIndex <= this.activeIndex) {
       this.activeIndex++
     }
-    this._syncStore()
+    this.syncStore()
   }
 
   exportState() {
@@ -247,7 +259,8 @@ export class TabBar {
       .map((t, i) => ({
         rootPath: t.rootPath,
         isActive: i === this.activeIndex,
-        tabId: t.tabId
+        tabId: t.tabId,
+        ssh: t.ssh ? { connectionId: t.ssh.connectionId, label: t.ssh.label } : undefined
       }))
   }
 

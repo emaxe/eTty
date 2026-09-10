@@ -88,4 +88,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowClose: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_CLOSE),
   windowIsMaximized: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_IS_MAXIMIZED),
   onMaximizedChange: (cb) => onIPC(IPC_CHANNELS.WINDOW_MAXIMIZED_CHANGE, (_, isMaximized) => cb(isMaximized)),
+  sshList: () => ipcRenderer.invoke(IPC_CHANNELS.SSH_LIST),
+  sshSave: (connection) => ipcRenderer.invoke(IPC_CHANNELS.SSH_SAVE, connection),
+  sshDelete: (id) => ipcRenderer.invoke(IPC_CHANNELS.SSH_DELETE, id),
+  sshReorder: (ids) => ipcRenderer.invoke(IPC_CHANNELS.SSH_REORDER, ids),
 })

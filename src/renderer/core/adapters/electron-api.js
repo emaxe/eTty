@@ -106,6 +106,12 @@ export class ElectronApiAdapter {
   // — Search —
   searchQuery(dirPath, query, options) { return this._api.searchQuery(dirPath, query, options) }
 
+  // — SSH —
+  sshList() { return this._api.sshList() }
+  sshSave(connection) { return this._api.sshSave(connection) }
+  sshDelete(id) { return this._api.sshDelete(id) }
+  sshReorder(ids) { return this._api.sshReorder(ids) }
+
   _on(channel, fn) {
     const unsub = this._api[`on${channel.charAt(0).toUpperCase() + channel.slice(1)}`]?.(fn)
     return unsub || (() => {})

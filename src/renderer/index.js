@@ -20,6 +20,8 @@ import { THEMES } from './themes.js'
 import { SettingsPage, SUPPORTED_AGENTS } from './settings-page.js'
 import { StatusBar } from './status-bar.js'
 import { GitPanel } from './features/git/git-panel.js'
+import { SshPanel } from './features/ssh/ssh-panel.js'
+import { SshTabOverlay } from './features/ssh/ssh-tab-overlay.js'
 import { EditorPanel } from './editor-panel.js'
 import { ProjectSearchDialog } from './project-search.js'
 import { NodeVersionDialog } from './node-version-dialog.js'
@@ -43,6 +45,9 @@ let loadedThemes = THEMES
 let tabBar = null
 /** @type {EditorPanel|null} */
 let editorPanel = null
+/** @type {SshPanel|null} */
+let sshPanel = null
+let sshPanelPosition = 'off'
 /** @type {StateStore|null} */
 let appStore = null
 /** @type {ResizeObserver|null} */
@@ -50,6 +55,7 @@ let resizeObserver = null
 let resizeDebounceTimer = null
 let newTabPlacement = 'modifierAdjacent'
 let tabSwitchHotkey = 'none'
+let isRestoringTabs = false
 
 /** Применяет стиль индикатора фокуса через data-атрибут на корневом элементе. */
 function applyFocusIndicator(style) {
@@ -66,8 +72,17 @@ function applyTheme(themeName) {
   appStore?.set('ui.theme', themeName)
 }
 
-/** Создаёт новую вкладку: Terminal + FitAddon + PTY-сессия. */
-async function createTab(api, cwd, tabId) {
+/** Применяет позицию панели SSH (left/right/off) — фактическое перемещение DOM см. в подписчике на ssh.panelPosition. */
+function applySshPanelPosition(pos) {
+  appStore?.set('ssh.panelPosition', pos || 'off')
+}
+
+/**
+ * Создаёт новую вкладку: Terminal + FitAddon + PTY-сессия.
+ * @param {object} [ssh] — { connectionId, label }. Если передан, PTY не создаётся сразу —
+ *   вкладка стартует неподключённой, подключение выполняет `connectSshTab()` (main index.js).
+ */
+async function createTab(api, cwd, tabId, ssh) {
   const term = new Terminal({
     cursorBlink: TERMINAL_CONFIG.CURSOR_BLINK,
     fontSize: TERMINAL_CONFIG.FONT_SIZE,
@@ -83,6 +98,11 @@ async function createTab(api, cwd, tabId) {
   term.loadAddon(new SearchAddon())
 
   tabId = tabId || crypto.randomUUID()
+
+  if (ssh) {
+    return { term, fitAddon, pid: null, rootPath: cwd, tabId, ssh }
+  }
+
   const { config } = await api.settingsLoad()
   const promptStyle = config.terminal?.promptStyle || 'default'
   const { pid } = await api.ptyCreate({
@@ -131,6 +151,7 @@ async function init() {
       sidebarVisible: true,
       editorVisible: false,
       gitPanelVisible: false,
+      sshPanelVisible: false,
     },
     settings: {
       collapseChildrenOnClose: config.fileTree?.collapseChildrenOnClose ?? true,
@@ -159,6 +180,10 @@ async function init() {
       totalDeletions: 0,
       ignoredTracked: new Set(),
       ignoredPaths: [],
+    },
+    ssh: {
+      panelPosition: config.ssh?.panelPosition || 'off',
+      connections: [],
     }
   })
 
@@ -251,8 +276,11 @@ async function init() {
   const btnToggleSidebar = document.getElementById('btn-toggle-sidebar')
   const btnSettings = document.getElementById('btn-settings')
   const btnToggleEditor = document.getElementById('btn-toggle-editor')
+  const btnToggleSsh = document.getElementById('btn-toggle-ssh')
   const sidebar = document.getElementById('sidebar')
   const resizeHandle = document.getElementById('resize-handle')
+  const workspaceEl = document.getElementById('workspace')
+  const resizeHandleSsh = document.getElementById('resize-handle-ssh')
 
   const { cwd: startCwd } = await api.getCwd()
 
@@ -462,6 +490,12 @@ async function init() {
     syncStatusBarTerminalState()
     statusBar.updateNow()
     gitStatusService.setRootPath(tab.rootPath || null)
+    // Lazy connect: восстановленная SSH-вкладка подключается при первом переключении на неё.
+    // Не срабатывает во время пакетного восстановления вкладок (isRestoringTabs) — иначе
+    // каждая промежуточная addTab()→switchTo() открыла бы реальное SSH-соединение.
+    if (!isRestoringTabs && tab.ssh && tab.pid == null && !tab._sshEverConnected && !tab._sshConnecting) {
+      connectSshTab(tab)
+    }
     } finally {
       _isSwitchingTab = false
     }
@@ -471,9 +505,11 @@ async function init() {
     if (settingsPage.isVisible()) return
     const active = tabBar.getActive()
     const cwd = active ? active.rootPath : startCwd
+    // Активная SSH-вкладка + "+" → новая вкладка того же подключения (REQ: наследование SSH)
+    const sshInherit = active?.ssh ? { connectionId: active.ssh.connectionId, label: active.ssh.label } : null
     let tabData
     try {
-      tabData = await createTab(api, cwd)
+      tabData = await createTab(api, cwd, null, sshInherit)
     } catch (e) {
       console.error('[tab.add] Failed to create tab', cwd, e.message)
       return
@@ -491,6 +527,29 @@ async function init() {
     tab.activeAgentId = null
     setupTabHandlers(tab)
     tab.fitAddon.fit()
+    if (sshInherit) connectSshTab(tab)
+  })
+
+  // Клик по строке в SshPanel / его контекстное меню — новая SSH-вкладка + подключение
+  bus.on('ssh.connect', async ({ connectionId }) => {
+    if (settingsPage.isVisible()) return
+    const connection = sshPanel.getConnection(connectionId)
+    if (!connection) return
+    const active = tabBar.getActive()
+    const cwd = active ? active.rootPath : startCwd
+    let tabData
+    try {
+      tabData = await createTab(api, cwd, null, { connectionId: connection.id, label: connection.label })
+    } catch (e) {
+      console.error('[ssh.connect] Failed to create tab', e.message)
+      return
+    }
+    const tab = tabBar.addTab(tabData)
+    tab.isBusy = false
+    tab.activeAgentId = null
+    setupTabHandlers(tab)
+    tab.fitAddon.fit()
+    connectSshTab(tab)
   })
 
   container.register('confirmDialog', () => new ConfirmDialog())
@@ -511,8 +570,9 @@ async function init() {
         etab.view.destroy()
       }
     }
+    tab._sshOverlay?.destroy()
     tabBar.removeTab(index)
-    api.ptyKill(tab.pid)
+    if (tab.pid != null) api.ptyKill(tab.pid)
   }
 
   // Низкоуровневый исполнитель закрытия (без подтверждения) — на случай прочих эмитентов.
@@ -581,6 +641,19 @@ async function init() {
     confirmDialog: r('confirmDialog'),
   }))
   const gitPanel = container.resolve('gitPanel')
+
+  container.register('sshPanel', (r) => new SshPanel({
+    panelEl: document.getElementById('ssh-panel'),
+    resizeHandleEl: resizeHandleSsh,
+    eventBus: r('bus'),
+    store: r('store'),
+    api: r('api'),
+    confirmDialog: r('confirmDialog'),
+  }))
+  sshPanel = container.resolve('sshPanel')
+  // Список подключений нужен сразу — для восстановления SSH-вкладок и наследования по "+",
+  // даже если панель ни разу не открывалась пользователем в этой сессии.
+  await sshPanel.refresh()
 
   container.register('projectSearch', (r) => new ProjectSearchDialog({
     eventBus: r('bus'),
@@ -715,8 +788,47 @@ async function init() {
     }
   })
 
+  appStore.subscribe((state, path) => {
+    if (path === 'ui.sshPanelVisible') {
+      const visible = state.ui.sshPanelVisible
+      if (visible) sshPanel.show()
+      else sshPanel.hide()
+      btnToggleSsh.classList.toggle('active', visible)
+    }
+  })
+
+  // Позиция панели SSH: 'off' скрывает кнопку тулбара и саму панель;
+  // 'left'/'right' перемещает panelEl + resizeHandleEl внутри #workspace.
+  appStore.subscribe((state, path) => {
+    if (path !== 'ssh.panelPosition') return
+    const pos = state.ssh.panelPosition
+    sshPanelPosition = pos
+    const panelEl = sshPanel._panelEl
+
+    if (pos === 'left') {
+      workspaceEl.insertBefore(panelEl, sidebar)
+      workspaceEl.insertBefore(resizeHandleSsh, sidebar)
+      panelEl.classList.remove('pos-right')
+      panelEl.classList.add('pos-left')
+    } else {
+      workspaceEl.appendChild(resizeHandleSsh)
+      workspaceEl.appendChild(panelEl)
+      panelEl.classList.remove('pos-left')
+      panelEl.classList.add('pos-right')
+    }
+
+    if (pos === 'off') {
+      btnToggleSsh.classList.add('hidden')
+      if (appStore.get('ui.sshPanelVisible')) appStore.set('ui.sshPanelVisible', false)
+    } else {
+      btnToggleSsh.classList.remove('hidden')
+    }
+  })
+  applySshPanelPosition(config.ssh?.panelPosition)
+
   // — Editor EventBus subscribers —
   bus.on('editor.resize', () => tabBar.getActive()?.fitAddon.fit())
+  bus.on('ssh.resize', () => tabBar.getActive()?.fitAddon.fit())
   bus.on('editor.show', () => btnToggleEditor.classList.add('active'))
   bus.on('editor.hide', () => {
     btnToggleEditor.classList.remove('active')
@@ -771,6 +883,11 @@ async function init() {
     if (key === 'appearance.theme') applyTheme(value)
     if (key === 'appearance.focusIndicator') applyFocusIndicator(value)
     if (key === 'appearance.statusBarSize') applyStatusBarSize(value)
+    if (key === 'ssh.panelPosition') {
+      if (!config.ssh) config.ssh = {}
+      config.ssh.panelPosition = value
+      applySshPanelPosition(value)
+    }
     if (key === 'fileTree.collapseChildrenOnClose') {
       appStore.set('settings.collapseChildrenOnClose', value)
       fileTree.setCollapseChildrenOnClose(value)
@@ -852,6 +969,11 @@ async function init() {
     diagnostics.recordPtyData(pid, data.length)
     const tab = tabBar.tabs.find(t => t.pid === pid)
     if (!tab) return
+    if (tab._sshOverlay) {
+      // Первый байт от PTY — скрываем прелоадер подключения (виден prompt пароля/yes-no от ssh)
+      tab._sshOverlay.destroy()
+      tab._sshOverlay = null
+    }
     if (tab._isActive) {
       batchedWrite(tab, data)
     } else {
@@ -870,7 +992,7 @@ async function init() {
     } catch (e) { /* ignore */ }
   })
 
-  api.onPtyExit(({ pid }) => {
+  api.onPtyExit(({ pid, exitCode }) => {
     const index = tabBar.tabs.findIndex(t => t.pid === pid)
     if (index >= 0) {
       const tab = tabBar.tabs[index]
@@ -879,12 +1001,30 @@ async function init() {
         tab._writeRaf = null
         tab._writeBuffer = null
       }
+      // SSH-сессия: не закрываем вкладку, показываем ошибку с возможностью переподключиться
+      if (tab.ssh) {
+        tab.pid = null
+        tabBar.syncStore()
+        if (!tab._sshOverlay) tab._sshOverlay = new SshTabOverlay(tab.container)
+        tab._sshOverlay.showError(tab.ssh.label, exitCode, () => connectSshTab(tab))
+        return
+      }
       tabBar.removeTab(index)
     }
   })
 
-  function setupTabHandlers(tab) {
-    // Keyboard handling
+  /**
+   * Создаёт и привязывает keyboardHandler/oscHandler для текущего tab.pid, сохраняя ссылки
+   * на tab._keyboardHandler/_oscHandler. Вынесено из setupTabHandlers, чтобы переиспользовать
+   * при переподключении SSH-вкладки (новый pid — оба хендлера захватывают pid в замыкание
+   * при attach() и не видят последующих изменений tab.pid; их `detach()` необратимо обнуляет
+   * зависимости из конструктора, так что для смены pid создаём новые инстансы, а не detach+attach).
+   */
+  function attachPidHandlers(tab) {
+    // При переподключении освобождаем disposables предыдущего oscHandler (регистрируются
+    // на term.parser и не заменяются сами — в отличие от attachCustomKeyEventHandler)
+    tab._oscHandler?.detach()
+
     const keyboardHandler = new TerminalKeyboardHandler(
       { write: (pid, data) => api.ptyWrite(pid, data) },
       (pid) => {
@@ -895,25 +1035,8 @@ async function init() {
       }
     )
     keyboardHandler.attach(tab.term, tab.pid)
+    tab._keyboardHandler = keyboardHandler
 
-    // Terminal → PTY data
-    tab.term.onData((data) => {
-      api.ptyWrite(tab.pid, data)
-    })
-
-    // Terminal → PTY resize
-    tab.term.onResize(({ cols, rows }) => {
-      api.ptyResize(tab.pid, cols, rows)
-    })
-
-    // Title change — only for active tab
-    tab.term.onTitleChange((title) => {
-      if (tabBar.getActive()?.pid === tab.pid) {
-        document.title = title || 'eTty'
-      }
-    })
-
-    // OSC handlers
     const oscHandler = new TerminalOscHandler({
       onCwdChange: (newPath, pid) => {
         const index = tabBar.tabs.findIndex(t => t.pid === pid)
@@ -941,12 +1064,85 @@ async function init() {
       },
     })
     oscHandler.attach(tab.term, tab.pid)
+    tab._oscHandler = oscHandler
+  }
+
+  function setupTabHandlers(tab) {
+    attachPidHandlers(tab)
+
+    // Terminal → PTY data
+    tab.term.onData((data) => {
+      api.ptyWrite(tab.pid, data)
+    })
+
+    // Terminal → PTY resize
+    tab.term.onResize(({ cols, rows }) => {
+      api.ptyResize(tab.pid, cols, rows)
+    })
+
+    // Title change — only for active tab
+    tab.term.onTitleChange((title) => {
+      if (tabBar.getActive()?.pid === tab.pid) {
+        document.title = title || 'eTty'
+      }
+    })
 
     // WebGL addon — try to load for better rendering performance, fallback to canvas
     try {
       tab.term.loadAddon(new WebglAddon())
     } catch (e) {
       console.warn('WebGL addon failed, using canvas renderer:', e)
+    }
+  }
+
+  /**
+   * (Пере)подключает SSH-вкладку: создаёт PTY-сессию через существующий pty:create
+   * (с ssh.connectionId) и пересоздаёт keyboardHandler/oscHandler под новый pid
+   * (см. attachPidHandlers).
+   */
+  async function connectSshTab(tab) {
+    if (!tab.ssh || tab._sshConnecting) return
+    tab._sshConnecting = true
+    try {
+      const connection = sshPanel.getConnection(tab.ssh.connectionId)
+      if (!tab._sshOverlay) tab._sshOverlay = new SshTabOverlay(tab.container)
+
+      if (!connection) {
+        tab._sshOverlay.showMissing(() => bus.emit('tab.close.request', { tabs: [tab] }))
+        return
+      }
+
+      tab.ssh.label = connection.label
+      tab.folderName = connection.label
+      tabBar._updateTabLabel(tab)
+      tab._sshOverlay.showConnecting(connection.label)
+      tab.term.reset()
+
+      let result
+      try {
+        result = await api.ptyCreate({
+          cols: tab.term.cols || TERMINAL_CONFIG.DEFAULT_COLS,
+          rows: tab.term.rows || TERMINAL_CONFIG.DEFAULT_ROWS,
+          cwd: tab.rootPath,
+          tabId: tab.tabId,
+          ssh: { connectionId: connection.id },
+        })
+      } catch (e) {
+        result = { error: e.message }
+      }
+
+      if (!result || result.error) {
+        console.error('[connectSshTab] Failed to connect', tab.ssh.connectionId, result?.error)
+        tab._sshOverlay.showError(connection.label, null, () => connectSshTab(tab))
+        return
+      }
+
+      tab.pid = result.pid
+      tab._sshEverConnected = true
+      tabBar.syncStore()
+      attachPidHandlers(tab)
+    } finally {
+      tab._sshConnecting = false
     }
   }
 
@@ -1028,36 +1224,47 @@ async function init() {
     // Create new tabs first
     const oldCount = tabBar.tabs.length
     let activeIndex = oldCount
-    for (let i = 0; i < savedTabs.length; i++) {
-      let tabData
-      try {
-        tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId)
-      } catch (e) {
-        console.error('[restoreTabs] Failed to restore tab', savedTabs[i].rootPath, e.message)
-        continue
+    let addedCount = 0
+    isRestoringTabs = true
+    try {
+      for (let i = 0; i < savedTabs.length; i++) {
+        let tabData
+        try {
+          tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId, savedTabs[i].ssh || null)
+        } catch (e) {
+          console.error('[restoreTabs] Failed to restore tab', savedTabs[i].rootPath, e.message)
+          continue
+        }
+        const tab = tabBar.addTab(tabData)
+        tab.isBusy = false
+        tab.activeAgentId = null
+        tab._savedEditorState = savedTabs[i].editorState || null
+        tab.gitPanelVisible = savedTabs[i].gitPanelVisible || false
+        setupTabHandlers(tab)
+        tab.fitAddon.fit()
+        addedCount++
+        if (savedTabs[i].isActive) activeIndex = oldCount + i
       }
-      const tab = tabBar.addTab(tabData)
-      tab.isBusy = false
-      tab.activeAgentId = null
-      tab._savedEditorState = savedTabs[i].editorState || null
-      tab.gitPanelVisible = savedTabs[i].gitPanelVisible || false
-      setupTabHandlers(tab)
-      tab.fitAddon.fit()
-      if (savedTabs[i].isActive) activeIndex = oldCount + i
+      // Ни одной вкладки не удалось создать (например, PTY недоступен) — оставляем
+      // старые вкладки нетронутыми вместо того, чтобы удалить их и остаться без ничего.
+      if (addedCount === 0) return
+      // Switch to restored active tab
+      tabBar.switchTo(activeIndex)
+      // Remove old tabs (in reverse to keep indices stable)
+      for (let i = oldCount - 1; i >= 0; i--) {
+        const tab = tabBar.tabs[i]
+        tab._sshOverlay?.destroy()
+        if (tab.pid != null) api.ptyKill(tab.pid)
+        tab.term.dispose()
+        tab.container.remove()
+        tab.element.remove()
+        tabBar.tabs.splice(i, 1)
+        if (tabBar.activeIndex > i) tabBar.activeIndex--
+      }
+      tabBar.switchTo(tabBar.activeIndex)
+    } finally {
+      isRestoringTabs = false
     }
-    // Switch to restored active tab
-    tabBar.switchTo(activeIndex)
-    // Remove old tabs (in reverse to keep indices stable)
-    for (let i = oldCount - 1; i >= 0; i--) {
-      const tab = tabBar.tabs[i]
-      api.ptyKill(tab.pid)
-      tab.term.dispose()
-      tab.container.remove()
-      tab.element.remove()
-      tabBar.tabs.splice(i, 1)
-      if (tabBar.activeIndex > i) tabBar.activeIndex--
-    }
-    tabBar.switchTo(tabBar.activeIndex)
     // Restore editor files for the active tab
     const activeRestored = tabBar.getActive()
     if (activeRestored?._savedEditorState) {
@@ -1074,6 +1281,10 @@ async function init() {
     if (activeRestored?.gitPanelVisible) {
       gitPanel.show(activeRestored.rootPath)
     }
+    // Подключаем только активную восстановленную SSH-вкладку (см. isRestoringTabs выше)
+    if (activeRestored?.ssh && !activeRestored._sshEverConnected) {
+      connectSshTab(activeRestored)
+    }
     await api.tabsDeleteSavedState()
     api.tabsStateChanged()
   }
@@ -1087,24 +1298,29 @@ async function init() {
       const shouldRestore = await api.tabsShowRestoreDialog(savedTabs.length)
       if (shouldRestore) {
         let activeIndex = 0
-        for (let i = 0; i < savedTabs.length; i++) {
-          let tabData
-          try {
-            tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId)
-          } catch (e) {
-            console.error('[Init] Failed to restore tab', savedTabs[i].rootPath, e.message)
-            continue
+        isRestoringTabs = true
+        try {
+          for (let i = 0; i < savedTabs.length; i++) {
+            let tabData
+            try {
+              tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId, savedTabs[i].ssh || null)
+            } catch (e) {
+              console.error('[Init] Failed to restore tab', savedTabs[i].rootPath, e.message)
+              continue
+            }
+            const tab = tabBar.addTab(tabData)
+            tab.isBusy = false
+            tab.activeAgentId = null
+            tab._savedEditorState = savedTabs[i].editorState || null
+            tab.gitPanelVisible = savedTabs[i].gitPanelVisible || false
+            setupTabHandlers(tab)
+            tab.fitAddon.fit()
+            if (savedTabs[i].isActive) activeIndex = i
           }
-          const tab = tabBar.addTab(tabData)
-          tab.isBusy = false
-          tab.activeAgentId = null
-          tab._savedEditorState = savedTabs[i].editorState || null
-          tab.gitPanelVisible = savedTabs[i].gitPanelVisible || false
-          setupTabHandlers(tab)
-          tab.fitAddon.fit()
-          if (savedTabs[i].isActive) activeIndex = i
+          if (savedTabs.length > 0) tabBar.switchTo(activeIndex)
+        } finally {
+          isRestoringTabs = false
         }
-        if (savedTabs.length > 0) tabBar.switchTo(activeIndex)
         // Restore editor files for the active tab
         const activeTab = tabBar.getActive()
         if (activeTab?._savedEditorState) {
@@ -1122,7 +1338,13 @@ async function init() {
         if (activeTab?.gitPanelVisible) {
           gitPanel.show(activeTab.rootPath)
         }
-        restored = true
+        // Подключаем только активную восстановленную SSH-вкладку (lazy connect для остальных)
+        if (activeTab?.ssh && !activeTab._sshEverConnected) {
+          connectSshTab(activeTab)
+        }
+        // Если все вкладки не удалось восстановить (см. catch выше), tabBar пуст —
+        // считаем, что восстановление не удалось, и даём шанс запасному локальному табу ниже.
+        restored = tabBar.tabs.length > 0
       }
       await api.tabsDeleteSavedState()
       api.tabsStateChanged()
@@ -1196,6 +1418,11 @@ async function init() {
   btnToggleEditor.addEventListener('click', () => {
     if (settingsPage.isVisible() || gitPanel.isVisible()) return
     appStore.set('ui.editorVisible', !appStore.get('ui.editorVisible'))
+  })
+
+  btnToggleSsh.addEventListener('click', () => {
+    if (settingsPage.isVisible() || gitPanel.isVisible()) return
+    appStore.set('ui.sshPanelVisible', !appStore.get('ui.sshPanelVisible'))
   })
 
   // Горячая клавиша Cmd+E / Ctrl+E — toggle панели редактора
@@ -1368,6 +1595,31 @@ async function init() {
     }
     const onUp = () => {
       resizeHandleRight.classList.remove('dragging')
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  })
+
+  // Resize handle для панели SSH — направление зависит от текущей позиции (left/right)
+  resizeHandleSsh.addEventListener('mousedown', (e) => {
+    e.preventDefault()
+    resizeHandleSsh.classList.add('dragging')
+    const startX = e.clientX
+    const startWidth = sshPanel._panelEl.offsetWidth
+    const isLeft = sshPanelPosition === 'left'
+    const onMove = (e) => {
+      const delta = isLeft ? (e.clientX - startX) : -(e.clientX - startX)
+      const newWidth = Math.max(
+        APP_CONFIG.SSH_PANEL_MIN_WIDTH,
+        Math.min(APP_CONFIG.SSH_PANEL_MAX_WIDTH, startWidth + delta)
+      )
+      sshPanel._panelEl.style.width = newWidth + 'px'
+      tabBar.getActive()?.fitAddon.fit()
+    }
+    const onUp = () => {
+      resizeHandleSsh.classList.remove('dragging')
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }

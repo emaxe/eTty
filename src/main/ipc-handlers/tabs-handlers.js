@@ -32,7 +32,8 @@ export function registerTabsHandlers(ipcMain, { saveTabState, loadTabState, dele
         rootPath: valid ? tab.rootPath : homedir,
         isActive: tab.isActive,
         tabId: tab.tabId,
-        editorState: tab.editorState || null
+        editorState: tab.editorState || null,
+        ssh: tab.ssh || null
       })
     }
     return validated

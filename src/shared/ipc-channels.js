@@ -95,4 +95,10 @@ export const IPC_CHANNELS = Object.freeze({
   NODE_VERSION_UNINSTALL: 'node-version:uninstall',
   NODE_VERSION_DETECT_MANAGER: 'node-version:detect-manager',
   NODE_VERSION_INSTALL_MANAGER: 'node-version:install-manager',
+
+  // SSH connections
+  SSH_LIST: 'ssh:list',
+  SSH_SAVE: 'ssh:save',
+  SSH_DELETE: 'ssh:delete',
+  SSH_REORDER: 'ssh:reorder',
 })

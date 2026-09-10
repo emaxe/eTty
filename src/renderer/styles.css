@@ -94,7 +94,8 @@ body.platform-darwin .window-controls {
 
 #btn-toggle-sidebar,
 #btn-settings,
-#btn-toggle-editor {
+#btn-toggle-editor,
+#btn-toggle-ssh {
   background: none;
   border: none;
   color: var(--muted);
@@ -108,15 +109,21 @@ body.platform-darwin .window-controls {
 
 #btn-toggle-sidebar:hover,
 #btn-settings:hover,
-#btn-toggle-editor:hover {
+#btn-toggle-editor:hover,
+#btn-toggle-ssh:hover {
   color: var(--text);
   background: var(--border);
 }
 
 #btn-settings.active,
 #btn-toggle-editor.active,
-#btn-toggle-sidebar.active {
+#btn-toggle-sidebar.active,
+#btn-toggle-ssh.active {
   color: var(--accent);
+}
+
+#btn-toggle-ssh.hidden {
+  display: none;
 }
 
 .toolbar-separator {
@@ -173,6 +180,18 @@ body.platform-darwin .window-controls {
   color: var(--text);
   border-bottom: 2px solid var(--accent);
   margin-bottom: -1px; /* перекрываем border-bottom тайтлбара */
+}
+
+/* SSH-вкладка — отличается цветом акцента (иконка + нижняя граница при активности) */
+.tab.tab-ssh .tab-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--green);
+}
+
+.tab.tab-ssh.active {
+  border-bottom-color: var(--green);
 }
 
 .tab-folder {
@@ -347,6 +366,7 @@ body.platform-darwin .window-controls {
   width: 100%;
   height: 100%;
   display: none;
+  position: relative;
 }
 
 .terminal-pane.active {
@@ -1584,6 +1604,184 @@ button svg {
   display: none;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   SSH Panel
+   ═══════════════════════════════════════════════════════════════ */
+
+#resize-handle-ssh {
+  width: 4px;
+  flex-shrink: 0;
+  background: transparent;
+  cursor: col-resize;
+  transition: background 0.15s;
+}
+#resize-handle-ssh:hover,
+#resize-handle-ssh.dragging {
+  background: var(--hover);
+}
+#resize-handle-ssh.hidden {
+  display: none;
+}
+
+#ssh-panel {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--surface);
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#ssh-panel.hidden {
+  display: none;
+}
+#ssh-panel.pos-left {
+  border-right: 1px solid var(--border);
+}
+#ssh-panel.pos-right {
+  border-left: 1px solid var(--border);
+}
+
+.ssh-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.ssh-panel-title {
+  font-weight: 600;
+  flex: 1;
+}
+
+.ssh-panel-add-btn {
+  background: var(--border);
+  border: none;
+  color: var(--text);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ssh-panel-add-btn:hover {
+  background: var(--hover);
+}
+
+.ssh-panel-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.ssh-panel-empty {
+  padding: 16px 10px;
+  color: var(--subtext);
+  font-size: 12px;
+  text-align: center;
+}
+
+.ssh-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+.ssh-row:hover {
+  background: var(--hover);
+}
+.ssh-row.dragging {
+  opacity: 0.4;
+}
+
+.ssh-row-icon {
+  color: var(--green);
+  flex-shrink: 0;
+  display: flex;
+}
+
+.ssh-row-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.ssh-row-label {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-row-target {
+  font-size: 11px;
+  color: var(--subtext);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* — Оверлей подключения над terminal-pane — */
+.ssh-tab-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+}
+.ssh-tab-overlay.hidden {
+  display: none;
+}
+
+.ssh-tab-overlay-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--green);
+  animation: ssh-spin 0.8s linear infinite;
+}
+@keyframes ssh-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ssh-tab-overlay-message {
+  color: var(--subtext);
+  max-width: 320px;
+}
+
+.ssh-tab-overlay.error .ssh-tab-overlay-message {
+  color: var(--red);
+}
+
+.ssh-tab-overlay-btn {
+  background: var(--border);
+  border: none;
+  color: var(--text);
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ssh-tab-overlay-btn:hover {
+  background: var(--hover);
+}
+
 /* Editor header with tabs */
 #editor-header {
   display: flex;
@@ -2415,6 +2613,17 @@ button svg {
   gap: 6px;
   font-size: 12px;
   color: var(--text);
+}
+
+.settings-dialog-hint {
+  font-size: 11px;
+  color: var(--subtext);
+  margin-top: 4px;
+}
+
+.settings-dialog-error {
+  font-size: 12px;
+  color: var(--red);
 }
 
 .settings-dialog-footer {

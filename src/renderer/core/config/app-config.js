@@ -24,6 +24,11 @@ export const APP_CONFIG = Object.freeze({
   EDITOR_MIN_WIDTH: 250,
   EDITOR_MAX_WIDTH_RATIO: 0.8,
 
+  // SSH panel resize constraints (px)
+  SSH_PANEL_DEFAULT_WIDTH: 240,
+  SSH_PANEL_MIN_WIDTH: 180,
+  SSH_PANEL_MAX_WIDTH: 480,
+
   // Interaction thresholds
   DOUBLE_CLICK_THRESHOLD_MS: 500,
   DRAG_START_THRESHOLD_PX: 5,

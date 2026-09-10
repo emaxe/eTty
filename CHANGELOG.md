@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-10
+
+### Added
+
+- **SSH connections** — a new sidebar panel for managing and launching SSH sessions:
+  - Add/edit/delete/reorder saved connections (host, port, user, auth type — ssh-agent / private key / password, extra `ssh` arguments) via a dedicated panel with drag-and-drop
+  - Panel position configurable in Settings → SSH Panel: left, right, or off (off by default) — the toolbar toggle button is hidden entirely when off
+  - Clicking a saved connection opens a regular terminal tab (color-accented, SSH icon) that spawns the system `ssh` binary through the existing PTY channel — full support for `~/.ssh/config`, ssh-agent, `ProxyJump`, and 2FA
+  - Pressing "+" while an SSH tab is active opens another tab to the same connection
+  - Saved passwords/passphrases are encrypted at rest via Electron `safeStorage` (OS keychain) and injected through `SSH_ASKPASS`, so a saved password isn't retyped on each connect; not supported on Windows, where the terminal prompts for it instead
+  - A connection overlay shows a spinner while connecting and an error (with exit code) plus a reconnect button if the session drops — the tab stays open instead of closing
+  - SSH tabs are saved and restored like local tabs across app restarts; only the tab that was active reconnects automatically, others reconnect lazily on first switch
+
 ## [0.1.12] - 2026-08-30
 
 ### Fixed

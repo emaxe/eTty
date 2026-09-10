@@ -15,6 +15,7 @@ import {
   saveTabState, loadTabState, deleteTabState, hasTabState, validatePath
 } from './tab-state'
 import { loadSettings, saveSettings } from './settings-store'
+import * as sshStore from './ssh-store.js'
 import { AppService } from './services/app-service.js'
 import {
   registerPtyHandlers,
@@ -28,6 +29,7 @@ import {
   registerGitHandlers,
   registerSearchHandlers,
   registerNodeVersionHandlers,
+  registerSshHandlers,
 } from './ipc-handlers/index.js'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
@@ -58,7 +60,7 @@ app.whenReady().then(async () => {
   appService.startAgentAutoRefresh()
   appService.startAutoUpdater()
 
-  registerPtyHandlers(ipcMain, { ptyManager, historyManager })
+  registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshStore, shellPathResolver })
   registerFsHandlers(ipcMain, { fileManager })
   registerWindowHandlers(ipcMain)
   registerAppHandlers(ipcMain)
@@ -69,6 +71,7 @@ app.whenReady().then(async () => {
   registerGitHandlers(ipcMain)
   registerSearchHandlers(ipcMain, { fileManager })
   registerNodeVersionHandlers(ipcMain, { nodeVersionManager })
+  registerSshHandlers(ipcMain, { sshStore })
 
   ipcMain.on(IPC_CHANNELS.TABS_STATE_CHANGED, () => appService.rebuildMenu())
 

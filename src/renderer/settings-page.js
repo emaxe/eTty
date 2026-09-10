@@ -241,6 +241,26 @@ export class SettingsPage {
       }
     ]))
 
+    body.appendChild(this._buildCategory('Панель SSH', [
+      {
+        label: 'Положение панели',
+        control: this._createSelect(
+          [
+            { key: 'off', name: 'Выключена' },
+            { key: 'left', name: 'Слева' },
+            { key: 'right', name: 'Справа' }
+          ],
+          this._config.ssh?.panelPosition || 'off',
+          (val) => {
+            if (!this._config.ssh) this._config.ssh = {}
+            this._config.ssh.panelPosition = val
+            this._bus.emit('settings.changed', { key: 'ssh.panelPosition', value: val })
+            this._scheduleSave()
+          }
+        )
+      }
+    ]))
+
     this._agentsCategory = this._buildCategory('ИИ-агенты', this._buildAgentRows())
     body.appendChild(this._agentsCategory)
 

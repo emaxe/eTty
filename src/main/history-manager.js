@@ -145,7 +145,8 @@ export class HistoryManager {
   async mergeAllTabsToGlobal(ptyManager) {
     if (IS_WIN) return
     for (const [, session] of ptyManager.sessions) {
-      if (session.tabId) {
+      // SSH-сессии (historyFile === null) не пишут в локальный zsh-history — нечего мержить
+      if (session.tabId && session.historyFile) {
         await this.mergeTabToGlobal(session.tabId, session.initialHistSize)
       }
     }

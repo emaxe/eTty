@@ -21,7 +21,7 @@ const PROMPT_MAP = {
  */
 export class PtyManager {
   constructor({ shellPathResolver }) {
-    /** @type {Map<number, {pty, webContents, tabId: string, historyFile: string, initialHistSize: number}>} */
+    /** @type {Map<number, {pty, webContents, tabId: string, historyFile: string|null, initialHistSize: number, tmpDir: string|null, isSsh: boolean}>} */
     this.sessions = new Map()
     this._shellPathResolver = shellPathResolver
   }
@@ -77,28 +77,42 @@ export class PtyManager {
   }
 
   /**
-   * Запускает новую сессию shell'а (zsh на macOS/Linux, cmd.exe на Windows) в изолированном PTY.
+   * Запускает новую сессию в изолированном PTY: локальный shell (zsh на macOS/Linux,
+   * cmd.exe на Windows), либо — если передан `sshLaunch` (см. `ssh-command.js`) — SSH-сессию
+   * к удалённому хосту через системный `ssh`.
+   * @param {object} params
+   * @param {{file: string, args: string[], env: object, tmpDir: string|null}} [params.sshLaunch]
    * @returns {{pid: number}} — PID процесса для идентификации сессии
    */
-  create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize, promptStyle }) {
-    const shellPath = this._shellPathResolver.getDefaultShell()
+  create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize, promptStyle, sshLaunch }) {
     const isWin = IS_WIN
-    const zdotdir = isWin ? null : this._createZdotdir(historyFile, promptStyle)
+    const isSsh = !!sshLaunch
 
-    const env = {
-      ...process.env,
-      PATH: this._shellPathResolver.getResolvedPath()
-        || process.env.PATH
-        || (isWin ? '' : '/usr/bin:/bin:/usr/sbin:/sbin')
+    let spawnFile, spawnArgs, env, tmpDir
+
+    if (isSsh) {
+      spawnFile = sshLaunch.file
+      spawnArgs = sshLaunch.args
+      env = sshLaunch.env
+      tmpDir = sshLaunch.tmpDir
+    } else {
+      spawnFile = this._shellPathResolver.getDefaultShell()
+      spawnArgs = []
+      tmpDir = isWin ? null : this._createZdotdir(historyFile, promptStyle)
+      env = {
+        ...process.env,
+        PATH: this._shellPathResolver.getResolvedPath()
+          || process.env.PATH
+          || (isWin ? '' : '/usr/bin:/bin:/usr/sbin:/sbin')
+      }
+      if (!isWin) {
+        env.ZDOTDIR = tmpDir
+        env.LANG = process.env.LANG || 'en_US.UTF-8'
+        env.LC_CTYPE = process.env.LC_CTYPE || 'en_US.UTF-8'
+      }
     }
 
-    if (!isWin) {
-      env.ZDOTDIR = zdotdir
-      env.LANG = process.env.LANG || 'en_US.UTF-8'
-      env.LC_CTYPE = process.env.LC_CTYPE || 'en_US.UTF-8'
-    }
-
-    const ptyProcess = spawn(shellPath, [], {
+    const ptyProcess = spawn(spawnFile, spawnArgs, {
       name: 'xterm-256color',
       cols: cols || 80,
       rows: rows || 24,
@@ -106,7 +120,15 @@ export class PtyManager {
       env
     })
 
-    this.sessions.set(ptyProcess.pid, { pty: ptyProcess, webContents, tabId, historyFile, initialHistSize: initialHistSize || 0, zdotdir })
+    this.sessions.set(ptyProcess.pid, {
+      pty: ptyProcess,
+      webContents,
+      tabId,
+      historyFile: isSsh ? null : historyFile,
+      initialHistSize: initialHistSize || 0,
+      tmpDir,
+      isSsh
+    })
 
     // Batch PTY output: accumulate chunks and flush every ~8 ms.
     // This prevents IPC flooding when TUI apps (Copilot CLI, etc.)
@@ -138,12 +160,12 @@ export class PtyManager {
         webContents.send(IPC_CHANNELS.PTY_EXIT, { pid: ptyProcess.pid, exitCode, signal })
       }
       this.sessions.delete(ptyProcess.pid)
-      // Cleanup zdotdir
-      if (zdotdir) {
+      // Cleanup temp dir (ZDOTDIR для локальных сессий, SSH_ASKPASS для SSH-сессий)
+      if (tmpDir) {
         try {
-          fs.rmSync(zdotdir, { recursive: true, force: true })
+          fs.rmSync(tmpDir, { recursive: true, force: true })
         } catch (err) {
-          log.warn('pty-manager: failed to cleanup zdotdir on exit', zdotdir, err.message)
+          log.warn('pty-manager: failed to cleanup tmpDir on exit', tmpDir, err.message)
         }
       }
     })
@@ -168,28 +190,28 @@ export class PtyManager {
     if (session) {
       session.pty.kill()
       this.sessions.delete(pid)
-      if (session.zdotdir) {
+      if (session.tmpDir) {
         try {
-          fs.rmSync(session.zdotdir, { recursive: true, force: true })
+          fs.rmSync(session.tmpDir, { recursive: true, force: true })
         } catch (err) {
-          log.warn('pty-manager: failed to cleanup zdotdir', session.zdotdir, err.message)
+          log.warn('pty-manager: failed to cleanup tmpDir', session.tmpDir, err.message)
         }
       }
     }
   }
 
   killAll() {
-    const zdotdirs = []
+    const tmpDirs = []
     for (const [, session] of this.sessions) {
-      if (session.zdotdir) zdotdirs.push(session.zdotdir)
+      if (session.tmpDir) tmpDirs.push(session.tmpDir)
       session.pty.kill()
     }
     this.sessions.clear()
-    for (const zdotdir of zdotdirs) {
+    for (const tmpDir of tmpDirs) {
       try {
-        fs.rmSync(zdotdir, { recursive: true, force: true })
+        fs.rmSync(tmpDir, { recursive: true, force: true })
       } catch (err) {
-        log.warn('pty-manager: failed to cleanup zdotdir on killAll', zdotdir, err.message)
+        log.warn('pty-manager: failed to cleanup tmpDir on killAll', tmpDir, err.message)
       }
     }
   }

@@ -143,13 +143,24 @@ do_rebuild() {
       echo ""
       hr
       printf "  ${CYAN}${BOLD}▸${RESET} ${BOLD}Rebuilding native modules (node-pty)...${RESET}\n"
-      printf "  ${DIM}\$ CPLUS_INCLUDE_PATH=... npx electron-rebuild -f -w node-pty${RESET}\n"
+      # SDK путь берём у активного Xcode/CLT через xcrun, а не хардкодим — после смены Xcode
+      # (upgrade/переустановка) захардкоженный путь до CommandLineTools SDK может не совпадать
+      # с текущим `xcode-select -p`, из-за чего сборка падает на "unknown type name 'uint32_t'"
+      # (не резолвится <cstdint> транзитивно). Fallback — старый путь, если xcrun недоступен.
+      local sdk_cpp_path
+      sdk_cpp_path="$(xcrun --show-sdk-path 2>/dev/null)/usr/include/c++/v1"
+      if [ ! -d "$sdk_cpp_path" ]; then
+        sdk_cpp_path="/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1"
+      fi
+      printf "  ${DIM}\$ CPLUS_INCLUDE_PATH=%s npx electron-rebuild -f -w node-pty${RESET}\n" "$sdk_cpp_path"
       hr
       echo ""
-      (cd "$PROJECT_ROOT" && CPLUS_INCLUDE_PATH="/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1" npx electron-rebuild -f -w node-pty) || {
+      (cd "$PROJECT_ROOT" && CPLUS_INCLUDE_PATH="$sdk_cpp_path" npx electron-rebuild -f -w node-pty) || {
         echo ""
         printf "  ${RED}▸ Native module rebuild failed. Try manually:${RESET}\n"
-        printf "  ${DIM}  CPLUS_INCLUDE_PATH=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1 npx electron-rebuild -f -w node-pty${RESET}\n"
+        printf "  ${DIM}  CPLUS_INCLUDE_PATH=%s npx electron-rebuild -f -w node-pty${RESET}\n" "$sdk_cpp_path"
+        printf "  ${DIM}  Если ошибка про 'distutils' — node-gyp нужен Python ≤3.11 (в 3.12+ distutils удалён):${RESET}\n"
+        printf "  ${DIM}  npm_config_python=/path/to/python3.11 CPLUS_INCLUDE_PATH=%s npx electron-rebuild -f -w node-pty${RESET}\n" "$sdk_cpp_path"
         echo ""
       }
     fi

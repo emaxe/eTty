@@ -26,6 +26,16 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **2,500 lines** scrollback buffer (performance-optimized)
 - **Scroll-to-bottom button** — floating button appears when you scroll up into history; click to jump back to the latest output
 
+### SSH Connections
+
+- **SSH panel** — dedicated sidebar for saved connections; position configurable in Settings → SSH Panel (left, right, or off — off by default). The toolbar toggle button is hidden entirely when the panel is off
+- **Add/edit/delete/reorder** — host, port, user, auth type (ssh-agent, private key, or password), private key path, extra `ssh` arguments; drag-and-drop to reorder
+- **Encrypted password storage** — saved passwords/passphrases are encrypted at rest via Electron `safeStorage` (OS keychain); not supported on Windows, where the terminal prompts for it instead
+- **Click to connect** — opens a regular terminal tab (color-accented, SSH icon) running the system `ssh` binary — full support for `~/.ssh/config`, ssh-agent, `ProxyJump`, 2FA
+- **"+" clones the active connection** — pressing "+" while an SSH tab is active opens another tab to the same host
+- **Connection overlay** — spinner while connecting; on a dropped session, an error with exit code and a reconnect button, without closing the tab
+- **Session restore** — SSH tabs are saved and restored like local tabs; only the tab that was active reconnects automatically on launch, others reconnect lazily when you switch to them
+
 ### Command History
 
 - **Shared global history** (5,000 lines) across all tabs
@@ -110,6 +120,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Status bar size** — compact, standard, or large; adjustable in Settings → Appearance
 - **New tab placement** — `modifierAdjacent` (Cmd/Ctrl opens next to active tab) or `modifierEnd` (Cmd/Ctrl appends to end); configurable in Settings → Terminal
 - **Tab switch hotkey** — off, `Cmd+Option+←/→`, or `Cmd+Shift+←/→`; configurable in Settings → Terminal
+- **SSH panel position** — off (default), left, or right; configurable in Settings → SSH Panel
 - **AI agent quick replies** — CRUD editor with per-agent toggles; drag-and-drop reordering and grouping into a tree
 - **Auto-persisted** to disk with debounced saves
 
@@ -282,8 +293,9 @@ All user data is stored in `~/.config/eTty/` (Electron `userData`):
 
 | File | Purpose |
 |------|---------|
-| `config.json` | App settings (theme, focus indicator, file tree behavior, prompt style, agent proxy, force-disabled agents, custom agents, quick replies); versioned, deep-merged with defaults on load |
+| `config.json` | App settings (theme, focus indicator, file tree behavior, prompt style, agent proxy, force-disabled agents, custom agents, quick replies, SSH panel position); versioned, deep-merged with defaults on load |
 | `themes/*.json` | User-defined custom themes, loaded alongside the 7 built-ins |
+| `ssh-connections.json` | Saved SSH connections; passwords/passphrases encrypted via `safeStorage` |
 | `tabs-state.json` | Saved tab state for session restore |
 | `history/global.zsh_history` | Shared command history (5000 lines) |
 | `history/tabs/<id>.zsh_history` | Per-tab command history |
@@ -294,6 +306,7 @@ All user data is stored in `~/.config/eTty/` (Electron `userData`):
 - `build/entitlements.mac.plist` contains macOS entitlements required for node-pty under hardened runtime (JIT, unsigned memory, library validation).
 - Auto-update is **stubbed** — logs only, no update server configured yet.
 - Settings overlay blocks tab switching to prevent focus leaking to hidden terminals.
+- Saved SSH passwords are auto-filled via `SSH_ASKPASS` on macOS/Linux (OpenSSH ≥ 8.4); on Windows the terminal always prompts for the password manually.
 
 ## License
 
