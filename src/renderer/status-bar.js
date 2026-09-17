@@ -17,7 +17,7 @@ import { buildQuickReplyTree } from './features/quick-replies/quick-replies-mode
  *   чтобы click-события доходили для double-click обработки.
  */
 export class StatusBar {
-  constructor({ btnEl, cwdEl, nodeEl, onOpen, onOpenNodeVersion, agentsContainerEl = null, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [], groups: [] }, api, store = null }) {
+  constructor({ btnEl, cwdEl, nodeEl, onOpen, onOpenNodeVersion, agentsContainerEl = null, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, onClearOptimisticBusy = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [], groups: [] }, api, store = null }) {
     this._btnEl = btnEl
     this._cwdEl = cwdEl
     this._nodeEl = nodeEl
@@ -30,6 +30,7 @@ export class StatusBar {
     this._onSelectAgent = onSelectAgent
     this._agentCommandsPanelEl = agentCommandsPanelEl
     this._onAgentCommand = onAgentCommand
+    this._onClearOptimisticBusy = onClearOptimisticBusy
     this._proxyToggleEl = proxyToggleEl
     this._onToggleProxy = onToggleProxy
     this._quickReplies = quickReplies
@@ -43,6 +44,9 @@ export class StatusBar {
     this._customAgentsById = new Map()
     this._activeTabBusy = false
     this._activeAgentId = null
+    // true, когда busy определён оптимистично (SSH-вкладка без честного OSC 133 —
+    // см. launchAgentInActiveTab/selectAgentAsActive в index.js), а не через реальный сигнал.
+    this._busyOptimistic = false
     this._proxy = ''
     this._proxyEnabled = false
     this._customAgentsCategory = null
@@ -138,9 +142,10 @@ export class StatusBar {
     this._updateAgentButtons()
   }
 
-  setTerminalState({ isBusy, activeAgentId }) {
+  setTerminalState({ isBusy, activeAgentId, busyOptimistic = false }) {
     this._activeTabBusy = !!isBusy
     this._activeAgentId = activeAgentId || null
+    this._busyOptimistic = !!busyOptimistic
     this._updateAgentButtons()
     this._updateAgentCommandsPanel()
   }
@@ -212,6 +217,11 @@ export class StatusBar {
     if (!busy) return
 
     this._agentCommandsPanelEl.innerHTML = ''
+    // Busy определён оптимистично (SSH без честного OSC 133) — единственный явный способ
+    // его снять, раз автоматического сигнала 133;A может не быть вовсе.
+    if (this._busyOptimistic) {
+      this._agentCommandsPanelEl.appendChild(this._createClearOptimisticBusyButton())
+    }
     const nodes = buildQuickReplyTree({
       items: this._quickReplies?.items || [],
       groups: this._quickReplies?.groups || [],
@@ -222,6 +232,15 @@ export class StatusBar {
         node.kind === 'group' ? this._createGroupButton(node) : this._createQuickReplyButton(node.item)
       )
     }
+  }
+
+  _createClearOptimisticBusyButton() {
+    const btn = document.createElement('button')
+    btn.className = 'agent-cmd-btn agent-cmd-clear-busy-btn'
+    btn.title = 'Отметить агента завершённым (busy определён оптимистично)'
+    btn.innerHTML = Icons.close
+    btn.addEventListener('click', () => this._onClearOptimisticBusy?.())
+    return btn
   }
 
   _createQuickReplyButton(item) {

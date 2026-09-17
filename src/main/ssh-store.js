@@ -72,9 +72,10 @@ export async function loadConnections() {
 
 /**
  * Создаёт или обновляет подключение.
- * @param {object} conn — { id?, label, host, port, user, authType, privateKeyPath, secret, extraArgs }
+ * @param {object} conn — { id?, label, host, port, user, authType, privateKeyPath, secret, extraArgs, injectShellIntegration? }
  *   `secret` — пароль/passphrase в открытом виде (только при изменении); `undefined` — оставить как есть,
- *   `null`/`''` — очистить.
+ *   `null`/`''` — очистить. `injectShellIntegration` — инжект OSC 7/133-хуков на удалённой стороне
+ *   (см. `ssh/remote-shell-hooks.js`), по умолчанию включён.
  */
 export async function saveConnection(conn) {
   try {
@@ -97,6 +98,7 @@ export async function saveConnection(conn) {
       authType: conn.authType || 'agent',
       privateKeyPath: conn.privateKeyPath || '',
       extraArgs: conn.extraArgs || '',
+      injectShellIntegration: conn.injectShellIntegration !== false,
       secret
     }
 

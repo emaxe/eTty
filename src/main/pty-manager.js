@@ -4,6 +4,7 @@ import os from 'os'
 import path from 'path'
 import log from 'electron-log'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
+import { SshControlChannel } from './ssh/ssh-control-channel.js'
 
 const IS_WIN = process.platform === 'win32'
 
@@ -20,10 +21,12 @@ const PROMPT_MAP = {
  * ZDOTDIR/истории/OSC-хуков (zsh-специфичны).
  */
 export class PtyManager {
-  constructor({ shellPathResolver }) {
+  /** @param {{ shellPathResolver, sshSessionRegistry: import('./ssh/ssh-session-registry.js').SshSessionRegistry }} deps */
+  constructor({ shellPathResolver, sshSessionRegistry }) {
     /** @type {Map<number, {pty, webContents, tabId: string, historyFile: string|null, initialHistSize: number, tmpDir: string|null, isSsh: boolean}>} */
     this.sessions = new Map()
     this._shellPathResolver = shellPathResolver
+    this._sshSessionRegistry = sshSessionRegistry
   }
 
   /**
@@ -79,9 +82,12 @@ export class PtyManager {
   /**
    * Запускает новую сессию в изолированном PTY: локальный shell (zsh на macOS/Linux,
    * cmd.exe на Windows), либо — если передан `sshLaunch` (см. `ssh-command.js`) — SSH-сессию
-   * к удалённому хосту через системный `ssh`.
+   * к удалённому хосту через системный `ssh`. Для SSH-сессий с доступным ControlMaster
+   * (`sshLaunch.control`) дополнительно поднимает `SshControlChannel` — служебный канал для
+   * операций удалённой ФС (Этап 4), регистрируемый в `sshSessionRegistry` по pid PTY.
    * @param {object} params
-   * @param {{file: string, args: string[], env: object, tmpDir: string|null}} [params.sshLaunch]
+   * @param {{file: string, args: string[], env: object, tmpDir: string|null,
+   *   control: {dir: string, path: string, target: string, port: number}|null}} [params.sshLaunch]
    * @returns {{pid: number}} — PID процесса для идентификации сессии
    */
   create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize, promptStyle, sshLaunch }) {
@@ -119,6 +125,19 @@ export class PtyManager {
       cwd,
       env
     })
+
+    if (isSsh && sshLaunch.control) {
+      const channel = new SshControlChannel({
+        sshFile: sshLaunch.file,
+        target: sshLaunch.control.target,
+        port: sshLaunch.control.port,
+        controlPath: sshLaunch.control.path,
+        controlDir: sshLaunch.control.dir
+      })
+      // Канал сам владеет жизненным циклом controlDir (создаёт/чистит при dispose()) —
+      // PtyManager отдельно этот каталог не отслеживает.
+      this._sshSessionRegistry.register(ptyProcess.pid, channel)
+    }
 
     this.sessions.set(ptyProcess.pid, {
       pty: ptyProcess,
@@ -160,17 +179,22 @@ export class PtyManager {
         webContents.send(IPC_CHANNELS.PTY_EXIT, { pid: ptyProcess.pid, exitCode, signal })
       }
       this.sessions.delete(ptyProcess.pid)
-      // Cleanup temp dir (ZDOTDIR для локальных сессий, SSH_ASKPASS для SSH-сессий)
-      if (tmpDir) {
-        try {
-          fs.rmSync(tmpDir, { recursive: true, force: true })
-        } catch (err) {
-          log.warn('pty-manager: failed to cleanup tmpDir on exit', tmpDir, err.message)
-        }
-      }
+      // ControlMaster-канал (если был) сам чистит свой controlDir при dispose()
+      this._sshSessionRegistry.dispose(ptyProcess.pid)
+      // ZDOTDIR (локальные сессии) / SSH_ASKPASS (SSH)
+      this._rmDirSafe(tmpDir, 'tmpDir on exit')
     })
 
     return { pid: ptyProcess.pid }
+  }
+
+  _rmDirSafe(dir, label) {
+    if (!dir) return
+    try {
+      fs.rmSync(dir, { recursive: true, force: true })
+    } catch (err) {
+      log.warn(`pty-manager: failed to cleanup ${label}`, dir, err.message)
+    }
   }
 
   write(pid, data) {
@@ -190,29 +214,21 @@ export class PtyManager {
     if (session) {
       session.pty.kill()
       this.sessions.delete(pid)
-      if (session.tmpDir) {
-        try {
-          fs.rmSync(session.tmpDir, { recursive: true, force: true })
-        } catch (err) {
-          log.warn('pty-manager: failed to cleanup tmpDir', session.tmpDir, err.message)
-        }
-      }
+      this._sshSessionRegistry.dispose(pid)
+      this._rmDirSafe(session.tmpDir, 'tmpDir')
     }
   }
 
   killAll() {
-    const tmpDirs = []
-    for (const [, session] of this.sessions) {
-      if (session.tmpDir) tmpDirs.push(session.tmpDir)
+    const dirs = []
+    for (const [pid, session] of this.sessions) {
+      if (session.tmpDir) dirs.push(session.tmpDir)
+      this._sshSessionRegistry.dispose(pid)
       session.pty.kill()
     }
     this.sessions.clear()
-    for (const tmpDir of tmpDirs) {
-      try {
-        fs.rmSync(tmpDir, { recursive: true, force: true })
-      } catch (err) {
-        log.warn('pty-manager: failed to cleanup tmpDir on killAll', tmpDir, err.message)
-      }
+    for (const dir of dirs) {
+      this._rmDirSafe(dir, 'dir on killAll')
     }
   }
 

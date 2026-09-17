@@ -191,6 +191,22 @@ export class GitPanel {
     requestAnimationFrame(() => this._fileList?.focusFilter())
   }
 
+  /**
+   * Открывает панель в пустом состоянии с уведомлением — для вкладок, у которых
+   * нет локального git (например SSH), вместо ошибочного опроса пути активной вкладки.
+   */
+  showUnavailable(message) {
+    this._rootPath = null
+    this._overlayEl.classList.remove('hidden')
+    this._diffView.clear()
+    this._showRootPath()
+    this._branch = null
+    this._renderHeaderStats()
+    this._fileList.setData({ staged: [], unstaged: [], untracked: [], ignored: [], isRepo: false })
+    this._lastStagedCount = 0
+    this._showToast(message, 'error')
+  }
+
   async _showRootPath() {
     if (!this._rootPathEl) return
     if (!this._rootPath) { this._rootPathEl.textContent = ''; return }

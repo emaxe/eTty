@@ -2,6 +2,8 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import log from 'electron-log'
+import { buildRemoteInitCommand } from './ssh/remote-shell-hooks.js'
+import { createControlSocket } from './ssh/ssh-control-channel.js'
 
 const IS_WIN = process.platform === 'win32'
 
@@ -47,19 +49,43 @@ function createAskpassScript() {
  * сохранённого пароля/passphrase на macOS/Linux создаёт временный SSH_ASKPASS-скрипт
  * (вызывающий код обязан очистить `tmpDir`, как и обычный ZDOTDIR).
  *
- * @param {{ connection: object, resolvedPath: string|null }} params
+ * @param {{ connection: object, resolvedPath: string|null, skipShellIntegration?: boolean }} params
  *   `connection` — результат `ssh-store.getConnectionForLaunch()` (с расшифрованным `secret`).
- * @returns {{ file: string, args: string[], env: object, tmpDir: string|null }}
+ *   `skipShellIntegration` — форсированно отключить инжект хуков для ОДНОЙ попытки подключения
+ *   (используется при авто-реконнекте после быстрого падения PTY, см. `connectSshTab` в renderer) —
+ *   не путать с `connection.injectShellIntegration`, постоянной настройкой самого подключения.
+ * @returns {{ file: string, args: string[], env: object, tmpDir: string|null,
+ *   control: { dir: string, path: string, target: string, port: number } | null }}
+ *   `control` — параметры ControlMaster-сокета для `SshControlChannel` (Этап 4, удалённая ФС),
+ *   `null` на Windows (OpenSSH для Windows не поддерживает мультиплексирование) либо когда путь
+ *   к сокету не влезает в лимит `sun_path` даже с фолбэком на `/tmp` (см. `createControlSocket`).
  */
-export function buildSshLaunch({ connection, resolvedPath }) {
+export function buildSshLaunch({ connection, resolvedPath, skipShellIntegration = false }) {
   const file = findSshBinary(resolvedPath)
+  const port = connection.port || 22
+  const target = `${connection.user}@${connection.host}`
   const args = [
     '-tt',
-    '-p', String(connection.port || 22),
+    '-p', String(port),
     '-o', 'ServerAliveInterval=30',
     '-o', 'ServerAliveCountMax=3',
     '-o', 'NumberOfPasswordPrompts=1'
   ]
+
+  // ControlMaster — мультиплексирование для служебных вызовов удалённой ФС (Этап 4) по тому же
+  // соединению, без повторной аутентификации. ControlPersist=10 (не `no`): служебный вызов,
+  // начатый в момент выхода из интерактивной сессии, успевает завершиться; ghost-мастер
+  // гарантированно убивается через `ssh -O exit` (см. PtyManager.kill/onExit).
+  let control = null
+  const socket = createControlSocket()
+  if (socket) {
+    control = { dir: socket.dir, path: socket.path, target, port }
+    args.push(
+      '-o', 'ControlMaster=auto',
+      '-o', `ControlPath=${socket.path}`,
+      '-o', 'ControlPersist=10'
+    )
+  }
 
   if (connection.authType === 'key' && connection.privateKeyPath) {
     args.push('-i', connection.privateKeyPath)
@@ -70,7 +96,16 @@ export function buildSshLaunch({ connection, resolvedPath }) {
     args.push(...extraArgs.split(/\s+/).filter(Boolean))
   }
 
-  args.push(`${connection.user}@${connection.host}`)
+  args.push(target)
+
+  // Remote-команда — ПОЗИЦИОННЫЙ аргумент после user@host (не `-o RemoteCommand=`: тот
+  // конфликтует с аргументом командной строки и требует RequestTTY). `-tt` уже стоит и
+  // как раз нужен — с remote-командой ssh по умолчанию tty не выделяет. Один элемент argv,
+  // без локального shell — node-pty вызывает ssh через execve, поэтому OpenSSH получит
+  // этот текст как один-единственный «command», без собственного join/re-quoting.
+  if (connection.injectShellIntegration !== false && !skipShellIntegration) {
+    args.push(buildRemoteInitCommand())
+  }
 
   const env = {
     ...process.env,
@@ -98,5 +133,5 @@ export function buildSshLaunch({ connection, resolvedPath }) {
     }
   }
 
-  return { file, args, env, tmpDir }
+  return { file, args, env, tmpDir, control }
 }

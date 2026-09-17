@@ -101,4 +101,8 @@ export const IPC_CHANNELS = Object.freeze({
   SSH_SAVE: 'ssh:save',
   SSH_DELETE: 'ssh:delete',
   SSH_REORDER: 'ssh:reorder',
+
+  // SSH remote FS — готовность ControlMaster-канала для конкретного pid (Этап 3/4)
+  SSH_FS_READY: 'ssh:fs-ready',
+  SSH_FS_RETRY: 'ssh:fs-retry',
 })

@@ -29,6 +29,13 @@ export const APP_CONFIG = Object.freeze({
   SSH_PANEL_MIN_WIDTH: 180,
   SSH_PANEL_MAX_WIDTH: 480,
 
+  // Сколько ждать первого OSC 7/133 от инжектированных remote-хуков, прежде чем считать
+  // их не сработавшими и включить оптимистичный busy (см. connectSshTab в index.js)
+  SSH_HOOK_DETECT_TIMEOUT_MS: 8000,
+  // Порог «быстрого падения» PTY сразу после подключения — признак конфликта remote-команды
+  // с RemoteCommand/ForceCommand на сервере, требующий реконнекта без инжекта хуков
+  SSH_HOOK_FAIL_FAST_MS: 3000,
+
   // Interaction thresholds
   DOUBLE_CLICK_THRESHOLD_MS: 500,
   DRAG_START_THRESHOLD_PX: 5,

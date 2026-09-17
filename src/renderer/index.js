@@ -35,6 +35,7 @@ import { TerminalScrollButton } from './features/terminal/terminal-scroll-button
 import { EventBus } from './core/event-bus.js'
 import { StateStore } from './core/state-store.js'
 import { ElectronApiAdapter } from './core/adapters/electron-api.js'
+import { createScopedFsApi } from './core/adapters/scoped-fs-api.js'
 import { AppContainer } from './core/container.js'
 import { diagnostics } from './core/diagnostics.js'
 import { GitStatusService } from './services/git-status-service.js'
@@ -100,7 +101,10 @@ async function createTab(api, cwd, tabId, ssh) {
   tabId = tabId || crypto.randomUUID()
 
   if (ssh) {
-    return { term, fitAddon, pid: null, rootPath: cwd, tabId, ssh }
+    // remoteCwd — последний известный удалённый cwd при восстановлении вкладки (см.
+    // tab-bar.js exportState/restore-циклы ниже); не часть ssh.connectionId/label самих по себе.
+    const { remoteCwd, ...sshInfo } = ssh
+    return { term, fitAddon, pid: null, rootPath: cwd, tabId, ssh: sshInfo, remoteCwd: remoteCwd || null }
   }
 
   const { config } = await api.settingsLoad()
@@ -184,6 +188,11 @@ async function init() {
     ssh: {
       panelPosition: config.ssh?.panelPosition || 'off',
       connections: [],
+    },
+    // Текущий FS-контекст активной вкладки — читает scoped-fs-api.js, обновляется в
+    // bus.on('tab.switch')/connectSshTab/onSshFsReady/onPtyExit (см. ниже).
+    fs: {
+      context: { kind: 'local' },
     }
   })
 
@@ -289,6 +298,7 @@ async function init() {
   container.register('store', () => appStore)
   container.register('bus', () => bus)
   container.register('api', () => api)
+  container.register('scopedApi', (r) => createScopedFsApi(api, () => r('store').get('fs.context')))
   container.register('gitStatusService', (r) => new GitStatusService({
     api: r('api'),
     eventBus: r('bus'),
@@ -362,11 +372,14 @@ async function init() {
     panelEl: document.getElementById('editor-panel'),
     resizeHandleEl: document.getElementById('resize-handle-right'),
     eventBus: r('bus'),
-    electronAPI: r('api'),
+    electronAPI: r('scopedApi'),
     getActiveCwd: () => container.resolve('tabBar').getActive()?.rootPath || startCwd,
     store: r('store'),
   }))
-  container.register('fileTree', (r) => new FileTree(fileTreeContainerEl, { eventBus: r('bus'), api: r('api'), store: r('store') }))
+  // Регистрация здесь (не рядом с остальными resolve('confirmDialog') ниже) — FileTree
+  // резолвится намного раньше и уже сейчас нуждается в confirmDialog для подтверждения удаления.
+  container.register('confirmDialog', () => new ConfirmDialog())
+  container.register('fileTree', (r) => new FileTree(fileTreeContainerEl, { eventBus: r('bus'), api: r('scopedApi'), store: r('store'), confirmDialog: r('confirmDialog') }))
 
   editorPanel = container.resolve('editorPanel')
   // Apply current theme immediately (applyTheme ran before editorPanel was created)
@@ -388,9 +401,12 @@ async function init() {
 
   const syncStatusBarTerminalState = () => {
     const tab = tabBar.getActive()
+    // Кнопку ручного сброса busy показываем и для честно-неопределённого состояния:
+    // busy выставлен оптимистично (SSH), либо OSC мог быть потерян при усечении буфера фоновой вкладки.
     statusBar.setTerminalState({
       isBusy: !!tab?.isBusy,
-      activeAgentId: tab?.activeAgentId || null
+      activeAgentId: tab?.activeAgentId || null,
+      busyOptimistic: !!(tab?._busyOptimistic || (tab?.isBusy && tab?._oscMaybeLost))
     })
   }
 
@@ -449,6 +465,14 @@ async function init() {
     if (settingsPage.isVisible()) return
     _isSwitchingTab = true
     try {
+    // Контекст ДО unwatchAll()/setRoot() — иначе последний fsUnwatchDir() прошлой вкладки
+    // уйдёт уже в новый ctx. Для SSH без готового удалённого FS (ещё подключается/провалилось)
+    // контекст не трогаем вовсе — дерево на секунду сохраняет вид прошлой вкладки, но НЕ
+    // показывает чужие данные под видом текущей (тот самый баг, который чинит Этап 0/4).
+    const nextCtx = tab.ssh
+      ? (tab._sshFsAvailable === true ? { kind: 'ssh', sessionId: tab.pid } : null)
+      : { kind: 'local' }
+    if (nextCtx) appStore.set('fs.context', nextCtx)
     // Очищаем все watchers перед сменой вкладки
     fileTree.unwatchAll()
     if (prevTab) {
@@ -469,10 +493,10 @@ async function init() {
       gitPanel.hideQuiet()
       appStore.set('ui.gitPanelVisible', false)
     }
-    if (tab.rootPath !== fileTree.getCwd()) {
-      await fileTree.setRoot(tab.rootPath)
-      api.fsSetRoot(tab.rootPath)
-    } else {
+    if (nextCtx && (tab.rootPath !== fileTree.getCwd() || !fileTree.isSameContext(nextCtx))) {
+      await fileTree.setRoot(tab.rootPath, nextCtx)
+      api.fsSetRoot(tab.rootPath, nextCtx)
+    } else if (nextCtx) {
       fileTree.collapseAll()
     }
     if (tab.treeExpandedDirs && tab.treeExpandedDirs.size > 0) {
@@ -482,14 +506,16 @@ async function init() {
     await editorPanel.restoreState(tab.editorState || null)
     // Восстановить git-панель если она была открыта на этой вкладке
     if (tab.gitPanelVisible) {
-      gitPanel.show(tab.rootPath)
+      openGitPanelForTab(tab)
       appStore.set('ui.gitPanelVisible', true)
     }
     document.title = tab.termTitle || 'eTty'
     updateNavButtons()
     syncStatusBarTerminalState()
     statusBar.updateNow()
-    gitStatusService.setRootPath(tab.rootPath || null)
+    // SSH-вкладки наследуют локальный rootPath только для spawn ssh — simple-git работает
+    // с локальной ФС и не должен опрашивать его как будто это репозиторий вкладки.
+    gitStatusService.setRootPath(tab.ssh ? null : (tab.rootPath || null))
     // Lazy connect: восстановленная SSH-вкладка подключается при первом переключении на неё.
     // Не срабатывает во время пакетного восстановления вкладок (isRestoringTabs) — иначе
     // каждая промежуточная addTab()→switchTo() открыла бы реальное SSH-соединение.
@@ -552,7 +578,7 @@ async function init() {
     connectSshTab(tab)
   })
 
-  container.register('confirmDialog', () => new ConfirmDialog())
+  // Регистрация вынесена выше (см. рядом с fileTree) — здесь просто резолвим тот же singleton.
   const confirmDialog = container.resolve('confirmDialog')
 
   // Закрывает конкретную вкладку (по ссылке — устойчиво к сдвигу индексов
@@ -642,6 +668,20 @@ async function init() {
   }))
   const gitPanel = container.resolve('gitPanel')
 
+  /**
+   * Открывает git-панель для данной вкладки. SSH-вкладки не имеют локального git —
+   * `simple-git` в main работает только с локальной ФС, поэтому вместо опроса
+   * унаследованного локального `tab.rootPath` показываем явное уведомление.
+   */
+  function openGitPanelForTab(tab) {
+    if (!tab) return
+    if (tab.ssh) {
+      gitPanel.showUnavailable('Git-панель доступна только для локальных вкладок')
+      return
+    }
+    gitPanel.show(tab.rootPath)
+  }
+
   container.register('sshPanel', (r) => new SshPanel({
     panelEl: document.getElementById('ssh-panel'),
     resizeHandleEl: resizeHandleSsh,
@@ -694,6 +734,13 @@ async function init() {
 
     tab.activeAgentId = agentId
     api.ptyWrite(tab.pid, command)
+    // OSC 133 не приходит с SSH-вкладок без инжектированных хуков (см. Этап 2 плана) —
+    // без оптимистичного busy панель быстрых команд никогда бы не появилась. Честный
+    // OSC 133 (если хуки всё-таки заработали) перекрывает это состояние в onBusyChange.
+    if (tab.ssh || tab._sshHooksMissing) {
+      tab.isBusy = true
+      tab._busyOptimistic = true
+    }
     syncStatusBarTerminalState()
     tab.term.focus()
   }
@@ -704,12 +751,33 @@ async function init() {
    * через OSC 133 (например, запущен вручную или через другое приложение).
    * Не отправляет команду в PTY — только декларативно устанавливает activeAgentId,
    * чтобы StatusBar показал быстрые команды (quick replies) этого агента.
+   * Для SSH-вкладок (см. launchAgentInActiveTab) работает и без предшествующего busy —
+   * там честного OSC 133 может не быть вовсе.
    */
   const selectAgentAsActive = (agentId) => {
     const tab = tabBar.getActive()
-    if (!tab || !tab.isBusy) return
+    if (!tab) return
+    if (!tab.isBusy && !tab.ssh && !tab._sshHooksMissing) return
+    const wasBusy = tab.isBusy
+    tab.isBusy = true
+    if (!wasBusy) tab._busyOptimistic = true
     tab.activeAgentId = agentId
     syncStatusBarTerminalState()
+  }
+
+  /**
+   * Явный сброс busy, когда он неопределён (крестик в панели быстрых команд, см. StatusBar):
+   * оптимистичное состояние SSH-вкладки, либо возможная потеря OSC 133 при усечении буфера.
+   */
+  const clearOptimisticBusy = () => {
+    const tab = tabBar.getActive()
+    if (!tab || (!tab._busyOptimistic && !tab._oscMaybeLost)) return
+    tab.isBusy = false
+    tab._busyOptimistic = false
+    tab._oscMaybeLost = false
+    tab.activeAgentId = null
+    syncStatusBarTerminalState()
+    updateNavButtons()
   }
 
   container.register('statusBar', (r) => new StatusBar({
@@ -729,6 +797,7 @@ async function init() {
         r('api').ptyWrite(tab.pid, `\x1b[200~${cmd + ''}\x1b[201~`)
       }
     },
+    onClearOptimisticBusy: clearOptimisticBusy,
     proxyToggleEl: document.getElementById('btn-proxy-toggle'),
     onToggleProxy: (enabled) => {
       config.agents.proxyEnabled = enabled
@@ -781,7 +850,7 @@ async function init() {
     if (path === 'ui.gitPanelVisible') {
       const visible = state.ui.gitPanelVisible
       if (visible) {
-        gitPanel.show(tabBar.getActive()?.rootPath)
+        openGitPanelForTab(tabBar.getActive())
       } else {
         gitPanel.hide()
       }
@@ -983,6 +1052,9 @@ async function init() {
         tab._pendingData.splice(0, tab._pendingData.length - 1)
         tab._pendingData[0] = '…[truncated]\n'
         tab._pendingDataSize = tab._pendingData[0].length
+        // OSC-последовательности (133;A и т.п.) из вырезанного куска потеряны — busy этой
+        // вкладки мог зависнуть без честного сигнала о завершении. Даёт право на ручной сброс.
+        tab._oscMaybeLost = true
       }
     }
     // Track xterm.js buffer state for diagnostics
@@ -1004,13 +1076,65 @@ async function init() {
       // SSH-сессия: не закрываем вкладку, показываем ошибку с возможностью переподключиться
       if (tab.ssh) {
         tab.pid = null
+        // Провайдер удалённой ФС жил в SshSessionRegistry по СТАРОМУ pid и уже уничтожен
+        // (PtyManager.onExit → sshSessionRegistry.dispose) — новый придёт через ssh:fs-ready
+        // при следующем connectSshTab. До тех пор дерево не должно считать сессию доступной.
+        tab._sshFsAvailable = false
         tabBar.syncStore()
+        if (tab._sshHookDetectTimer) {
+          clearTimeout(tab._sshHookDetectTimer)
+          tab._sshHookDetectTimer = null
+        }
+        // Инжект хуков (Этап 2) мог конфликтовать с RemoteCommand в ~/.ssh/config пользователя
+        // или ForceCommand на сервере — один безусловный реконнект без remote-команды,
+        // прежде чем показать ошибку. injectedHooks читается ДО детект-таймаута (8с), поэтому
+        // при быстром падении (<3с) достоверно отражает, инжектились ли хуки для ЭТОЙ попытки.
+        const injectedHooks = !tab._sshHooksMissing
+        const failedFast = exitCode !== 0
+          && tab._sshConnectedAt
+          && (Date.now() - tab._sshConnectedAt) < APP_CONFIG.SSH_HOOK_FAIL_FAST_MS
+        if (injectedHooks && failedFast && !tab._sshHookRetried) {
+          tab._sshHookRetried = true
+          connectSshTab(tab, { skipShellIntegration: true })
+          return
+        }
         if (!tab._sshOverlay) tab._sshOverlay = new SshTabOverlay(tab.container)
         tab._sshOverlay.showError(tab.ssh.label, exitCode, () => connectSshTab(tab))
         return
       }
       tabBar.removeTab(index)
     }
+  })
+
+  /** Пересчитывает fs.context для активной вкладки и (пере)открывает дерево на её корне. */
+  function syncActiveFsContext() {
+    const tab = tabBar.getActive()
+    if (!tab) return
+    const ctx = tab.ssh
+      ? (tab._sshFsAvailable === true ? { kind: 'ssh', sessionId: tab.pid } : null)
+      : { kind: 'local' }
+    if (!ctx) return
+    appStore.set('fs.context', ctx)
+    if (tab.rootPath !== fileTree.getCwd() || !fileTree.isSameContext(ctx)) {
+      fileTree.setRoot(tab.rootPath, ctx)
+      api.fsSetRoot(tab.rootPath, ctx)
+    }
+  }
+
+  // Готовность ControlMaster-канала удалённой ФС (см. src/main/ssh/ssh-control-channel.js).
+  api.onSshFsReady(({ pid, available, reason, caps }) => {
+    const tab = tabBar.tabs.find(t => t.pid === pid)
+    if (!tab) return
+    tab._sshFsAvailable = available
+    tab._sshFsReason = available ? null : (reason || null)
+    if (available) {
+      // caps.home — стартовый корень удалённого дерева (см. F в плане); remoteCwd сохраняется
+      // отдельно, чтобы восстановленная вкладка не «прыгала» обратно в $HOME при реконнекте.
+      tab.remoteCwd = tab.remoteCwd || caps?.home || '/'
+      tab.rootPath = tab.remoteCwd
+      tabBar.syncStore()
+    }
+    if (tabBar.getActive() === tab) syncActiveFsContext()
   })
 
   /**
@@ -1020,6 +1144,20 @@ async function init() {
    * при attach() и не видят последующих изменений tab.pid; их `detach()` необратимо обнуляет
    * зависимости из конструктора, так что для смены pid создаём новые инстансы, а не detach+attach).
    */
+  /**
+   * Отмечает, что инжектированные на SSH-хосте remote-хуки (Этап 2, remote-shell-hooks.js)
+   * действительно ожили — снимает детект-таймаут в connectSshTab и оптимистичный fallback (Этап 1).
+   */
+  function markSshHooksAlive(tab) {
+    if (!tab || tab._sshHooksAlive) return
+    tab._sshHooksAlive = true
+    tab._sshHooksMissing = false
+    if (tab._sshHookDetectTimer) {
+      clearTimeout(tab._sshHookDetectTimer)
+      tab._sshHookDetectTimer = null
+    }
+  }
+
   function attachPidHandlers(tab) {
     // При переподключении освобождаем disposables предыдущего oscHandler (регистрируются
     // на term.parser и не заменяются сами — в отличие от attachCustomKeyEventHandler)
@@ -1040,12 +1178,29 @@ async function init() {
     const oscHandler = new TerminalOscHandler({
       onCwdChange: (newPath, pid) => {
         const index = tabBar.tabs.findIndex(t => t.pid === pid)
-        if (index >= 0) tabBar.updateRootPath(index, newPath)
+        const changedTab = tabBar.tabs[index]
+        if (!changedTab) return
 
+        if (changedTab.ssh) {
+          // OSC 7 подтверждает, что инжектированные хуки (Этап 2) ожили. Обновляем
+          // remoteCwd/rootPath (без переименования вкладки — см. updateRootPath/label) и,
+          // если хуки уже дали доступ к удалённой ФС (Этап 4), синхронизируем дерево.
+          markSshHooksAlive(changedTab)
+          changedTab.remoteCwd = newPath
+          changedTab.rootPath = newPath
+          tabBar._updateTabLabel(changedTab)
+          if (tabBar.getActive() === changedTab) {
+            syncActiveFsContext()
+            updateNavButtons()
+          }
+          return
+        }
+
+        tabBar.updateRootPath(index, newPath)
         if (tabBar.getActive()?.pid === pid) {
-          if (newPath !== fileTree.getCwd()) {
-            fileTree.setRoot(newPath)
-            api.fsSetRoot(newPath)
+          if (newPath !== fileTree.getCwd() || !fileTree.isSameContext({ kind: 'local' })) {
+            fileTree.setRoot(newPath, { kind: 'local' })
+            api.fsSetRoot(newPath, { kind: 'local' })
           }
           updateNavButtons()
         }
@@ -1055,6 +1210,11 @@ async function init() {
         if (!targetTab) return
 
         targetTab.isBusy = isBusy
+        // Честный OSC 133 всегда перекрывает оптимистичное/неопределённое busy (см.
+        // launchAgentInActiveTab, onPtyData): если сигнал дошёл, состояние снова достоверно.
+        targetTab._busyOptimistic = false
+        targetTab._oscMaybeLost = false
+        if (targetTab.ssh) markSshHooksAlive(targetTab)
         if (!isBusy) targetTab.activeAgentId = null
 
         if (wasBusy !== isBusy && tabBar.getActive()?.pid === pid) {
@@ -1099,8 +1259,12 @@ async function init() {
    * (Пере)подключает SSH-вкладку: создаёт PTY-сессию через существующий pty:create
    * (с ssh.connectionId) и пересоздаёт keyboardHandler/oscHandler под новый pid
    * (см. attachPidHandlers).
+   * @param {object} tab
+   * @param {{ skipShellIntegration?: boolean }} [opts] — `skipShellIntegration` форсирует ОДНУ
+   *   попытку без инжекта remote-хуков (Этап 2); используется авто-реконнектом из onPtyExit
+   *   при подозрении на конфликт с RemoteCommand/ForceCommand на сервере.
    */
-  async function connectSshTab(tab) {
+  async function connectSshTab(tab, { skipShellIntegration = false } = {}) {
     if (!tab.ssh || tab._sshConnecting) return
     tab._sshConnecting = true
     try {
@@ -1118,6 +1282,14 @@ async function init() {
       tab._sshOverlay.showConnecting(connection.label)
       tab.term.reset()
 
+      if (tab._sshHookDetectTimer) {
+        clearTimeout(tab._sshHookDetectTimer)
+        tab._sshHookDetectTimer = null
+      }
+      // Обычная (не авто-реконнектная) попытка — даём шанс на новый авто-реконнект,
+      // если и эта тоже быстро упадёт.
+      if (!skipShellIntegration) tab._sshHookRetried = false
+
       let result
       try {
         result = await api.ptyCreate({
@@ -1125,7 +1297,7 @@ async function init() {
           rows: tab.term.rows || TERMINAL_CONFIG.DEFAULT_ROWS,
           cwd: tab.rootPath,
           tabId: tab.tabId,
-          ssh: { connectionId: connection.id },
+          ssh: { connectionId: connection.id, skipShellIntegration },
         })
       } catch (e) {
         result = { error: e.message }
@@ -1139,8 +1311,26 @@ async function init() {
 
       tab.pid = result.pid
       tab._sshEverConnected = true
+      tab._sshConnectedAt = Date.now()
+      tab._sshHooksAlive = false
+      // Новый pid — предыдущий результат ssh:fs-ready относился к прошлой попытке
+      tab._sshFsAvailable = undefined
+      tab._sshFsReason = null
+      // Хуки отключены для этой попытки (авто-реконнект) либо для подключения целиком —
+      // сразу включаем оптимистичный busy (Этап 1), не дожидаясь детект-таймаута.
+      tab._sshHooksMissing = skipShellIntegration || connection.injectShellIntegration === false
       tabBar.syncStore()
       attachPidHandlers(tab)
+
+      if (!tab._sshHooksMissing) {
+        const connectedPid = result.pid
+        tab._sshHookDetectTimer = setTimeout(() => {
+          tab._sshHookDetectTimer = null
+          if (!tab._sshHooksAlive && tab.pid === connectedPid) {
+            tab._sshHooksMissing = true
+          }
+        }, APP_CONFIG.SSH_HOOK_DETECT_TIMEOUT_MS)
+      }
     } finally {
       tab._sshConnecting = false
     }
@@ -1230,7 +1420,8 @@ async function init() {
       for (let i = 0; i < savedTabs.length; i++) {
         let tabData
         try {
-          tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId, savedTabs[i].ssh || null)
+          const sshInfo = savedTabs[i].ssh ? { ...savedTabs[i].ssh, remoteCwd: savedTabs[i].remoteCwd || null } : null
+          tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId, sshInfo)
         } catch (e) {
           console.error('[restoreTabs] Failed to restore tab', savedTabs[i].rootPath, e.message)
           continue
@@ -1279,7 +1470,7 @@ async function init() {
     }
     // Restore git panel for the active tab
     if (activeRestored?.gitPanelVisible) {
-      gitPanel.show(activeRestored.rootPath)
+      openGitPanelForTab(activeRestored)
     }
     // Подключаем только активную восстановленную SSH-вкладку (см. isRestoringTabs выше)
     if (activeRestored?.ssh && !activeRestored._sshEverConnected) {
@@ -1303,7 +1494,8 @@ async function init() {
           for (let i = 0; i < savedTabs.length; i++) {
             let tabData
             try {
-              tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId, savedTabs[i].ssh || null)
+              const sshInfo = savedTabs[i].ssh ? { ...savedTabs[i].ssh, remoteCwd: savedTabs[i].remoteCwd || null } : null
+              tabData = await createTab(api, savedTabs[i].rootPath, savedTabs[i].tabId, sshInfo)
             } catch (e) {
               console.error('[Init] Failed to restore tab', savedTabs[i].rootPath, e.message)
               continue
@@ -1336,7 +1528,7 @@ async function init() {
         }
         // Restore git panel for the active tab
         if (activeTab?.gitPanelVisible) {
-          gitPanel.show(activeTab.rootPath)
+          openGitPanelForTab(activeTab)
         }
         // Подключаем только активную восстановленную SSH-вкладку (lazy connect для остальных)
         if (activeTab?.ssh && !activeTab._sshEverConnected) {

@@ -1125,6 +1125,19 @@ body.platform-darwin .window-controls {
 }
 .agent-cmd-group-btn svg { width: 10px; height: 10px; }
 
+/* Снятие оптимистичного busy (SSH без честного OSC 133) — см. StatusBar._createClearOptimisticBusyButton */
+.agent-cmd-clear-busy-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  color: var(--red);
+}
+.agent-cmd-clear-busy-btn:hover {
+  background: color-mix(in srgb, var(--red) 18%, transparent);
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
+}
+.agent-cmd-clear-busy-btn svg { width: 10px; height: 10px; display: block; }
+
 .stat-add { color: var(--green); }
 .stat-del { color: var(--red); }
 

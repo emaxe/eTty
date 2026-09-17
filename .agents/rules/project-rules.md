@@ -32,8 +32,23 @@ src/
       git-handlers.js        — Git операции: status/diff/branches/commit/push/stage/discard
       search-handlers.js     — поиск по проекту: query/cancel
       node-version-handlers.js — менеджер версий Node: list/switch/install/uninstall
-    pty-manager.js            — управление PTY-сессиями (node-pty + shell)
-    file-manager.js           — файловые операции с path traversal защитой
+      ssh-handlers.js         — SSH-подключения: list/save/delete/reorder, ssh:fs-retry
+    pty-manager.js            — управление PTY-сессиями (node-pty + shell); для SSH дополнительно
+                                 поднимает SshControlChannel через sshSessionRegistry
+    file-manager.js           — файловые операции с path traversal защитой (локальная ФС)
+    fs/                       — абстракция FsProvider (локальный/SSH) поверх file-manager.js
+      fs-provider.js          — JSDoc-контракт FsProvider (readDir/rename/copy/move/read/write/stat/watch...)
+      local-fs-provider.js    — тонкая обёртка над FileManager
+      ssh-fs-provider.js      — удалённая ФС по SSH: exec() из remote-scripts.js + polling-watcher
+      fs-provider-registry.js — resolve(ctx) → провайдер; отсутствие ctx = локальный (совместимость)
+    ssh-store.js               — хранилище SSH-подключений (ssh-connections.json), шифрование secret через safeStorage
+    ssh-command.js             — сборка argv `ssh` (ControlMaster, remote-хуки, askpass) для node-pty
+    ssh/
+      ssh-control-channel.js  — служебный канал по ControlMaster: -O check/exit, exec() для remote-scripts
+      ssh-session-registry.js — Map<pid, {channel, caps, fsProvider}> — живёт вместе с PTY-сессией
+      remote-shell-hooks.js   — генерация remote-команды: OSC 7/133-хуки на удалённой стороне (zsh/bash)
+      remote-scripts.js       — POSIX sh-скрипты для readDir/rename/copy/move/read/write/stat (argv-safe)
+      remote-parse.js         — чистые парсеры вывода remote-scripts.js (NUL-разделённые списки и т.п.)
     history-manager.js        — история команд (глобальная + per-tab, мержинг, мьютекс)
     tab-state.js               — сохранение/восстановление вкладок между сессиями
     settings-store.js         — оркестратор настроек: агрегирует config-loader.js + theme-loader.js
@@ -42,7 +57,7 @@ src/
     agent-service.js          — авто-детект CLI ИИ-агентов (Claude, Codex, Copilot, Cursor, OpenCode, Qwen, Agento) + кастомные
     shell-path-resolver.js    — резолв логин-шелла и его PATH кроссплатформенно (фикс запуска из GUI/Dock)
   preload/                    — contextBridge API (~90 методов)
-    index.js                  — IPC-мост: pty, fs, window, tabs, settings, git, agents, search, node-version
+    index.js                  — IPC-мост: pty, fs (+ctx для SSH), window, tabs, settings, git, agents, search, node-version, ssh
   renderer/                   — UI
     index.js                  — bootstrap: DI Container, EventBus, State Store, компоненты
     core/                     — инфраструктура renderer
@@ -52,6 +67,8 @@ src/
       diagnostics.js          — perf-диагностика (выкл. по умолчанию, `window.__diagnostics.start()`)
       adapters/
         electron-api.js       — адаптер window.electronAPI
+        scoped-fs-api.js      — Proxy над electron-api: дописывает ctx (local/ssh) во все fs*/getCwd
+                                 по текущей вкладке (store.get('fs.context')) — 0 правок в file-tree.js
       config/
         app-config.js         — константы приложения (debounce, интервалы, размеры)
         terminal-config.js    — константы терминала (font, scrollback)
@@ -60,6 +77,10 @@ src/
       terminal-keyboard-handler.js — Kitty protocol + кириллица
       terminal-osc-handler.js      — OSC 7 (cwd), OSC 133 (busy)
       terminal-scroll-button.js    — плавающая кнопка "прокрутить вниз"
+    features/ssh/                — SSH-подключения
+      ssh-panel.js               — боковая панель подключений: список, CRUD, drag-and-drop
+      ssh-connection-dialog.js   — форма добавления/редактирования подключения
+      ssh-tab-overlay.js         — оверлей вкладки: подключение/ошибка/подключение удалено
     features/git/                — модульная Git-панель (мастер/деталь)
       git-panel.js               — оркестратор: overlay, ветки, commit/push/discard
       git-file-list.js           — левая панель: список файлов по группам, staging, контекстное меню
@@ -91,6 +112,9 @@ src/
   shared/
     ipc-channels.js          — константы имён IPC каналов (единый источник истины)
     binary-extensions.js     — расширения файлов, открываемых во внешнем приложении вместо редактора
+    path-utils.js            — POSIX/Windows-safe пути без node:path (createPathUtils(sep)) — общий
+                                 для main (SshFsProvider) и renderer (FileTree._path)
+    ssh-fs-config.js         — таймауты/интервалы транспорта удалённой ФС (main не видит renderer/core/config)
 out/                         — артефакты electron-vite build (НЕ редактировать вручную)
 dist/                        — артефакты electron-builder (НЕ коммитить)
 build/                       — ресурсы для сборки (иконки, entitlements)
@@ -115,12 +139,30 @@ docs/                        — спецификации, планы, чекл�
 - WebGL-ускорение рендеринга (fallback на canvas)
 - Kitty keyboard protocol (Shift+Enter, Ctrl+Enter, Ctrl+Shift+Enter), per-agent режим (Kitty / newline / Ctrl+J)
 - Корректная обработка кириллицы и non-ASCII символов
-- OSC 7 — синхронизация директории shell → UI (только zsh)
-- OSC 133 — отслеживание занятости (preexec/precmd, только zsh)
+- OSC 7 — синхронизация директории shell → UI (zsh локально; на SSH — инжектированные remote-хуки, см. ниже)
+- OSC 133 — отслеживание занятости (preexec/precmd, zsh локально и на SSH через remote-хуки)
 - Scrollback **2500** строк
 - Хоткей переключения соседних вкладок (`Cmd+Option+←/→` / `Cmd+Shift+←/→`, выкл. по умолчанию) — `TabBar.switchRelative()`
 - Подтверждение перед закрытием занятой вкладки (`tab.close.request` → `ConfirmDialog`, если `tab.isBusy`)
 - Кнопка «прокрутить вниз» при скролле в историю (`TerminalScrollButton`)
+
+### SSH-подключения
+- Панель подключений (`features/ssh/ssh-panel.js`): список, CRUD, drag-and-drop reorder; хранилище — `ssh-store.js` (`ssh-connections.json`, секрет через `safeStorage`)
+- SSH-вкладка — PTY, в котором node-pty напрямую спавнит системный `ssh` (`ssh-command.js`), не библиотека
+- ControlMaster-мультиплексирование (`-o ControlMaster=auto`, сокет в `os.tmpdir()/etty-cm-*`): один
+  параллельный служебный канал (`SshControlChannel`) для операций удалённой ФС без повторной
+  аутентификации; недоступно на Windows (OpenSSH для Windows не поддерживает мультиплексирование)
+- Remote-хуки (`remote-shell-hooks.js`): при подключении инжектируется remote-команда, которая на
+  удалённой стороне воспроизводит логику локального `_createZdotdir` — временный rc с precmd/preexec
+  для OSC 7/133 (zsh и bash отдельными ветками), fallback без хуков для прочих shell (fish/csh/...).
+  Настройка per-connection `injectShellIntegration` (чекбокс в форме подключения), авто-реконнект без
+  remote-команды при быстром падении PTY (конфликт с `RemoteCommand`/`ForceCommand`)
+- Удалённая ФС (`SshFsProvider`, `remote-scripts.js`) — POSIX sh-скрипты через `SshControlChannel.exec()`;
+  весь пользовательский ввод — только позиционные параметры argv (без интерполяции в текст скрипта),
+  списки — NUL-разделённые (устойчиво к пробелам/кавычкам/переводам строк в именах)
+- Lazy connect: восстановленная SSH-вкладка подключается при первом переключении на неё
+- Разрыв соединения не закрывает вкладку — оверлей с кнопкой «Переподключиться» (`SshTabOverlay`)
+- Наследование подключения по «+» на активной SSH-вкладке
 
 ### История команд (zsh, macOS/Linux)
 - Глобальная история (5000 строк, `~/.config/eTty/history/global.zsh_history`)
@@ -133,14 +175,23 @@ docs/                        — спецификации, планы, чекл�
 - Lazy-load поддиректорий
 - Фильтрация скрытых файлов (toggle)
 - Кнопки навигации: cd .., cd ~
-- fs.watch для автообновления (debounce **500мс**, было 300мс)
+- fs.watch для автообновления локальной ФС (debounce **500мс**); для SSH — polling mtime
+  раскрытых каталогов (см. `SshFsProvider`, интервал `SSH_FS_CONFIG.POLL_INTERVAL_MS`) +
+  форсированный push сразу после своих мутаций
 - Контекстные меню: новый файл/папка, rename, delete, copy, paste, копирование относительного пути, меню корневого узла
-- Path traversal защита в FileManager
+  («Открыть в системном эксплорере» скрыт для SSH-контекста — `FileTree._isRemote()`)
+- Path traversal защита: `FileManager.validatePath` (локально) / префикс-проверка в remote-скриптах (SSH)
 - Resizable sidebar (150–600px)
 - Multi-select: Ctrl/Cmd+Click, Shift+Click range, Ctrl+A
 - Drag-and-drop перемещение файлов/папок
 - Undo (Ctrl+Z) для move-операций
 - Hover overlay с кнопкой cd
+- **Удалённое дерево по SSH**: читает/пишет через `FsProvider` (`src/main/fs/*`), контекст
+  вкладки (`{kind:'local'}`/`{kind:'ssh', sessionId}`) хранится в `StateStore` (`fs.context`) и
+  подставляется автоматически через `scoped-fs-api.js` — сам `file-tree.js` не знает о контексте
+  явно (кроме `_isRemote()` для гейтинга меню). Полный CRUD; на Windows недоступно (OpenSSH для
+  Windows не поддерживает ControlMaster) — деградации к локальным файлам НЕТ, дерево просто не
+  синхронизируется до появления реализации на этой платформе
 
 ### Редактор файлов (CodeMirror 6)
 - Подсветка синтаксиса: JS/TS, Python, Go, Rust, HTML, CSS/SCSS, JSON, YAML, Markdown, Vue, C#
@@ -164,7 +215,7 @@ docs/                        — спецификации, планы, чекл�
 - Отменяемые запросы: `SEARCH_QUERY` / `SEARCH_CANCEL`, live-превью с подсветкой совпадений
 
 ### ИИ-агенты
-- Авто-детект CLI агентов в статус-баре (Claude Code, Codex, Copilot, Cursor Agent, OpenCode, Qwen, Agento)
+- Авто-детект CLI агентов в статус-баре (Claude Code, Codex, Copilot, Cursor Agent, OpenCode, Qwen, Agento) — только локально, для SSH-вкладок не выполняется
 - Кастомные агенты (label, launchCommand, опциональный checkCommand) — доступны наравне со встроенными
 - Запуск агента в активный терминал одним кликом
 - Подсветка активного агента и блокировка кнопок при busy
@@ -173,6 +224,11 @@ docs/                        — спецификации, планы, чекл�
 - Прокси URL для ИИ-агентов (с toggle в статус-баре)
 - Quick replies — настраиваемые быстрые команды per-agent, drag-and-drop reorder, группировка (дерево с DnD в настройках, группа — кнопка с выпадающим меню в статус-баре, видимость наследуется от ответов)
 - Per-agent режим Shift+Enter: Kitty protocol / newline / Ctrl+J
+- **Отслеживание busy на SSH-вкладках**: честный сигнал — инжектированные remote-хуки (OSC 133,
+  см. `remote-shell-hooks.js`), с авто-реконнектом без remote-команды при конфликте с
+  `RemoteCommand`/`ForceCommand`. Пока хуки не подтвердились (таймаут `SSH_HOOK_DETECT_TIMEOUT_MS`)
+  или инжект выключен в настройках подключения — оптимистичный busy при запуске агента с кнопкой
+  ручного сброса «Агент завершён» в панели быстрых команд (`StatusBar._createClearOptimisticBusyButton`)
 
 ### Менеджер версий Node.js
 - Определение установленного менеджера: nvm, fnm, asdf (`NodeVersionManager`)
@@ -215,7 +271,7 @@ docs/                        — спецификации, планы, чекл�
 | Префикс | Каналы | Назначение |
 |---------|--------|-----------|
 | `pty:*` | create, write, resize, kill, data, exit | PTY-сессии |
-| `fs:*` | read-dir, create-file, create-dir, rename, delete, delete-many, copy, copy-many, move, read-file, write-file, stat-file, get-cwd, set-root, watch-dir, unwatch-dir, dir-changed | Файловые операции |
+| `fs:*` | read-dir, create-file, create-dir, rename, delete, delete-many, copy, copy-many, move, read-file, write-file, stat-file, get-cwd, set-root, watch-dir, unwatch-dir, dir-changed | Файловые операции (все каналы принимают опциональный `ctx` — `{kind:'local'}`/`{kind:'ssh', sessionId}`, см. `fs-provider-registry.js`) |
 | `git:*` | get-status, get-root, get-diff, get-branches, checkout, create-branch, delete-branch, commit, push, discard, stage, unstage, discard-file | Git |
 | `tabs:*` | export-state, has-saved-state, load-saved-state, delete-saved-state, show-restore-dialog, trigger-restore, state-changed, auto-save | Вкладки |
 | `agents:*` | get-status, refresh, settings-updated | AI-агенты (детект, кэш, кастомные) |
@@ -225,6 +281,7 @@ docs/                        — спецификации, планы, чекл�
 | `app:*` | homedir, open-external | Системные |
 | `search:*` | query, cancel | Поиск по проекту |
 | `node-version:*` | get-current, list-installed, list-remote, install, use, uninstall, detect-manager, install-manager | Менеджер версий Node.js |
+| `ssh:*` | list, save, delete, reorder, fs-ready (push), fs-retry | SSH-подключения + готовность удалённой ФС |
 
 ## Команды
 

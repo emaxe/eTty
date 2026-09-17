@@ -22,22 +22,23 @@ export class ElectronApiAdapter {
   onPtyData(fn) { return this._on('ptyData', fn) }
   onPtyExit(fn) { return this._on('ptyExit', fn) }
 
-  // — FS —
-  fsReadDir(path) { return this._api.fsReadDir(path) }
-  fsReadFile(path) { return this._api.fsReadFile(path) }
-  fsWriteFile(path, content) { return this._api.fsWriteFile(path, content) }
-  fsStatFile(path) { return this._api.fsStatFile(path) }
-  fsCreateFile(path) { return this._api.fsCreateFile(path) }
-  fsCreateDir(path) { return this._api.fsCreateDir(path) }
-  fsRename(oldPath, newPath) { return this._api.fsRename(oldPath, newPath) }
-  fsDelete(path) { return this._api.fsDelete(path) }
-  fsDeleteMany(paths) { return this._api.fsDeleteMany(paths) }
-  fsCopy(src, dest) { return this._api.fsCopy(src, dest) }
-  fsCopyMany(srcPaths, destDir) { return this._api.fsCopyMany(srcPaths, destDir) }
-  fsSetRoot(path) { this._api.fsSetRoot(path) }
-  fsWatchDir(path) { return this._api.fsWatchDir(path) }
-  fsUnwatchDir(path) { return this._api.fsUnwatchDir(path) }
-  fsMove(srcPaths, destDir) { return this._api.fsMove(srcPaths, destDir) }
+  // — FS — ctx: {kind:'local'} | {kind:'ssh', sessionId} | undefined (см. scoped-fs-api.js,
+  // который подставляет его автоматически для fileTree/editorPanel/projectSearch).
+  fsReadDir(path, ctx) { return this._api.fsReadDir(path, ctx) }
+  fsReadFile(path, ctx) { return this._api.fsReadFile(path, ctx) }
+  fsWriteFile(path, content, ctx) { return this._api.fsWriteFile(path, content, ctx) }
+  fsStatFile(path, ctx) { return this._api.fsStatFile(path, ctx) }
+  fsCreateFile(path, ctx) { return this._api.fsCreateFile(path, ctx) }
+  fsCreateDir(path, ctx) { return this._api.fsCreateDir(path, ctx) }
+  fsRename(oldPath, newPath, ctx) { return this._api.fsRename(oldPath, newPath, ctx) }
+  fsDelete(path, ctx) { return this._api.fsDelete(path, ctx) }
+  fsDeleteMany(paths, ctx) { return this._api.fsDeleteMany(paths, ctx) }
+  fsCopy(src, dest, ctx) { return this._api.fsCopy(src, dest, ctx) }
+  fsCopyMany(srcPaths, destDir, ctx) { return this._api.fsCopyMany(srcPaths, destDir, ctx) }
+  fsSetRoot(path, ctx) { this._api.fsSetRoot(path, ctx) }
+  fsWatchDir(path, ctx) { return this._api.fsWatchDir(path, ctx) }
+  fsUnwatchDir(path, ctx) { return this._api.fsUnwatchDir(path, ctx) }
+  fsMove(srcPaths, destDir, ctx) { return this._api.fsMove(srcPaths, destDir, ctx) }
   onFsDirChanged(fn) { return this._on('fsDirChanged', fn) }
 
   // — Window —
@@ -87,7 +88,7 @@ export class ElectronApiAdapter {
   historyCleanup(activeTabIds) { this._api.historyCleanup(activeTabIds) }
 
   // — App —
-  getCwd() { return this._api.getCwd() }
+  getCwd(ctx) { return this._api.getCwd(ctx) }
   getHomedir() { return this._api.getHomedir() }
   get nodeVersion() { return this._api.nodeVersion }
   get platform() { return this._api.platform }
@@ -111,6 +112,8 @@ export class ElectronApiAdapter {
   sshSave(connection) { return this._api.sshSave(connection) }
   sshDelete(id) { return this._api.sshDelete(id) }
   sshReorder(ids) { return this._api.sshReorder(ids) }
+  onSshFsReady(fn) { return this._on('sshFsReady', fn) }
+  sshFsRetry(sessionId) { return this._api.sshFsRetry(sessionId) }
 
   _on(channel, fn) {
     const unsub = this._api[`on${channel.charAt(0).toUpperCase() + channel.slice(1)}`]?.(fn)

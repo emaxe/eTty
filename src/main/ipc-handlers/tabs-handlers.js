@@ -24,16 +24,25 @@ export function registerTabsHandlers(ipcMain, { saveTabState, loadTabState, dele
     const homedir = os.homedir()
     const validated = []
     for (const tab of state.tabs) {
-      const valid = await validatePath(tab.rootPath)
-      if (!valid) {
-        log.warn('tab-state: path not found, using homedir:', tab.rootPath)
+      // SSH-вкладки хранят удалённый rootPath — validatePath проверяет ЛОКАЛЬНУЮ ФС и
+      // всегда сочтёт такой путь несуществующим, подменив его на homedir и потеряв
+      // сохранённую удалённую директорию.
+      let rootPath = tab.rootPath
+      if (!tab.ssh) {
+        const valid = await validatePath(tab.rootPath)
+        if (!valid) {
+          log.warn('tab-state: path not found, using homedir:', tab.rootPath)
+          rootPath = homedir
+        }
       }
       validated.push({
-        rootPath: valid ? tab.rootPath : homedir,
+        rootPath,
         isActive: tab.isActive,
         tabId: tab.tabId,
         editorState: tab.editorState || null,
-        ssh: tab.ssh || null
+        ssh: tab.ssh || null,
+        remoteCwd: tab.remoteCwd || null,
+        gitPanelVisible: tab.gitPanelVisible || false
       })
     }
     return validated

@@ -13,12 +13,17 @@ import { isBinaryPath } from '../shared/binary-extensions.js'
  * - Undo: Ctrl+Z для отката move-операций
  */
 export class FileTree {
-  constructor(container, { eventBus, api, store } = {}) {
+  constructor(container, { eventBus, api, store, confirmDialog } = {}) {
     this._container = container
     this._bus = eventBus
     this._api = api
     this._store = store || null
+    this._confirmDialog = confirmDialog || null
     this._cwd = null
+    // Контекст текущего корня — {kind:'local'} | {kind:'ssh', sessionId}. Обновляется извне
+    // (см. index.js) синхронно с setRoot(); используется только чтобы прятать пункты меню,
+    // не имеющие смысла для удалённой ФС (открытие в системном файловом менеджере).
+    this._context = { kind: 'local' }
     this._modKeys = { shift: false, meta: false, ctrl: false }
     this._contextMenu = new ContextMenu()
     this._dirTimers = new Map()
@@ -547,10 +552,25 @@ export class FileTree {
     }
   }
 
-  async setRoot(newPath) {
+  /**
+   * @param {string} newPath
+   * @param {{kind:'local'}|{kind:'ssh', sessionId:number}} [ctx] — если передан и отличается от
+   *   текущего (по kind+sessionId), форсирует перезагрузку дерева даже при совпадающем newPath —
+   *   иначе смена вкладки local↔ssh с текстуально одинаковым путём (напр. оба "/home/user")
+   *   тихо оставила бы дерево от прошлого контекста.
+   */
+  /** true если `ctx` совпадает с текущим контекстом дерева (kind+sessionId) — см. setRoot(). */
+  isSameContext(ctx) {
+    if (!ctx) return true
+    return ctx.kind === this._context.kind && ctx.sessionId === this._context.sessionId
+  }
+
+  async setRoot(newPath, ctx) {
     console.log('[FileTree] setRoot called:', newPath, 'current:', this._cwd)
     const prevPath = this._cwd
-    if (this._cwd === newPath) return
+    const contextChanged = ctx && (ctx.kind !== this._context.kind || ctx.sessionId !== this._context.sessionId)
+    if (ctx) this._context = ctx
+    if (this._cwd === newPath && !contextChanged) return
 
     // Очищаем все watchers для старой директории
     this.unwatchAll()
@@ -1292,6 +1312,10 @@ export class FileTree {
     return filePath.replace(/\/[^/]+$/, '')
   }
 
+  _isRemote() {
+    return this._context?.kind === 'ssh'
+  }
+
   _showMenuFile(x, y, entry, row) {
     const parentDir = this._parentDir(entry.path)
     const parentContainer = this._findContainerForDir(parentDir)
@@ -1316,12 +1340,19 @@ export class FileTree {
           this._bus.emit('filetree.shellCmd', `open '${escaped}'\n`)
           this._bus.emit('terminal.focus')
         }
-      },
-      { label: 'Открыть в системном эксплорере', action: () => {
+      }
+    )
+    // «Открыть в системном эксплорере» открывает ЛОКАЛЬНОЕ окно Finder/Explorer — для
+    // удалённого пути это либо ошибка (нет такого локально), либо (реже) откроет случайно
+    // совпавший локальный путь. Нет смысла показывать этот пункт для SSH-контекста.
+    if (!this._isRemote()) {
+      items.push({ label: 'Открыть в системном эксплорере', action: () => {
           const dirPath = this._parentDir(entry.path)
           this._api.openExternal(dirPath)
         }
-      },
+      })
+    }
+    items.push(
       { separator: true },
       { label: 'Копировать', action: () => { this._clipboard = targets } },
       { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(entry.path); this._bus.emit('terminal.focus') } },
@@ -1346,16 +1377,20 @@ export class FileTree {
           this._bus.emit('filetree.shellCmd', `cd '${escaped}'\r`)
           this._bus.emit('terminal.focus')
         }
-      },
-      { label: 'Открыть в системном эксплорере', action: () => {
+      }
+    ]
+    if (!this._isRemote()) {
+      items.push({ label: 'Открыть в системном эксплорере', action: () => {
           this._api.openExternal(entry.path)
         }
-      },
+      })
+    }
+    items.push(
       { separator: true },
       { label: 'Новый файл', action: () => this._createInlineInDir('file', entry.path, childrenEl, arrow, childDepth) },
       { label: 'Новая папка', action: () => this._createInlineInDir('dir', entry.path, childrenEl, arrow, childDepth) },
       { separator: true }
-    ]
+    )
     if (!isMulti) {
       items.push({ label: 'Переименовать', action: () => this._renameInline(entry, row) })
     }
@@ -1374,14 +1409,20 @@ export class FileTree {
     const items = [
       { label: 'Новый файл', action: () => this._createInline('file', this._cwd, this._rootContainer, 1) },
       { label: 'Новая папка', action: () => this._createInline('dir', this._cwd, this._rootContainer, 1) },
-      { separator: true },
-      { label: 'Открыть в системном эксплорере', action: () => {
-          this._api.openExternal(this._cwd)
+    ]
+    if (!this._isRemote()) {
+      items.push(
+        { separator: true },
+        { label: 'Открыть в системном эксплорере', action: () => {
+            this._api.openExternal(this._cwd)
+          }
         }
-      },
+      )
+    }
+    items.push(
       { separator: true },
       { label: 'Копировать путь', action: () => { navigator.clipboard.writeText(this._cwd); this._bus.emit('terminal.focus') } }
-    ]
+    )
     if (this._clipboard && this._clipboard.length > 0) {
       items.push({ separator: true })
       items.push({ label: 'Вставить', action: () => this._pasteMany(this._cwd, this._rootContainer, 1) })
@@ -1393,12 +1434,16 @@ export class FileTree {
     const items = [
       { label: 'Новый файл', action: () => this._createInline('file', dirPath, container, depth) },
       { label: 'Новая папка', action: () => this._createInline('dir', dirPath, container, depth) },
-      { separator: true },
-      { label: 'Открыть в системном эксплорере', action: () => {
-          this._api.openExternal(dirPath)
-        }
-      }
     ]
+    if (!this._isRemote()) {
+      items.push(
+        { separator: true },
+        { label: 'Открыть в системном эксплорере', action: () => {
+            this._api.openExternal(dirPath)
+          }
+        }
+      )
+    }
     if (this._clipboard && this._clipboard.length > 0) {
       items.push({ separator: true })
       items.push({ label: 'Вставить', action: () => this._pasteMany(dirPath, container, depth) })
@@ -1486,7 +1531,15 @@ export class FileTree {
     nameEl.replaceWith(input)
     input.select()
 
-    const restore = () => input.replaceWith(nameEl)
+    // Guard against double-restore: Enter запускает async fsRename(), и пока он в полёте,
+    // может успеть сработать blur (переключение окна/клик мимо) — тогда оба обработчика
+    // вызовут restore(), а второй replaceWith() кинет "node is no longer a child of this node".
+    let restored = false
+    const restore = () => {
+      if (restored) return
+      restored = true
+      input.replaceWith(nameEl)
+    }
 
     input.addEventListener('keydown', async (e) => {
       if (e.key === 'Escape') { restore(); return }
@@ -1505,6 +1558,14 @@ export class FileTree {
 
       nameEl.textContent = newName
       restore()
+      // entry — тот же объект, что захвачен замыканиями остальных действий контекстного меню
+      // этой строки (удалить/копировать/cd/открыть в терминале и т.д., см. contextmenu-листенер
+      // выше по файлу) — без обновления путь для них навсегда останется старым. row.dataset.path
+      // — вторая копия пути (используется _deletePaths/_applyGitStatuses/DnD-реордером), тоже
+      // должна обновиться синхронно с li.dataset.path.
+      entry.path = newPath
+      entry.name = newName
+      row.dataset.path = newPath
       const li = row.closest('li')
       if (li) li.dataset.path = newPath
     })
@@ -1514,6 +1575,21 @@ export class FileTree {
 
   async _deletePaths(paths) {
     if (paths.length === 0) return
+    // Подтверждение — здесь, а не нативным диалогом в main (см. fs-handlers.js): main не знает
+    // контекста (локальный путь или SSH-хост), поэтому больше не может отрендерить это осмысленно.
+    if (this._confirmDialog) {
+      const remoteSuffix = this._isRemote() ? ' на удалённом сервере' : ''
+      const message = paths.length === 1
+        ? `Удалить «${paths[0].split('/').filter(Boolean).pop() || paths[0]}»${remoteSuffix}?`
+        : `Удалить ${paths.length} элементов${remoteSuffix}?`
+      const confirmed = await this._confirmDialog.open({
+        title: 'Подтверждение удаления',
+        message,
+        confirmText: 'Удалить',
+        cancelText: 'Отмена',
+      })
+      if (!confirmed) return
+    }
     const result = await this._api.fsDeleteMany(paths)
     if (result && result.success === false) return
     for (const p of paths) {

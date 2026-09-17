@@ -1,6 +1,85 @@
 import { IPC_CHANNELS } from '../../shared/ipc-channels.js'
 import { buildSshLaunch } from '../ssh-command.js'
+import { PROBE_SCRIPT } from '../ssh/remote-scripts.js'
+import { parseProbe } from '../ssh/remote-parse.js'
+import { SshFsProvider } from '../fs/ssh-fs-provider.js'
+import { createPathUtils } from '../../shared/path-utils.js'
+import { SSH_FS_CONFIG } from '../../shared/ssh-fs-config.js'
 import log from 'electron-log'
+
+const IS_WIN = process.platform === 'win32'
+
+/**
+ * Ждёт поднятия ControlMaster для сессии `pid`, гонит одноразовый probe (ОС/флавор `stat`/
+ * поддержка `find -print0`, см. `ssh/remote-scripts.js`), поднимает `SshFsProvider` и пушит
+ * `ssh:fs-ready` в renderer. Переиспользуется и при первом подключении (см. `watchSshFsReadiness`),
+ * и при ручном «Повторить» (см. `ssh-handlers.js` — там `sshLaunch` уже недоступен, но и не нужен:
+ * весь необходимый контекст канала уже хранится в самом `SshControlChannel`).
+ * @param {number} pid
+ */
+export async function establishSshFs(pid, { sshSessionRegistry, webContents }) {
+  const send = (payload) => {
+    if (!webContents.isDestroyed()) {
+      webContents.send(IPC_CHANNELS.SSH_FS_READY, { pid, sessionId: pid, ...payload })
+    }
+  }
+
+  const session = sshSessionRegistry.get(pid)
+  if (!session) return false // сессия уже закрылась до старта опроса
+
+  const ready = await session.channel.waitReady({ isCancelled: () => !sshSessionRegistry.get(pid) })
+  if (!sshSessionRegistry.get(pid)) return false // вкладку закрыли/переподключили, пока ждали
+  if (!ready) {
+    send({ available: false, reason: 'master-timeout' })
+    return false
+  }
+
+  const probeResult = await session.channel.exec(PROBE_SCRIPT, [], { timeoutMs: SSH_FS_CONFIG.PROBE_TIMEOUT_MS })
+  if (!sshSessionRegistry.get(pid)) return false
+  if (probeResult.code !== 0 || !probeResult.stdout.length) {
+    log.warn('[PtyHandlers] SSH probe failed', pid, probeResult.error || probeResult.code)
+    send({ available: false, reason: 'probe-failed' })
+    return false
+  }
+
+  const caps = parseProbe(probeResult.stdout.toString('utf-8'))
+  if (!caps.home) {
+    send({ available: false, reason: 'probe-failed' })
+    return false
+  }
+  sshSessionRegistry.setCaps(pid, caps)
+
+  const fsProvider = new SshFsProvider({
+    channel: session.channel,
+    root: caps.home,
+    caps,
+    pathUtils: createPathUtils('/')
+  })
+  sshSessionRegistry.setFsProvider(pid, fsProvider)
+
+  send({ available: true, caps })
+  return true
+}
+
+/** Предварительные, специфичные для первого подключения проверки (см. `establishSshFs`). */
+async function watchSshFsReadiness(pid, { sshSessionRegistry, sshLaunch, webContents }) {
+  const send = (payload) => {
+    if (!webContents.isDestroyed()) {
+      webContents.send(IPC_CHANNELS.SSH_FS_READY, { pid, sessionId: pid, ...payload })
+    }
+  }
+
+  if (IS_WIN) {
+    send({ available: false, reason: 'no-controlmaster-on-windows' })
+    return
+  }
+  if (!sshLaunch.control) {
+    send({ available: false, reason: 'socket-path-too-long' })
+    return
+  }
+
+  await establishSshFs(pid, { sshSessionRegistry, webContents })
+}
 
 /**
  * Register PTY IPC handlers.
@@ -9,12 +88,11 @@ import log from 'electron-log'
  *   ptyManager: import('../pty-manager').PtyManager,
  *   historyManager: import('../history-manager').HistoryManager,
  *   sshStore: typeof import('../ssh-store.js'),
- *   shellPathResolver: import('../shell-path-resolver').ShellPathResolver
+ *   shellPathResolver: import('../shell-path-resolver').ShellPathResolver,
+ *   sshSessionRegistry: import('../ssh/ssh-session-registry.js').SshSessionRegistry
  * }} deps
  */
-const IS_WIN = process.platform === 'win32'
-
-export function registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshStore, shellPathResolver }) {
+export function registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshStore, shellPathResolver, sshSessionRegistry }) {
   ipcMain.handle(IPC_CHANNELS.PTY_CREATE, async (event, options) => {
     const tabId = options.tabId || crypto.randomUUID()
 
@@ -23,13 +101,21 @@ export function registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshSt
       if (!connection) {
         return { error: 'connection-not-found' }
       }
-      const sshLaunch = buildSshLaunch({ connection, resolvedPath: shellPathResolver.getResolvedPath() })
+      const sshLaunch = buildSshLaunch({
+        connection,
+        resolvedPath: shellPathResolver.getResolvedPath(),
+        skipShellIntegration: !!options.ssh.skipShellIntegration
+      })
+      let result
       try {
-        return ptyManager.create({ ...options, tabId, sshLaunch, webContents: event.sender })
+        result = ptyManager.create({ ...options, tabId, sshLaunch, webContents: event.sender })
       } catch (e) {
         log.error('[PtyHandlers] Failed to spawn SSH session', e.message)
         return { error: e.message }
       }
+      watchSshFsReadiness(result.pid, { sshSessionRegistry, sshLaunch, webContents: event.sender })
+        .catch((e) => log.warn('[PtyHandlers] watchSshFsReadiness failed', e.message))
+      return result
     }
 
     let historyFile = null

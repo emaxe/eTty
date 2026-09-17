@@ -4,6 +4,9 @@
  * All application lifecycle logic lives in AppService (window, menu, updater, state save).
  */
 import { app, ipcMain } from 'electron'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
 import log from 'electron-log'
 import { PtyManager } from './pty-manager'
 import { FileManager } from './file-manager'
@@ -11,6 +14,8 @@ import { HistoryManager } from './history-manager'
 import { AgentService } from './agent-service.js'
 import { ShellPathResolver } from './shell-path-resolver.js'
 import { NodeVersionManager } from './services/node-version-manager.js'
+import { SshSessionRegistry } from './ssh/ssh-session-registry.js'
+import { FsProviderRegistry } from './fs/fs-provider-registry.js'
 import {
   saveTabState, loadTabState, deleteTabState, hasTabState, validatePath
 } from './tab-state'
@@ -34,9 +39,11 @@ import {
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
 const shellPathResolver = new ShellPathResolver()
+const sshSessionRegistry = new SshSessionRegistry()
 
-const ptyManager = new PtyManager({ shellPathResolver })
+const ptyManager = new PtyManager({ shellPathResolver, sshSessionRegistry })
 const fileManager = new FileManager()
+const fsProviderRegistry = new FsProviderRegistry({ fileManager, sshSessionRegistry })
 const historyManager = new HistoryManager()
 const agentService = new AgentService({ shellPathResolver })
 const nodeVersionManager = new NodeVersionManager({ shellPathResolver })
@@ -54,14 +61,43 @@ const appService = new AppService({
 let diagnosticsInterval = null
 let isQuitting = false
 
+/**
+ * Удаляет осиротевшие каталоги ControlMaster-сокетов (`etty-cm-*` в os.tmpdir()) старше суток —
+ * например после аварийного завершения (kill -9), когда PtyManager.killAll() не успел отработать.
+ * `SshControlChannel.dispose()` штатно чистит их сама при обычном закрытии вкладки/приложения.
+ */
+function cleanupOrphanedControlSockets() {
+  const tmpDir = os.tmpdir()
+  const maxAgeMs = 24 * 60 * 60 * 1000
+  let entries
+  try {
+    entries = fs.readdirSync(tmpDir, { withFileTypes: true })
+  } catch (e) {
+    return
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith('etty-cm-')) continue
+    const dirPath = path.join(tmpDir, entry.name)
+    try {
+      const stat = fs.statSync(dirPath)
+      if (Date.now() - stat.mtimeMs > maxAgeMs) {
+        fs.rmSync(dirPath, { recursive: true, force: true })
+      }
+    } catch (e) {
+      // сокет уже мог исчезнуть между readdir и stat — не критично
+    }
+  }
+}
+
 app.whenReady().then(async () => {
   await shellPathResolver.resolve()
+  cleanupOrphanedControlSockets()
 
   appService.startAgentAutoRefresh()
   appService.startAutoUpdater()
 
-  registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshStore, shellPathResolver })
-  registerFsHandlers(ipcMain, { fileManager })
+  registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshStore, shellPathResolver, sshSessionRegistry })
+  registerFsHandlers(ipcMain, { fsProviderRegistry })
   registerWindowHandlers(ipcMain)
   registerAppHandlers(ipcMain)
   registerTabsHandlers(ipcMain, { saveTabState, loadTabState, deleteTabState, hasTabState, validatePath })
@@ -71,7 +107,7 @@ app.whenReady().then(async () => {
   registerGitHandlers(ipcMain)
   registerSearchHandlers(ipcMain, { fileManager })
   registerNodeVersionHandlers(ipcMain, { nodeVersionManager })
-  registerSshHandlers(ipcMain, { sshStore })
+  registerSshHandlers(ipcMain, { sshStore, sshSessionRegistry })
 
   ipcMain.on(IPC_CHANNELS.TABS_STATE_CHANGED, () => appService.rebuildMenu())
 

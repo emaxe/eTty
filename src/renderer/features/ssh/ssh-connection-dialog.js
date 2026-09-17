@@ -112,6 +112,17 @@ export class SshConnectionDialog {
 
     const extraArgsInput = this._field(body, 'Доп. аргументы ssh', 'text', connection?.extraArgs || '', 'например: -J bastion.example.com')
 
+    const hooksRow = document.createElement('div')
+    hooksRow.className = 'settings-dialog-row'
+    const hooksLabel = document.createElement('label')
+    hooksLabel.textContent = 'Отслеживать busy и cwd (эксперимент. хуки)'
+    const hooksToggle = this._createToggle(connection?.injectShellIntegration !== false, () => {})
+    hooksToggle.title = 'Временно инжектирует rc-хуки на удалённой стороне (OSC 7/133) для быстрых '
+      + 'команд и подсветки занятого терминала — см. remote-shell-hooks.js'
+    hooksRow.appendChild(hooksLabel)
+    hooksRow.appendChild(hooksToggle)
+    body.appendChild(hooksRow)
+
     const errorEl = document.createElement('div')
     errorEl.className = 'settings-dialog-error'
     errorEl.hidden = true
@@ -160,6 +171,7 @@ export class SshConnectionDialog {
         authType: authSelect.value,
         privateKeyPath: keyPathInput.value.trim(),
         extraArgs: extraArgsInput.value.trim(),
+        injectShellIntegration: hooksToggle.querySelector('input').checked,
         secret
       })
     })
@@ -183,6 +195,24 @@ export class SshConnectionDialog {
     this._overlay = overlay
 
     setTimeout(() => hostInput.focus(), 0)
+  }
+
+  /** Toggle-переключатель — тот же DOM/CSS, что и `SettingsPage._createToggle()`. */
+  _createToggle(value, onChange) {
+    const label = document.createElement('label')
+    label.className = 'settings-toggle'
+
+    const input = document.createElement('input')
+    input.type = 'checkbox'
+    input.checked = value
+    input.addEventListener('change', () => onChange(input.checked))
+
+    const track = document.createElement('span')
+    track.className = 'settings-toggle-track'
+
+    label.appendChild(input)
+    label.appendChild(track)
+    return label
   }
 
   _field(container, labelText, type, value, placeholder) {

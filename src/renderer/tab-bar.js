@@ -39,12 +39,14 @@ export class TabBar {
       rootPath: t.rootPath,
       tabId: t.tabId,
       folderName: t.folderName,
-      termTitle: t.termTitle
+      termTitle: t.termTitle,
+      ssh: t.ssh ? { connectionId: t.ssh.connectionId, label: t.ssh.label } : null,
+      sshFsAvailable: t._sshFsAvailable ?? null
     })))
     this._store.set('tabs.activeIndex', this.activeIndex)
   }
 
-  addTab({ pid, term, fitAddon, rootPath, tabId, ssh }, insertIndex = -1) {
+  addTab({ pid, term, fitAddon, rootPath, tabId, ssh, remoteCwd }, insertIndex = -1) {
     const folderName = ssh ? ssh.label : (rootPath.split('/').filter(Boolean).pop() || '/')
     const container = document.createElement('div')
     container.className = 'terminal-pane'
@@ -54,6 +56,7 @@ export class TabBar {
     const element = this._createTabEl(folderName, '', !!ssh)
 
     const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '', tabId, ssh: ssh || null,
+      remoteCwd: remoteCwd || null,
       treeExpandedDirs: new Set(),
       treeScrollTop: 0,
       _pendingData: [],
@@ -260,7 +263,10 @@ export class TabBar {
         rootPath: t.rootPath,
         isActive: i === this.activeIndex,
         tabId: t.tabId,
-        ssh: t.ssh ? { connectionId: t.ssh.connectionId, label: t.ssh.label } : undefined
+        ssh: t.ssh ? { connectionId: t.ssh.connectionId, label: t.ssh.label } : undefined,
+        // Последний известный удалённый cwd — при восстановлении пытаемся открыть именно его,
+        // а не заново $HOME (см. index.js: restore + connectSshTab)
+        remoteCwd: t.ssh ? (t.remoteCwd || undefined) : undefined
       }))
   }
 
@@ -289,5 +295,8 @@ export class TabBar {
   _updateTabLabel(tab) {
     tab.element.querySelector('.tab-folder').textContent = tab.folderName
     tab.element.querySelector('.tab-title').textContent = tab.termTitle
+    // SSH-вкладки держат folderName === ssh.label (не переименовываются по cd, см.
+    // updateRootPath) — реальный текущий путь виден по hover через title.
+    if (tab.ssh) tab.element.title = `${tab.ssh.label}: ${tab.rootPath || ''}`
   }
 }
