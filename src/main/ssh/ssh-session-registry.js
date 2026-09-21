@@ -7,16 +7,33 @@
 export class SshSessionRegistry {
   constructor() {
     /** @type {Map<number, { channel: import('./ssh-control-channel.js').SshControlChannel,
-     *   caps: object|null, fsProvider: import('../fs/ssh-fs-provider.js').SshFsProvider|null }>} */
+     *   caps: object|null, fsProvider: import('../fs/ssh-fs-provider.js').SshFsProvider|null,
+     *   connectionId: string|null }>} */
     this._sessions = new Map()
   }
 
-  register(pid, channel) {
-    this._sessions.set(pid, { channel, caps: null, fsProvider: null })
+  /** @param {string|null} connectionId — id подключения (ssh-store.js), см. `findLiveChannelFor()`. */
+  register(pid, channel, connectionId = null) {
+    this._sessions.set(pid, { channel, caps: null, fsProvider: null, connectionId })
   }
 
   get(pid) {
     return this._sessions.get(pid) || null
+  }
+
+  /**
+   * Живой канал открытой вкладки этого подключения — панель SSH/tmux (`SshConnectionMaster`)
+   * «одалживает» его для листинга/kill/rename сессий вместо подъёма отдельного панельного
+   * мастера: при открытой вкладке список сессий обходится вообще без нового SSH-соединения.
+   * Первое совпадение по `connectionId` (обычно ровно одна живая вкладка на подключение).
+   * @param {string} connectionId
+   * @returns {import('./ssh-control-channel.js').SshControlChannel|null}
+   */
+  findLiveChannelFor(connectionId) {
+    for (const session of this._sessions.values()) {
+      if (session.connectionId === connectionId) return session.channel
+    }
+    return null
   }
 
   setCaps(pid, caps) {

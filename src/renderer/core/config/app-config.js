@@ -35,6 +35,11 @@ export const APP_CONFIG = Object.freeze({
   // Порог «быстрого падения» PTY сразу после подключения — признак конфликта remote-команды
   // с RemoteCommand/ForceCommand на сервере, требующий реконнекта без инжекта хуков
   SSH_HOOK_FAIL_FAST_MS: 3000,
+  // Персистентная (tmux) вкладка быстро падает, пока к этому же подключению открыта другая
+  // вкладка (наблюдалось на практике) — повтор с растущей паузой вместо немедленного показа
+  // ошибки (см. onPtyExit в index.js). MS — база задержки, умножается на номер попытки.
+  SSH_TMUX_RACE_MAX_RETRIES: 3,
+  SSH_TMUX_RACE_RETRY_DELAY_MS: 1000,
 
   // Interaction thresholds
   DOUBLE_CLICK_THRESHOLD_MS: 500,

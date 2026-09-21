@@ -2,6 +2,7 @@ import { app, safeStorage } from 'electron'
 import { join } from 'path'
 import { readFile, writeFile, mkdir, access } from 'fs/promises'
 import log from 'electron-log'
+import { SSH_SESSION_CONFIG } from '../shared/ssh-session-config.js'
 
 /**
  * Хранилище SSH-подключений. Отдельно от config.json: config.json целиком уходит
@@ -72,10 +73,19 @@ export async function loadConnections() {
 
 /**
  * Создаёт или обновляет подключение.
- * @param {object} conn — { id?, label, host, port, user, authType, privateKeyPath, secret, extraArgs, injectShellIntegration? }
+ * @param {object} conn — { id?, label, host, port, user, authType, privateKeyPath, secret, extraArgs,
+ *   injectShellIntegration?, persistence?, tmuxSocket? }
  *   `secret` — пароль/passphrase в открытом виде (только при изменении); `undefined` — оставить как есть,
  *   `null`/`''` — очистить. `injectShellIntegration` — инжект OSC 7/133-хуков на удалённой стороне
- *   (см. `ssh/remote-shell-hooks.js`), по умолчанию включён.
+ *   (см. `ssh/remote-shell-hooks.js`), по умолчанию включён. `persistence` — `'off'`|`'tmux'`, DEPRECATED:
+ *   режим (обычная сессия / tmux) теперь выбирается ПРИ ПОДКЛЮЧЕНИИ (переключатель SSH/tmux в боковой
+ *   панели, передаётся с каждым `pty:create`, см. `ssh/ssh-persistence.js`), форма подключения это поле
+ *   больше не отправляет. Значение в сторе остаётся ТОЛЬКО как fallback обратной совместимости — для
+ *   вкладок, восстановленных из `tabs-state.json` без явного `persistence` (сохранены до этой фичи):
+ *   если `conn.persistence` не передан, СУЩЕСТВУЮЩЕЕ значение сохраняется как есть, а не сбрасывается
+ *   в `'off'` — иначе первое же редактирование подключения новым диалогом стёрло бы `'tmux'`, и такие
+ *   вкладки перестали бы попадать в свою сессию. `tmuxSocket` — сокет tmux-сервера (`-L`); пустая
+ *   строка — сокет по умолчанию (режим совместимости с чужим `tmux ls`).
  */
 export async function saveConnection(conn) {
   try {
@@ -89,6 +99,10 @@ export async function saveConnection(conn) {
       secret = conn.secret ? encryptSecret(conn.secret) : null
     }
 
+    const persistence = conn.persistence !== undefined
+      ? (conn.persistence === 'tmux' ? 'tmux' : 'off')
+      : (existing?.persistence === 'tmux' ? 'tmux' : 'off')
+
     const record = {
       id,
       label: conn.label || conn.host || 'SSH',
@@ -99,6 +113,8 @@ export async function saveConnection(conn) {
       privateKeyPath: conn.privateKeyPath || '',
       extraArgs: conn.extraArgs || '',
       injectShellIntegration: conn.injectShellIntegration !== false,
+      persistence,
+      tmuxSocket: typeof conn.tmuxSocket === 'string' ? conn.tmuxSocket.trim() : SSH_SESSION_CONFIG.DEFAULT_SOCKET,
       secret
     }
 

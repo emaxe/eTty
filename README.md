@@ -2,6 +2,14 @@
 
 [🇷🇺 Русский](README.ru.md)
 
+<p align="center">
+  <a href="https://github.com/emaxe/eTty/releases/latest"><img src="https://img.shields.io/github/v/release/emaxe/eTty?label=release" alt="Latest release" /></a>
+  <a href="https://github.com/emaxe/eTty/releases"><img src="https://img.shields.io/github/downloads/emaxe/eTty/total" alt="Downloads" /></a>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platforms: macOS, Windows, Linux" />
+  <img src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white" alt="Electron 33" />
+  <a href="https://github.com/emaxe/eTty/commits"><img src="https://img.shields.io/github/last-commit/emaxe/eTty" alt="Last commit" /></a>
+</p>
+
 Modern terminal emulator built with Electron. Lightweight, fast, and feature-rich.
 
 <p align="center">
@@ -29,12 +37,29 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 ### SSH Connections
 
 - **SSH panel** — dedicated sidebar for saved connections; position configurable in Settings → SSH Panel (left, right, or off — off by default). The toolbar toggle button is hidden entirely when the panel is off
+- **SSH / tmux switch** — a segmented control in the panel header decides what a click on a connection does: open a regular SSH tab, or (tmux mode) expand the row into the list of tmux sessions on the server; the choice is remembered
 - **Add/edit/delete/reorder** — host, port, user, auth type (ssh-agent, private key, or password), private key path, extra `ssh` arguments; drag-and-drop to reorder
 - **Encrypted password storage** — saved passwords/passphrases are encrypted at rest via Electron `safeStorage` (OS keychain); not supported on Windows, where the terminal prompts for it instead
 - **Click to connect** — opens a regular terminal tab (color-accented, SSH icon) running the system `ssh` binary — full support for `~/.ssh/config`, ssh-agent, `ProxyJump`, 2FA
 - **"+" clones the active connection** — pressing "+" while an SSH tab is active opens another tab to the same host
 - **Connection overlay** — spinner while connecting; on a dropped session, an error with exit code and a reconnect button, without closing the tab
 - **Session restore** — SSH tabs are saved and restored like local tabs; only the tab that was active reconnects automatically on launch, others reconnect lazily when you switch to them
+
+#### Remote file system and agents
+
+- **File tree and editor over SSH** — browse, create, rename, delete, copy, move, read and write remote files; operations run as short-lived non-interactive calls multiplexed over the system `ssh` (ControlMaster), so there's no extra authentication and nothing to install on the server
+- **Change detection** — polling of expanded directories (`fs.watch` isn't available over SSH) with an immediate refresh after your own changes
+- **CLI agents work remotely** — remote shell hooks (zsh and bash) report the working directory and busy state, so quick replies, Shift+Enter and the busy indicator behave as in local tabs; falls back to an optimistic busy state if the server blocks hooks (`RemoteCommand`/`ForceCommand`)
+
+#### Persistent sessions (tmux)
+
+- **Sessions survive disconnects** — a tab attaches to a named tmux session, so a network drop, laptop sleep or app restart doesn't kill what's running on the server; closing a tab detaches instead of killing, and restoring tabs re-attaches the same session
+- **Session list without an open tab** — in tmux mode, expand a connection to see all its tmux sessions (not only eTty's own); connect, rename (inline) or kill (with confirmation) from the context menu; the list refreshes automatically
+- **Several independent sessions per connection** — new ones are named `etty-<id>`, `-2`, `-3`…; clicking a session that's already open just switches to its tab
+- **tmux badge** — persistent tabs get a "tmux" badge and their own accent color
+- **Taken over from elsewhere** — if another client attaches to the session, the tab shows a "detached" overlay rather than a generic error
+- **tmux not installed?** — eTty detects the server's package manager and offers to type the install command into the tab's own terminal; nothing runs without your confirmation, and any `sudo` password is entered by you
+- **Configurable socket** — per-connection tmux socket (`-L`, default `etty`; empty uses the server's default)
 
 ### Command History
 
@@ -121,6 +146,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **New tab placement** — `modifierAdjacent` (Cmd/Ctrl opens next to active tab) or `modifierEnd` (Cmd/Ctrl appends to end); configurable in Settings → Terminal
 - **Tab switch hotkey** — off, `Cmd+Option+←/→`, or `Cmd+Shift+←/→`; configurable in Settings → Terminal
 - **SSH panel position** — off (default), left, or right; configurable in Settings → SSH Panel
+- **SSH panel mode** — SSH (regular tabs) or tmux (persistent sessions); switched right in the panel header
 - **AI agent quick replies** — CRUD editor with per-agent toggles; drag-and-drop reordering and grouping into a tree
 - **Auto-persisted** to disk with debounced saves
 
@@ -164,7 +190,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 | Desktop shell | Electron 33 |
 | Build tooling | electron-vite (Vite-based) |
 | Terminal UI | xterm.js 5.5 + WebGL, Fit, WebLinks, Search addons |
-| PTY backend | node-pty 1.0 (native module) |
+| PTY backend | node-pty 1.1 (native module) |
 | Code editor | CodeMirror 6 with 13 language packages (JS/TS, Python, Go, Rust, HTML, CSS, JSON, YAML, Markdown, Vue, C#) |
 | Git operations | simple-git |
 | UI font | Roboto (global application font) |
@@ -293,7 +319,7 @@ All user data is stored in `~/.config/eTty/` (Electron `userData`):
 
 | File | Purpose |
 |------|---------|
-| `config.json` | App settings (theme, focus indicator, file tree behavior, prompt style, agent proxy, force-disabled agents, custom agents, quick replies, SSH panel position); versioned, deep-merged with defaults on load |
+| `config.json` | App settings (theme, focus indicator, file tree behavior, prompt style, agent proxy, force-disabled agents, custom agents, quick replies, SSH panel position and mode); versioned, deep-merged with defaults on load |
 | `themes/*.json` | User-defined custom themes, loaded alongside the 7 built-ins |
 | `ssh-connections.json` | Saved SSH connections; passwords/passphrases encrypted via `safeStorage` |
 | `tabs-state.json` | Saved tab state for session restore |
@@ -307,6 +333,8 @@ All user data is stored in `~/.config/eTty/` (Electron `userData`):
 - Auto-update is **stubbed** — logs only, no update server configured yet.
 - Settings overlay blocks tab switching to prevent focus leaking to hidden terminals.
 - Saved SSH passwords are auto-filled via `SSH_ASKPASS` on macOS/Linux (OpenSSH ≥ 8.4); on Windows the terminal always prompts for the password manually.
+- The remote file tree, remote agent tracking and the tmux session list rely on SSH ControlMaster multiplexing, which OpenSSH for Windows doesn't support — on Windows an SSH tab is terminal-only and the tree isn't synced.
+- Passing the working directory and busy state through tmux needs tmux ≥ 3.3 on the server (DCS passthrough); on older versions persistent sessions still work, with the optimistic busy fallback.
 
 ## License
 

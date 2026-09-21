@@ -8,6 +8,27 @@ import { SshControlChannel } from './ssh/ssh-control-channel.js'
 
 const IS_WIN = process.platform === 'win32'
 
+// Хвост вывода SSH-PTY для диагностики: при ненулевом коде выхода renderer видит только код,
+// а текст ошибки (tmux/ssh/remote-shell) терялся — см. onExit ниже.
+const SSH_EXIT_TAIL_BYTES = 2048
+// eslint-disable-next-line no-control-regex
+const ANSI_CSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g
+
+/**
+ * Локальный cwd процесса `ssh` ни на что не влияет — но должен существовать: у подключённой
+ * SSH-вкладки `tab.rootPath` это УДАЛЁННЫЙ путь (OSC 7/remoteCwd), и renderer передаёт его сюда
+ * при реконнекте и при новой вкладке от активной SSH-вкладки. Без проверки node-pty падает на
+ * chdir за ~20 мс с exitCode 1 и пустым выводом («соединение разорвано (код 1)»).
+ */
+function resolveSshSpawnCwd(cwd) {
+  try {
+    if (cwd && fs.statSync(cwd).isDirectory()) return cwd
+  } catch {
+    // нет такого локального каталога (удалённый путь) — падаем на домашний
+  }
+  return os.homedir()
+}
+
 const PROMPT_MAP = {
   short: '%1~ %% ',
   minimal: '> ',
@@ -90,7 +111,7 @@ export class PtyManager {
    *   control: {dir: string, path: string, target: string, port: number}|null}} [params.sshLaunch]
    * @returns {{pid: number}} — PID процесса для идентификации сессии
    */
-  create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize, promptStyle, sshLaunch }) {
+  create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize, promptStyle, sshLaunch, ssh }) {
     const isWin = IS_WIN
     const isSsh = !!sshLaunch
 
@@ -122,7 +143,7 @@ export class PtyManager {
       name: 'xterm-256color',
       cols: cols || 80,
       rows: rows || 24,
-      cwd,
+      cwd: isSsh ? resolveSshSpawnCwd(cwd) : cwd,
       env
     })
 
@@ -135,8 +156,10 @@ export class PtyManager {
         controlDir: sshLaunch.control.dir
       })
       // Канал сам владеет жизненным циклом controlDir (создаёт/чистит при dispose()) —
-      // PtyManager отдельно этот каталог не отслеживает.
-      this._sshSessionRegistry.register(ptyProcess.pid, channel)
+      // PtyManager отдельно этот каталог не отслеживает. connectionId — чтобы панель SSH/tmux
+      // могла найти и «одолжить» уже живой канал этой вкладки вместо подъёма отдельного
+      // панельного мастера (см. SshConnectionMasterRegistry.acquire()).
+      this._sshSessionRegistry.register(ptyProcess.pid, channel, ssh?.connectionId ?? null)
     }
 
     this.sessions.set(ptyProcess.pid, {
@@ -154,6 +177,8 @@ export class PtyManager {
     // redraw the screen at high frequency.
     let dataChunks = []
     let flushTimer = null
+    let sshTail = ''
+    const startedAt = Date.now()
 
     const flushData = () => {
       if (dataChunks.length > 0 && !webContents.isDestroyed()) {
@@ -164,6 +189,7 @@ export class PtyManager {
     }
 
     ptyProcess.onData((data) => {
+      if (isSsh) sshTail = (sshTail + data).slice(-SSH_EXIT_TAIL_BYTES)
       dataChunks.push(data)
       if (!flushTimer) {
         flushTimer = setTimeout(flushData, 8)
@@ -174,6 +200,17 @@ export class PtyManager {
       if (flushTimer) {
         clearTimeout(flushTimer)
         flushData()
+      }
+      if (isSsh && exitCode !== 0) {
+        log.warn('[PtyManager] ssh session exited', {
+          pid: ptyProcess.pid,
+          exitCode,
+          signal,
+          lifetimeMs: Date.now() - startedAt,
+          sessionName: ssh?.sessionName ?? null,
+          persistence: ssh?.persistence ?? null,
+          tail: sshTail.replace(ANSI_CSI_RE, '')
+        })
       }
       if (!webContents.isDestroyed()) {
         webContents.send(IPC_CHANNELS.PTY_EXIT, { pid: ptyProcess.pid, exitCode, signal })

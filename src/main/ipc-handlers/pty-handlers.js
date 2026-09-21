@@ -1,10 +1,13 @@
 import { IPC_CHANNELS } from '../../shared/ipc-channels.js'
 import { buildSshLaunch } from '../ssh-command.js'
-import { PROBE_SCRIPT } from '../ssh/remote-scripts.js'
-import { parseProbe } from '../ssh/remote-parse.js'
+import { PROBE_SCRIPT, TMUX_SESSION_STATE_SCRIPT } from '../ssh/remote-scripts.js'
+import { parseProbe, parseTmuxSessionState } from '../ssh/remote-parse.js'
+import { buildTmuxInstallCommand } from '../ssh/tmux-install.js'
+import { resolveSshPersistence } from '../../shared/ssh-persistence.js'
 import { SshFsProvider } from '../fs/ssh-fs-provider.js'
 import { createPathUtils } from '../../shared/path-utils.js'
 import { SSH_FS_CONFIG } from '../../shared/ssh-fs-config.js'
+import { SSH_SESSION_CONFIG } from '../../shared/ssh-session-config.js'
 import log from 'electron-log'
 
 const IS_WIN = process.platform === 'win32'
@@ -17,7 +20,7 @@ const IS_WIN = process.platform === 'win32'
  * весь необходимый контекст канала уже хранится в самом `SshControlChannel`).
  * @param {number} pid
  */
-export async function establishSshFs(pid, { sshSessionRegistry, webContents }) {
+export async function establishSshFs(pid, { sshSessionRegistry, webContents, persistence, sessionName, socketName }) {
   const send = (payload) => {
     if (!webContents.isDestroyed()) {
       webContents.send(IPC_CHANNELS.SSH_FS_READY, { pid, sessionId: pid, ...payload })
@@ -32,6 +35,21 @@ export async function establishSshFs(pid, { sshSessionRegistry, webContents }) {
   if (!ready) {
     send({ available: false, reason: 'master-timeout' })
     return false
+  }
+
+  // Ресинк cwd/busy персистентной (tmux) сессии сразу после attach — без него вкладка не узнает
+  // состояние до следующего промпта (может быть через часы), см. план, Этап 2. Не блокирует и
+  // не зависит от FS-проба ниже — отдельная операция по тому же каналу.
+  if (persistence === 'tmux' && sessionName) {
+    session.channel
+      .exec(TMUX_SESSION_STATE_SCRIPT, [socketName || '', sessionName], { timeoutMs: SSH_FS_CONFIG.OP_TIMEOUT_MS })
+      .then((result) => {
+        if (!sshSessionRegistry.get(pid) || result.code !== 0) return
+        const state = parseTmuxSessionState(result.stdout.toString('utf-8'))
+        if (!state || webContents.isDestroyed()) return
+        webContents.send(IPC_CHANNELS.SSH_SESSION_STATE, { pid, ...state })
+      })
+      .catch((e) => log.warn('[PtyHandlers] tmux session-state resync failed', pid, e.message))
   }
 
   const probeResult = await session.channel.exec(PROBE_SCRIPT, [], { timeoutMs: SSH_FS_CONFIG.PROBE_TIMEOUT_MS })
@@ -49,6 +67,17 @@ export async function establishSshFs(pid, { sshSessionRegistry, webContents }) {
   }
   sshSessionRegistry.setCaps(pid, caps)
 
+  // Постоянные сессии запрошены, но tmux на сервере не найден — предлагаем установить (с
+  // подтверждением на стороне renderer, команда вводится в реальный терминал вкладки, а не
+  // выполняется здесь привилегированно — см. tmux-install.js). Молчим, если менеджер пакетов
+  // не распознан: без готовой команды предлагать нечего.
+  if (persistence === 'tmux' && !caps.tmuxVersion) {
+    const installCmd = buildTmuxInstallCommand(caps.pkgManager)
+    if (installCmd && !webContents.isDestroyed()) {
+      webContents.send(IPC_CHANNELS.SSH_TMUX_MISSING, { pid, installCmd })
+    }
+  }
+
   const fsProvider = new SshFsProvider({
     channel: session.channel,
     root: caps.home,
@@ -62,7 +91,7 @@ export async function establishSshFs(pid, { sshSessionRegistry, webContents }) {
 }
 
 /** Предварительные, специфичные для первого подключения проверки (см. `establishSshFs`). */
-async function watchSshFsReadiness(pid, { sshSessionRegistry, sshLaunch, webContents }) {
+async function watchSshFsReadiness(pid, { sshSessionRegistry, sshLaunch, webContents, persistence, sessionName, socketName }) {
   const send = (payload) => {
     if (!webContents.isDestroyed()) {
       webContents.send(IPC_CHANNELS.SSH_FS_READY, { pid, sessionId: pid, ...payload })
@@ -78,7 +107,7 @@ async function watchSshFsReadiness(pid, { sshSessionRegistry, sshLaunch, webCont
     return
   }
 
-  await establishSshFs(pid, { sshSessionRegistry, webContents })
+  await establishSshFs(pid, { sshSessionRegistry, webContents, persistence, sessionName, socketName })
 }
 
 /**
@@ -101,10 +130,23 @@ export function registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshSt
       if (!connection) {
         return { error: 'connection-not-found' }
       }
+      // Режим ЭТОГО запуска — из панели SSH/tmux (renderer передаёт options.ssh.persistence
+      // явно), а не только из сохранённой настройки подключения; connection.persistence
+      // остаётся fallback для обратной совместимости (вкладки, восстановленные до этой фичи —
+      // см. ssh/ssh-persistence.js).
+      const persistence = resolveSshPersistence(options.ssh, connection)
+      // Имя сессии — единственная интерполяция данных в текст remote-команды (см.
+      // remote-shell-hooks.js) — проверяем ДО buildSshLaunch, а не полагаемся только на
+      // проверку внутри билдера, чтобы вернуть понятную ошибку вызывающей стороне.
+      if (persistence === 'tmux' && !SSH_SESSION_CONFIG.SESSION_NAME_RE.test(options.ssh.sessionName || '')) {
+        return { error: 'invalid-session-name' }
+      }
       const sshLaunch = buildSshLaunch({
         connection,
         resolvedPath: shellPathResolver.getResolvedPath(),
-        skipShellIntegration: !!options.ssh.skipShellIntegration
+        skipShellIntegration: !!options.ssh.skipShellIntegration,
+        sessionName: options.ssh.sessionName || null,
+        persistence
       })
       let result
       try {
@@ -113,9 +155,17 @@ export function registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshSt
         log.error('[PtyHandlers] Failed to spawn SSH session', e.message)
         return { error: e.message }
       }
-      watchSshFsReadiness(result.pid, { sshSessionRegistry, sshLaunch, webContents: event.sender })
-        .catch((e) => log.warn('[PtyHandlers] watchSshFsReadiness failed', e.message))
-      return result
+      watchSshFsReadiness(result.pid, {
+        sshSessionRegistry,
+        sshLaunch,
+        webContents: event.sender,
+        persistence,
+        sessionName: options.ssh.sessionName || null,
+        socketName: connection.tmuxSocket ?? SSH_SESSION_CONFIG.DEFAULT_SOCKET
+      }).catch((e) => log.warn('[PtyHandlers] watchSshFsReadiness failed', e.message))
+      // persistence — resolved-значение этого запуска; renderer пишет его в tab.ssh.persistence
+      // (self-heal для восстановленных вкладок без явного persistence в tabs-state.json).
+      return { ...result, persistence }
     }
 
     let historyFile = null

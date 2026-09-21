@@ -114,6 +114,13 @@ export class ElectronApiAdapter {
   sshReorder(ids) { return this._api.sshReorder(ids) }
   onSshFsReady(fn) { return this._on('sshFsReady', fn) }
   sshFsRetry(sessionId) { return this._api.sshFsRetry(sessionId) }
+  onSshSessionState(fn) { return this._on('sshSessionState', fn) }
+  onSshTmuxMissing(fn) { return this._on('sshTmuxMissing', fn) }
+  sshMasterAcquire(connectionId) { return this._api.sshMasterAcquire(connectionId) }
+  sshMasterRelease(connectionId) { return this._api.sshMasterRelease(connectionId) }
+  sshSessionsList(connectionId, force) { return this._api.sshSessionsList(connectionId, force) }
+  sshSessionKill(connectionId, name) { return this._api.sshSessionKill(connectionId, name) }
+  sshSessionRename(connectionId, name, newName) { return this._api.sshSessionRename(connectionId, name, newName) }
 
   _on(channel, fn) {
     const unsub = this._api[`on${channel.charAt(0).toUpperCase() + channel.slice(1)}`]?.(fn)

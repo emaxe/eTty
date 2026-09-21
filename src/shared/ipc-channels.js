@@ -105,4 +105,21 @@ export const IPC_CHANNELS = Object.freeze({
   // SSH remote FS — готовность ControlMaster-канала для конкретного pid (Этап 3/4)
   SSH_FS_READY: 'ssh:fs-ready',
   SSH_FS_RETRY: 'ssh:fs-retry',
+
+  // Персистентные удалённые сессии (tmux) — ресинк cwd/busy после attach, когда OSC 7/133
+  // не проходят наружу сами (см. remote-shell-hooks.js, Этап 2)
+  SSH_SESSION_STATE: 'ssh:session-state',
+
+  // Постоянные сессии запрошены (persistence:'tmux'), но tmux на сервере не найден — push с
+  // готовой командой установки (см. ssh/tmux-install.js), если менеджер пакетов распознан
+  SSH_TMUX_MISSING: 'ssh:tmux-missing',
+
+  // Панель tmux-сессий — служебный ControlMaster НА ПОДКЛЮЧЕНИЕ (не на PTY), см.
+  // ssh/ssh-connection-master.js. acquire/release — держат мастер живым, пока строка
+  // подключения раскрыта в панели.
+  SSH_MASTER_ACQUIRE: 'ssh:master-acquire',
+  SSH_MASTER_RELEASE: 'ssh:master-release',
+  SSH_SESSIONS_LIST: 'ssh:sessions-list',
+  SSH_SESSION_KILL: 'ssh:session-kill',
+  SSH_SESSION_RENAME: 'ssh:session-rename',
 })

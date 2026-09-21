@@ -37,6 +37,15 @@ export class SshTabOverlay {
     this._el.querySelector('.ssh-tab-overlay-btn')?.addEventListener('click', onReconnect)
   }
 
+  /** Персистентная (tmux) сессия перехвачена другим клиентом (`new-session -A -D`, Этап 3). */
+  showDetached(label, onReattach) {
+    this._render(`
+      <div class="ssh-tab-overlay-message">Сессия «${this._escape(label)}» перехвачена другим клиентом</div>
+      <button class="ssh-tab-overlay-btn" type="button">Переподключиться</button>
+    `, 'error')
+    this._el.querySelector('.ssh-tab-overlay-btn')?.addEventListener('click', onReattach)
+  }
+
   showMissing(onClose) {
     this._render(`
       <div class="ssh-tab-overlay-message">Подключение удалено</div>

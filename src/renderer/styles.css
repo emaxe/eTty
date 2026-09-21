@@ -194,6 +194,31 @@ body.platform-darwin .window-controls {
   border-bottom-color: var(--green);
 }
 
+/* tmux-вкладка (persistence:'tmux') — отдельный акцент, чтобы отличать от обычной SSH-сессии;
+   селектор с обоими классами — специфичнее .tab.tab-ssh.active, чтобы точно победить его */
+.tab.tab-ssh.tab-tmux .tab-icon {
+  color: var(--accent);
+}
+.tab.tab-ssh.tab-tmux.active {
+  border-bottom-color: var(--accent);
+}
+.tab-badge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--border);
+  color: var(--subtext);
+  flex-shrink: 0;
+  /* «tmux · <имя сессии>» — пользовательское имя не должно раздувать вкладку */
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tab-folder {
   font-weight: 600;
   overflow: hidden;
@@ -1671,7 +1696,9 @@ button svg {
   flex: 1;
 }
 
-.ssh-panel-add-btn {
+.ssh-panel-add-btn,
+.ssh-panel-refresh-btn,
+.ssh-panel-close-btn {
   background: var(--border);
   border: none;
   color: var(--text);
@@ -1683,8 +1710,41 @@ button svg {
   align-items: center;
   justify-content: center;
 }
-.ssh-panel-add-btn:hover {
+.ssh-panel-add-btn:hover,
+.ssh-panel-refresh-btn:hover,
+.ssh-panel-close-btn:hover {
   background: var(--hover);
+}
+.ssh-panel-refresh-btn[hidden] {
+  display: none;
+}
+
+/* Сегмент SSH/tmux — переключает режим клика по строке подключения (см. ssh-panel.js) */
+.ssh-panel-mode {
+  display: flex;
+  gap: 2px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ssh-mode-btn {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--subtext);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.ssh-mode-btn:hover {
+  color: var(--text);
+}
+.ssh-mode-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
 }
 
 .ssh-panel-list {
@@ -1710,7 +1770,8 @@ button svg {
 .ssh-row:hover {
   background: var(--hover);
 }
-.ssh-row.dragging {
+.ssh-row.dragging,
+.ssh-sessions.dragging {
   opacity: 0.4;
 }
 
@@ -1738,6 +1799,115 @@ button svg {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* — Режим tmux: раскрытие строки подключения в список сессий — */
+.ssh-row-twisty {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--subtext);
+}
+
+.ssh-sessions {
+  padding: 2px 10px 6px 34px;
+  border-bottom: 1px solid transparent;
+}
+
+.ssh-session-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.ssh-session-row:hover {
+  background: var(--hover);
+}
+
+.ssh-session-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--subtext);
+}
+.ssh-session-dot.attached {
+  background: var(--green);
+}
+
+.ssh-session-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.ssh-session-name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-session-rename-input {
+  width: 100%;
+  font-size: 12px;
+  padding: 1px 4px;
+}
+
+.ssh-session-meta {
+  font-size: 11px;
+  color: var(--subtext);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-session-new {
+  padding: 6px;
+  margin-top: 2px;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  color: var(--subtext);
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+.ssh-session-new:hover {
+  color: var(--text);
+  border-color: var(--subtext);
+}
+.ssh-session-new-wrap {
+  margin-top: 2px;
+}
+.ssh-session-new-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 12px;
+  padding: 5px 6px;
+}
+
+.ssh-sessions-status {
+  padding: 6px 2px;
+  color: var(--subtext);
+  font-size: 11px;
+}
+.ssh-sessions-status.error {
+  color: var(--red);
+}
+
+.ssh-sessions-retry {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+.ssh-sessions-retry:hover {
+  background: var(--hover);
 }
 
 /* — Оверлей подключения над terminal-pane — */

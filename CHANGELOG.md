@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-21
+
+### Added
+
+- **Remote file system for SSH tabs** — the file tree and code editor now work over SSH, not just the terminal:
+  - Browse, create, rename, delete, copy, move, read and write remote files through short-lived non-interactive calls multiplexed over the system `ssh` (ControlMaster) — no extra authentication and no agent installed on the server
+  - Path-traversal protection is enforced on the remote side; file-tree watching falls back to polling expanded directories (`fs.watch` isn't available over SSH), with an immediate refresh after your own changes
+  - On Windows, where OpenSSH has no ControlMaster, the tree is explicitly not synced instead of silently showing local files
+- **CLI-agent tracking over SSH** — remote shell hooks (zsh and bash) emit real OSC 7/133 on the server, so the working directory, busy indicator, quick replies and Shift+Enter behave as in local tabs; falls back automatically to an optimistic busy state (with manual reset) when the server blocks hooks (`RemoteCommand`/`ForceCommand`)
+- **Persistent SSH sessions via tmux** — an SSH tab can attach to a named tmux session on the server, so a network drop, laptop sleep or app restart no longer kills what's running:
+  - Closing a tab detaches instead of killing the session, with no busy-close confirmation for persistent tabs; restoring tabs after a restart re-attaches the same session
+  - If another client takes over the session, the tab shows a "detached" overlay instead of a generic connection error
+  - Working directory and busy state pass through tmux (DCS passthrough, tmux ≥ 3.3) and are resynced right after attach
+  - If tmux isn't installed on the server, eTty detects the package manager and offers to type the install command into the tab's own terminal — nothing runs without confirmation, and any `sudo` password is entered by you as usual
+  - Configurable tmux socket per connection (`-L`, default `etty`; empty uses the server's default socket)
+- **SSH / tmux mode switch in the SSH panel** — a segmented control in the panel header selects what a click on a connection does; the choice is remembered (`ssh.panelMode`):
+  - **SSH** — a regular tab, drag-and-drop reordering as before
+  - **tmux** — the row expands into the list of tmux sessions on the server, including ones not created by eTty
+  - Several independent sessions per connection (`etty-<id>`, `-2`, `-3`…); clicking a session that's already open switches to its tab instead of connecting twice
+  - Session context menu: Connect / Rename / Kill (with confirmation); auto-refresh while the panel is open, plus an immediate refresh when a tmux tab opens, closes or drops
+  - Sessions are listed without an open tab through a per-connection background ControlMaster that reuses a live tab's channel when there is one; clear states for Windows, tmux not installed, and "connect to see sessions" when a password prompt is needed
+- **tmux badge on tabs** — persistent tabs get a "tmux" badge and a separate accent color
+
+### Changed
+
+- The persistence mode is no longer a connection field in the edit form — it's chosen with the SSH / tmux switch in the panel; connections saved earlier keep working through a backward-compatible fallback
+- Native delete-confirmation dialogs moved from the main process to the renderer's `ConfirmDialog`, since main doesn't know whether the target is local or remote
+- A tmux tab that drops right after start while another tab of the same connection is open is retried with a growing delay instead of showing an error immediately
+
 ## [0.2.0] - 2026-09-10
 
 ### Added

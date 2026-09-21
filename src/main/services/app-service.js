@@ -17,8 +17,9 @@ export class AppService {
    * @param {Object} deps.tabState
    * @param {Function} deps.loadSettings
    * @param {Function} deps.saveSettings
+   * @param {import('../ssh/ssh-connection-master-registry.js').SshConnectionMasterRegistry} [deps.sshConnectionMasters]
    */
-  constructor({ ptyManager, fileManager, historyManager, agentService, tabState, loadSettings, saveSettings }) {
+  constructor({ ptyManager, fileManager, historyManager, agentService, tabState, loadSettings, saveSettings, sshConnectionMasters }) {
     this._ptyManager = ptyManager
     this._fileManager = fileManager
     this._historyManager = historyManager
@@ -26,6 +27,7 @@ export class AppService {
     this._tabState = tabState
     this._loadSettings = loadSettings
     this._saveSettings = saveSettings
+    this._sshConnectionMasters = sshConnectionMasters
     this._mainWindow = null
   }
 
@@ -178,11 +180,13 @@ export class AppService {
     }
     this._ptyManager.killAll()
     this._fileManager.unwatchAll()
+    this._sshConnectionMasters?.disposeAll()
   }
 
   quit() {
     this._ptyManager.killAll()
     this._fileManager.unwatchAll()
+    this._sshConnectionMasters?.disposeAll()
     app.quit()
   }
 }

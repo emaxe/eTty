@@ -123,6 +123,18 @@ export class SshConnectionDialog {
     hooksRow.appendChild(hooksToggle)
     body.appendChild(hooksRow)
 
+    // Режим запуска (обычная сессия / tmux) выбирается ПРИ ПОДКЛЮЧЕНИИ — переключатель SSH/tmux
+    // в боковой панели, см. SshPanel — не здесь; форма хранит только сокет, который тот режим
+    // будет использовать, когда его выберут.
+    const socketInput = this._field(
+      body, 'Сокет tmux', 'text',
+      connection?.tmuxSocket ?? 'etty',
+      'etty (пусто — сокет по умолчанию, tmux ls без -L)'
+    )
+    socketInput.title = 'Используется, когда вкладка этого подключения открывается в режиме tmux '
+      + '(переключатель SSH/tmux в боковой панели) — отдельный сокет tmux-сервера (-L), не трогает '
+      + 'сокет/сессии пользователя по умолчанию. Пусто — сокет по умолчанию (tmux ls без -L).'
+
     const errorEl = document.createElement('div')
     errorEl.className = 'settings-dialog-error'
     errorEl.hidden = true
@@ -159,6 +171,15 @@ export class SshConnectionDialog {
       if (!user) return this._showError(errorEl, 'Укажите пользователя')
       if (port < 1 || port > 65535) return this._showError(errorEl, 'Порт должен быть от 1 до 65535')
 
+      const tmuxSocket = socketInput.value.trim()
+      // Тот же алфавит, что и SESSION_NAME_RE на main-стороне (remote-shell-hooks.js) — сокет
+      // становится частью текста remote-команды, проверяем здесь для быстрой обратной связи;
+      // main всё равно перепроверит перед подстановкой. Проверка безусловная (не только для
+      // tmux-режима) — режим теперь выбирается позже, при подключении, а не в этой форме.
+      if (tmuxSocket && !/^[A-Za-z0-9_-]{1,64}$/.test(tmuxSocket)) {
+        return this._showError(errorEl, 'Имя сокета tmux — только буквы/цифры/`_`/`-`')
+      }
+
       const secretValue = secretInput.value
       const secret = this._clearSecret ? null : (secretValue ? secretValue : undefined)
 
@@ -172,6 +193,7 @@ export class SshConnectionDialog {
         privateKeyPath: keyPathInput.value.trim(),
         extraArgs: extraArgsInput.value.trim(),
         injectShellIntegration: hooksToggle.querySelector('input').checked,
+        tmuxSocket,
         secret
       })
     })

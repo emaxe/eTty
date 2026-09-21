@@ -96,4 +96,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sshReorder: (ids) => ipcRenderer.invoke(IPC_CHANNELS.SSH_REORDER, ids),
   onSshFsReady: (cb) => onIPC(IPC_CHANNELS.SSH_FS_READY, (_, info) => cb(info)),
   sshFsRetry: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.SSH_FS_RETRY, sessionId),
+  onSshSessionState: (cb) => onIPC(IPC_CHANNELS.SSH_SESSION_STATE, (_, info) => cb(info)),
+  onSshTmuxMissing: (cb) => onIPC(IPC_CHANNELS.SSH_TMUX_MISSING, (_, info) => cb(info)),
+  sshMasterAcquire: (connectionId) => ipcRenderer.invoke(IPC_CHANNELS.SSH_MASTER_ACQUIRE, connectionId),
+  sshMasterRelease: (connectionId) => ipcRenderer.send(IPC_CHANNELS.SSH_MASTER_RELEASE, connectionId),
+  sshSessionsList: (connectionId, force) => ipcRenderer.invoke(IPC_CHANNELS.SSH_SESSIONS_LIST, connectionId, force),
+  sshSessionKill: (connectionId, name) => ipcRenderer.invoke(IPC_CHANNELS.SSH_SESSION_KILL, { connectionId, name }),
+  sshSessionRename: (connectionId, name, newName) => ipcRenderer.invoke(IPC_CHANNELS.SSH_SESSION_RENAME, { connectionId, name, newName }),
 })

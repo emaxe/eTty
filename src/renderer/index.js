@@ -39,6 +39,8 @@ import { createScopedFsApi } from './core/adapters/scoped-fs-api.js'
 import { AppContainer } from './core/container.js'
 import { diagnostics } from './core/diagnostics.js'
 import { GitStatusService } from './services/git-status-service.js'
+import { buildSessionNameBase, pickFreeSessionName } from '../shared/ssh-session-name.js'
+import { resolveSshPersistence } from '../shared/ssh-persistence.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
@@ -104,6 +106,15 @@ async function createTab(api, cwd, tabId, ssh) {
     // remoteCwd — последний известный удалённый cwd при восстановлении вкладки (см.
     // tab-bar.js exportState/restore-циклы ниже); не часть ssh.connectionId/label самих по себе.
     const { remoteCwd, ...sshInfo } = ssh
+    // Имя tmux-сессии генерируется ОДИН раз здесь, а не при каждом connectSshTab: стабильно при
+    // восстановлении вкладки by construction (детерминировано от tabId) и всегда проходит
+    // SESSION_NAME_RE. Только для режима tmux — обычная SSH-вкладка (persistence !== 'tmux')
+    // имени не получает. Если sessionName уже пришёл (восстановление, наследование по «+») —
+    // не трогаем: main сам решает, использовать ли его (см. resolveSshPersistence).
+    if (sshInfo.persistence === 'tmux' && !sshInfo.sessionName) {
+      const tabIdHex = tabId.replace(/[^A-Za-z0-9]/g, '').slice(0, 8) || Math.random().toString(16).slice(2, 10)
+      sshInfo.sessionName = `${buildSessionNameBase(sshInfo.connectionId)}-${tabIdHex}`.slice(0, 64)
+    }
     return { term, fitAddon, pid: null, rootPath: cwd, tabId, ssh: sshInfo, remoteCwd: remoteCwd || null }
   }
 
@@ -527,12 +538,52 @@ async function init() {
     }
   })
 
+  /**
+   * Имена tmux-сессий, занятые ВСЕМИ открытыми вкладками этого подключения — в т.ч. отключёнными
+   * (pid не задан): такая вкладка может переподключиться, и если её имя достанется новой вкладке,
+   * `new-session -A -D` перехватит сессию.
+   */
+  function claimedSessionNames(connectionId) {
+    return tabBar.tabs
+      .filter(t => t.ssh?.connectionId === connectionId && t.ssh.sessionName)
+      .map(t => t.ssh.sessionName)
+  }
+
+  /**
+   * Имя tmux-сессии для подключения/переподключения. По умолчанию — детерминированное от
+   * connectionId: «одна постоянная сессия на подключение» — закрыли вкладку, подключились
+   * заново (клик в панели SSH или "+") — вернулись в ту же сессию, а не создали пустую новую
+   * (см. docs/features/ssh-persistent-sessions/, баг: сессия не находилась после переподключения).
+   * Если это имя уже занято ЖИВОЙ вкладкой (в т.ч. при «+ Новая сессия» из панели, передающей
+   * `knownNames` — известные с сервера имена) — берём первое свободное `<base>-2`, `-3`, …,
+   * иначе `new-session -A -D` у tmux отцепил бы уже открытую вкладку.
+   * @param {string} connectionId
+   * @param {string[]} [knownNames] — дополнительные занятые имена (сессии с сервера — панель
+   *   передаёт актуальный список при «+ Новая сессия», см. features/ssh/ssh-panel.js)
+   */
+  function pickNewTmuxSessionName(connectionId, knownNames = []) {
+    const base = buildSessionNameBase(connectionId)
+    const taken = [...claimedSessionNames(connectionId), ...knownNames]
+    return pickFreeSessionName(base, taken)
+  }
+
   bus.on('tab.add', async (payload) => {
     if (settingsPage.isVisible()) return
     const active = tabBar.getActive()
     const cwd = active ? active.rootPath : startCwd
-    // Активная SSH-вкладка + "+" → новая вкладка того же подключения (REQ: наследование SSH)
-    const sshInherit = active?.ssh ? { connectionId: active.ssh.connectionId, label: active.ssh.label } : null
+    // Активная SSH-вкладка + "+" → новая вкладка того же подключения (REQ: наследование SSH).
+    // persistence — от активной вкладки; для tmux всегда НОВОЕ имя сессии (не переиспользуем
+    // текущее — иначе new-session -A -D отцепил бы вкладку-источник).
+    const sshInherit = active?.ssh
+      ? {
+          connectionId: active.ssh.connectionId,
+          label: active.ssh.label,
+          persistence: active.ssh.persistence,
+          sessionName: active.ssh.persistence === 'tmux'
+            ? pickNewTmuxSessionName(active.ssh.connectionId, sshPanel.getKnownSessionNames(active.ssh.connectionId))
+            : null
+        }
+      : null
     let tabData
     try {
       tabData = await createTab(api, cwd, null, sshInherit)
@@ -556,16 +607,43 @@ async function init() {
     if (sshInherit) connectSshTab(tab)
   })
 
-  // Клик по строке в SshPanel / его контекстное меню — новая SSH-вкладка + подключение
-  bus.on('ssh.connect', async ({ connectionId }) => {
+  /**
+   * Клик по подключению/сессии в SshPanel — новая SSH-вкладка + подключение.
+   * @param {{ connectionId: string, persistence?: 'off'|'tmux', sessionName?: string,
+   *   knownSessionNames?: string[], forceNew?: boolean }} payload — `persistence`/`sessionName` —
+   *   из режима панели (SSH/tmux, клик по конкретной сессии в списке); не заданы — main решает
+   *   сам по `connection.persistence` (обратная совместимость, см. ssh/ssh-persistence.js).
+   *   `knownSessionNames` — известные с сервера имена сессий (панель передаёт их для
+   *   «+ Новая сессия», чтобы не столкнуться с сессией без открытой вкладки).
+   *   `forceNew` — «+ Новая сессия»: без `sessionName` это НЕ «подключись к дефолтной сессии»,
+   *   а «создай новую со свободным именем».
+   */
+  bus.on('ssh.connect', async ({ connectionId, persistence, sessionName, knownSessionNames, forceNew }) => {
     if (settingsPage.isVisible()) return
     const connection = sshPanel.getConnection(connectionId)
     if (!connection) return
+    // Уже открытая живая вкладка этой же (или дефолтной) сессии — переключаемся на неё вместо
+    // второго подключения: иначе new-session -A -D отцепило бы собственную вкладку пользователя
+    // (см. план, «важная деталь»). При forceNew без имени дефолтной сессии не подразумевается —
+    // иначе вторая «новая» сессия всегда упиралась бы в вкладку с базовым именем.
+    const targetName = sessionName || (persistence === 'tmux' && !forceNew ? buildSessionNameBase(connectionId) : null)
+    if (targetName) {
+      const already = tabBar.tabs.find(t => t.ssh?.connectionId === connectionId && t.ssh.sessionName === targetName && t.pid != null)
+      if (already) {
+        tabBar.switchTo(tabBar.tabs.indexOf(already))
+        return
+      }
+    }
     const active = tabBar.getActive()
     const cwd = active ? active.rootPath : startCwd
     let tabData
     try {
-      tabData = await createTab(api, cwd, null, { connectionId: connection.id, label: connection.label })
+      tabData = await createTab(api, cwd, null, {
+        connectionId: connection.id,
+        label: connection.label,
+        persistence,
+        sessionName: sessionName || (persistence === 'tmux' ? pickNewTmuxSessionName(connectionId, knownSessionNames) : null)
+      })
     } catch (e) {
       console.error('[ssh.connect] Failed to create tab', e.message)
       return
@@ -576,6 +654,18 @@ async function init() {
     setupTabHandlers(tab)
     tab.fitAddon.fit()
     connectSshTab(tab)
+  })
+
+  // Сессию переименовали из контекстного меню панели (ssh-panel.js) — если у неё есть открытая
+  // вкладка, обновляем её sessionName. Без этого следующий реконнект создал бы НОВУЮ пустую
+  // сессию под старым (уже не существующим) именем вместо attach к переименованной.
+  bus.on('ssh.session.renamed', ({ connectionId, from, to }) => {
+    const tab = tabBar.tabs.find(t => t.ssh?.connectionId === connectionId && t.ssh.sessionName === from)
+    if (!tab) return
+    tab.ssh.sessionName = to
+    tabBar.setTabTmux(tab, tab.ssh.persistence === 'tmux')
+    tabBar._updateTabLabel(tab)
+    tabBar.syncStore()
   })
 
   // Регистрация вынесена выше (см. рядом с fileTree) — здесь просто резолвим тот же singleton.
@@ -599,6 +689,9 @@ async function init() {
     tab._sshOverlay?.destroy()
     tabBar.removeTab(index)
     if (tab.pid != null) api.ptyKill(tab.pid)
+    // Закрытие tmux-вкладки = detach: панели не ждать полла, чтобы погасить индикатор «подключена».
+    // pty:exit для этой вкладки уже не найдёт (удалена выше) — второго события не будет.
+    if (tab.pid != null && tab._sshPersistent && tab.ssh) bus.emit('ssh.session.activity', { connectionId: tab.ssh.connectionId })
   }
 
   // Низкоуровневый исполнитель закрытия (без подтверждения) — на случай прочих эмитентов.
@@ -616,7 +709,9 @@ async function init() {
     const targets = (tabs && tabs.length ? tabs : [tabBar.tabs[index]]).filter(Boolean)
     if (targets.length === 0) return
 
-    const busyTabs = targets.filter(t => t.isBusy)
+    // Персистентная (tmux) SSH-вкладка не подтверждается: закрытие — это detach, а не kill
+    // (см. план, Этап 3), процесс на сервере не убивается, предупреждение вводило бы в заблуждение.
+    const busyTabs = targets.filter(t => t.isBusy && !t._sshPersistent)
     if (busyTabs.length > 0) {
       let message
       if (targets.length === 1) {
@@ -689,6 +784,13 @@ async function init() {
     store: r('store'),
     api: r('api'),
     confirmDialog: r('confirmDialog'),
+    initialMode: config.ssh?.panelMode === 'tmux' ? 'tmux' : 'ssh',
+    onModeChange: (mode) => {
+      if (!config.ssh) config.ssh = {}
+      config.ssh.panelMode = mode
+      api.settingsSave(config)
+    },
+    onClose: () => appStore.set('ui.sshPanelVisible', false),
   }))
   sshPanel = container.resolve('sshPanel')
   // Список подключений нужен сразу — для восстановления SSH-вкладок и наследования по "+",
@@ -1085,10 +1187,26 @@ async function init() {
           clearTimeout(tab._sshHookDetectTimer)
           tab._sshHookDetectTimer = null
         }
+        if (!tab._sshOverlay) tab._sshOverlay = new SshTabOverlay(tab.container)
+
+        // Обрыв/перехват tmux-вкладки меняет число клиентов сессии — панель обновляет индикатор.
+        if (tab._sshPersistent) bus.emit('ssh.session.activity', { connectionId: tab.ssh.connectionId })
+
+        // Персистентная сессия, перехваченная другим клиентом (`new-session -A -D` отцепляет
+        // прежнего) — локальный ssh получает exitCode 0, а не разрыв. Существующий авто-реконнект
+        // ниже требует exitCode !== 0 и на это условие не сработает — отдельная ветка с понятным
+        // сообщением вместо «разорвано (код 0)» (см. план, Этап 3).
+        if (tab._sshPersistent && exitCode === 0 && tab._sshEverConnected) {
+          tab._sshOverlay.showDetached(tab.ssh.label, () => connectSshTab(tab))
+          return
+        }
+
         // Инжект хуков (Этап 2) мог конфликтовать с RemoteCommand в ~/.ssh/config пользователя
         // или ForceCommand на сервере — один безусловный реконнект без remote-команды,
         // прежде чем показать ошибку. injectedHooks читается ДО детект-таймаута (8с), поэтому
         // при быстром падении (<3с) достоверно отражает, инжектились ли хуки для ЭТОЙ попытки.
+        // В tmux-режиме remote-команда остаётся (см. ssh-command.js: persistence тянет её за
+        // собой независимо от хуков) — ретрай лишь выключает OSC/ZDOTDIR-хуки, сама сессия жива.
         const injectedHooks = !tab._sshHooksMissing
         const failedFast = exitCode !== 0
           && tab._sshConnectedAt
@@ -1098,7 +1216,25 @@ async function init() {
           connectSshTab(tab, { skipShellIntegration: true })
           return
         }
-        if (!tab._sshOverlay) tab._sshOverlay = new SshTabOverlay(tab.container)
+        // Персистентные (tmux) вкладки иногда быстро падают (exitCode≠0, пустой терминал, без
+        // единого байта вывода) именно КОГДА к этому же подключению уже открыта другая вкладка —
+        // воспроизведено на практике; пропадает, как только остаётся одна живая вкладка этого
+        // подключения, и не решается одной мгновенной попыткой (см. ретрай выше — он тоже может
+        // попасть в то же окно). Это не гонка записи общих файлов хуков в $HOME/.cache/etty —
+        // проверено адверсариальным стресс-тестом. Один из подтверждённых источников такого
+        // симптома — удалённый rootPath активной SSH-вкладки, попавший в локальный cwd `ssh`
+        // (исправлено в PtyManager.resolveSshSpawnCwd); повтор С ЗАДЕРЖКОЙ оставлен для
+        // остальных быстрых падений — даём несколько попыток, прежде чем показать ошибку насовсем.
+        if (tab._sshPersistent && failedFast && (tab._sshTmuxRaceRetries || 0) < APP_CONFIG.SSH_TMUX_RACE_MAX_RETRIES) {
+          tab._sshTmuxRaceRetries = (tab._sshTmuxRaceRetries || 0) + 1
+          const attempt = tab._sshTmuxRaceRetries
+          tab._sshOverlay.showConnecting(tab.ssh.label)
+          setTimeout(() => {
+            // Пользователь мог сам переподключить/закрыть вкладку, пока мы ждали — не мешаем.
+            if (tab.pid == null && tabBar.tabs.includes(tab)) connectSshTab(tab, { isTmuxRaceRetry: true })
+          }, APP_CONFIG.SSH_TMUX_RACE_RETRY_DELAY_MS * attempt)
+          return
+        }
         tab._sshOverlay.showError(tab.ssh.label, exitCode, () => connectSshTab(tab))
         return
       }
@@ -1127,6 +1263,12 @@ async function init() {
     if (!tab) return
     tab._sshFsAvailable = available
     tab._sshFsReason = available ? null : (reason || null)
+    // caps.tmuxPassthrough — используется в onSshSessionState для решения, доверять ли pane_path
+    // как доказательству живых хуков (см. там же).
+    if (caps) tab._sshFsCaps = caps
+    // Служебный канал поднят = авторизация прошла, tmux-клиент вот-вот подцепится — поздний,
+    // более точный сигнал для панели, чем момент ptyCreate (см. connectSshTab).
+    if (tab._sshPersistent) bus.emit('ssh.session.activity', { connectionId: tab.ssh.connectionId })
     if (available) {
       // caps.home — стартовый корень удалённого дерева (см. F в плане); remoteCwd сохраняется
       // отдельно, чтобы восстановленная вкладка не «прыгала» обратно в $HOME при реконнекте.
@@ -1135,6 +1277,64 @@ async function init() {
       tabBar.syncStore()
     }
     if (tabBar.getActive() === tab) syncActiveFsContext()
+  })
+
+  // Ресинк персистентной (tmux) сессии сразу после attach (Этап 2) — без него вкладка не знает
+  // cwd/busy до следующего промпта. `pathFromOsc` — то, что tmux сам забрал из НАШЕГО OSC 7,
+  // рабочий фолбэк, даже когда `markSshHooksAlive` ниже не срабатывает (tmux < 3.3/passthrough
+  // недоступен) — тогда `_sshHooksMissing` намеренно остаётся true, чтобы не терять существующий
+  // оптимистичный busy-фолбэк.
+  api.onSshSessionState(({ pid, currentPath, pathFromOsc, currentCommand }) => {
+    const tab = tabBar.tabs.find(t => t.pid === pid)
+    if (!tab || !tab.ssh) return
+
+    const newPath = currentPath || pathFromOsc
+    if (newPath) {
+      tab.remoteCwd = newPath
+      tab.rootPath = newPath
+      tabBar._updateTabLabel(tab)
+      if (tabBar.getActive() === tab) {
+        syncActiveFsContext()
+        updateNavButtons()
+      }
+    }
+
+    // Признак busy — эвристика: текущая команда панели не похожа на login-shell. Ручной сброс
+    // (_busyOptimistic, см. StatusBar._createClearOptimisticBusyButton) остаётся доступен.
+    const looksLikeShell = !currentCommand || /^-?(zsh|bash|sh|fish|csh|tcsh|dash)$/.test(currentCommand)
+    if (!looksLikeShell) {
+      tab.isBusy = true
+      tab._busyOptimistic = true
+      tabBar._updateTabLabel(tab)
+    }
+
+    // pane_path (tmux сам забрал его из нашего OSC 7) доказывает, что хуки исполнились —
+    // засчитываем это, только если DCS-passthrough вообще доступен (caps из ssh:fs-ready,
+    // см. onSshFsReady ниже): иначе OSC 133 наружу всё равно не пройдёт, и снятие
+    // _sshHooksMissing здесь лишило бы вкладку оптимистичного busy-фолбэка без замены.
+    if (pathFromOsc && tab._sshFsCaps?.tmuxPassthrough) markSshHooksAlive(tab)
+  })
+
+  // Постоянные сессии запрошены, но tmux на сервере не найден (Этап 1) — main уже распознал
+  // менеджер пакетов и прислал готовую команду (см. tmux-install.js). Ничего не выполняется
+  // от имени пользователя без явного согласия; сама команда вводится в ЭТОТ ЖЕ терминал —
+  // если нужен sudo-пароль, пользователь вводит его как обычно, вживую.
+  api.onSshTmuxMissing(({ pid, installCmd }) => {
+    const tab = tabBar.tabs.find(t => t.pid === pid)
+    if (!tab || !tab.ssh || tab._sshTmuxInstallOffered) return
+    tab._sshTmuxInstallOffered = true
+    confirmDialog.open({
+      title: 'tmux не найден на сервере',
+      message: `На «${tab.ssh.label}» включены постоянные сессии, но tmux не установлен. `
+        + `Ввести в этом терминале команду:\n${installCmd}\n\n`
+        + 'Если появится запрос пароля sudo — введите его как обычно.',
+      confirmText: 'Установить',
+      cancelText: 'Не сейчас',
+    }).then((confirmed) => {
+      if (!confirmed || tab.pid !== pid) return
+      api.ptyWrite(pid, installCmd + '\n')
+      tab._sshTmuxInstallPending = true
+    })
   })
 
   /**
@@ -1217,6 +1417,19 @@ async function init() {
         if (targetTab.ssh) markSshHooksAlive(targetTab)
         if (!isBusy) targetTab.activeAgentId = null
 
+        // Установка tmux (см. onSshTmuxMissing ниже) завершилась — команда вернула управление
+        // shell'у (busy → done). Не переподключаем молча: установка могла упасть, спросить
+        // надёжнее, чем гадать по коду выхода команды через OSC.
+        if (targetTab._sshTmuxInstallPending && wasBusy && !isBusy) {
+          targetTab._sshTmuxInstallPending = false
+          confirmDialog.open({
+            title: 'Установка tmux завершена?',
+            message: 'Если команда установки отработала успешно — переподключиться и включить постоянные сессии?',
+            confirmText: 'Переподключиться',
+            cancelText: 'Не сейчас',
+          }).then((confirmed) => { if (confirmed) connectSshTab(targetTab) })
+        }
+
         if (wasBusy !== isBusy && tabBar.getActive()?.pid === pid) {
           updateNavButtons()
           syncStatusBarTerminalState()
@@ -1260,11 +1473,14 @@ async function init() {
    * (с ssh.connectionId) и пересоздаёт keyboardHandler/oscHandler под новый pid
    * (см. attachPidHandlers).
    * @param {object} tab
-   * @param {{ skipShellIntegration?: boolean }} [opts] — `skipShellIntegration` форсирует ОДНУ
-   *   попытку без инжекта remote-хуков (Этап 2); используется авто-реконнектом из onPtyExit
-   *   при подозрении на конфликт с RemoteCommand/ForceCommand на сервере.
+   * @param {{ skipShellIntegration?: boolean, isTmuxRaceRetry?: boolean }} [opts] —
+   *   `skipShellIntegration` форсирует ОДНУ попытку без инжекта remote-хуков (Этап 2);
+   *   используется авто-реконнектом из onPtyExit при подозрении на конфликт с
+   *   RemoteCommand/ForceCommand на сервере. `isTmuxRaceRetry` — этот вызов сам является
+   *   отложенным авто-повтором из onPtyExit (см. там же) — не сбрасывает счётчики ретраев,
+   *   иначе они бы обнулялись на каждой собственной попытке и ограничение стало бы бессмысленным.
    */
-  async function connectSshTab(tab, { skipShellIntegration = false } = {}) {
+  async function connectSshTab(tab, { skipShellIntegration = false, isTmuxRaceRetry = false } = {}) {
     if (!tab.ssh || tab._sshConnecting) return
     tab._sshConnecting = true
     try {
@@ -1278,6 +1494,16 @@ async function init() {
 
       tab.ssh.label = connection.label
       tab.folderName = connection.label
+      // Режим ЭТОГО запуска — явный tab.ssh.persistence (выбран в панели SSH/tmux при создании
+      // вкладки), иначе fallback на connection.persistence (обратная совместимость с
+      // восстановленными вкладками/старым кодом панели, см. shared/ssh-persistence.js).
+      // Вычисляем заново на каждый (ре)коннект — нужно синхронно, ДО ответа ptyCreate, для
+      // распознавания «сессию перехватил другой клиент» (exitCode 0, см. onPtyExit) — то условие,
+      // которое обычный auto-reconnect не покрывает (он ждёт exitCode !== 0).
+      const resolvedPersistence = resolveSshPersistence(tab.ssh, connection)
+      tab.ssh.persistence = resolvedPersistence
+      tab._sshPersistent = resolvedPersistence === 'tmux'
+      tabBar.setTabTmux(tab, tab._sshPersistent)
       tabBar._updateTabLabel(tab)
       tab._sshOverlay.showConnecting(connection.label)
       tab.term.reset()
@@ -1287,8 +1513,11 @@ async function init() {
         tab._sshHookDetectTimer = null
       }
       // Обычная (не авто-реконнектная) попытка — даём шанс на новый авто-реконнект,
-      // если и эта тоже быстро упадёт.
-      if (!skipShellIntegration) tab._sshHookRetried = false
+      // если и эта тоже быстро упадёт. Собственные отложенные повторы (isTmuxRaceRetry) не
+      // сбрасывают ни этот, ни tmux-race-счётчик ниже — иначе ограничение попыток было бы
+      // бессмысленным (обнулялось бы прямо перед использованием).
+      if (!skipShellIntegration && !isTmuxRaceRetry) tab._sshHookRetried = false
+      if (!isTmuxRaceRetry) tab._sshTmuxRaceRetries = 0
 
       let result
       try {
@@ -1297,7 +1526,7 @@ async function init() {
           rows: tab.term.rows || TERMINAL_CONFIG.DEFAULT_ROWS,
           cwd: tab.rootPath,
           tabId: tab.tabId,
-          ssh: { connectionId: connection.id, skipShellIntegration },
+          ssh: { connectionId: connection.id, skipShellIntegration, sessionName: tab.ssh.sessionName, persistence: resolvedPersistence },
         })
       } catch (e) {
         result = { error: e.message }
@@ -1313,9 +1542,23 @@ async function init() {
       tab._sshEverConnected = true
       tab._sshConnectedAt = Date.now()
       tab._sshHooksAlive = false
+      // Main — источник истины на случай fallback-разночтения (см. resolveSshPersistence) —
+      // маловероятно после resolvedPersistence выше, но самосогласованность важнее допущения.
+      if (result.persistence && result.persistence !== tab.ssh.persistence) {
+        tab.ssh.persistence = result.persistence
+        tab._sshPersistent = result.persistence === 'tmux'
+        tabBar.setTabTmux(tab, tab._sshPersistent)
+      }
+      // Панель SSH/tmux: клиент на сервере появится чуть позже (auth + attach) — панель сама
+      // выдерживает паузу и дебаунсит вместе с ssh:fs-ready ниже по цепочке.
+      if (tab._sshPersistent) bus.emit('ssh.session.activity', { connectionId: connection.id })
       // Новый pid — предыдущий результат ssh:fs-ready относился к прошлой попытке
       tab._sshFsAvailable = undefined
       tab._sshFsReason = null
+      // Новая попытка подключения — если пользователь отказался ставить tmux в прошлый раз,
+      // предложение должно появиться снова (сервер мог измениться, или человек передумал).
+      tab._sshTmuxInstallOffered = false
+      tab._sshTmuxInstallPending = false
       // Хуки отключены для этой попытки (авто-реконнект) либо для подключения целиком —
       // сразу включаем оптимистичный busy (Этап 1), не дожидаясь детект-таймаута.
       tab._sshHooksMissing = skipShellIntegration || connection.injectShellIntegration === false

@@ -8,6 +8,23 @@ import { ContextMenu } from './components/base/context-menu/context-menu.js'
 import { DraggableTabs } from './components/base/tabs/draggable-tabs.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 import { Icons } from './icons.js'
+import { buildSessionNameBase } from '../shared/ssh-session-name.js'
+
+/**
+ * Текст бейджа tmux-вкладки: `tmux` для сессии с базовым именем, `tmux N` для авто-нумерованных
+ * (`<base>-N`), `tmux · <имя>` для сессий с пользовательским именем — иначе несколько
+ * tmux-вкладок одного сервера неразличимы (у всех label подключения).
+ * @param {{ connectionId?: string, sessionName?: string }|null} ssh
+ */
+function tmuxBadgeText(ssh) {
+  const name = ssh?.sessionName
+  if (!name || !ssh.connectionId) return 'tmux'
+  const base = buildSessionNameBase(ssh.connectionId)
+  if (name === base) return 'tmux'
+  const suffix = name.startsWith(`${base}-`) ? name.slice(base.length + 1) : ''
+  if (/^\d+$/.test(suffix)) return `tmux ${suffix}`
+  return `tmux · ${name}`
+}
 
 export class TabBar {
   constructor({ tabBarEl, terminalContainerEl, eventBus, store }) {
@@ -40,7 +57,7 @@ export class TabBar {
       tabId: t.tabId,
       folderName: t.folderName,
       termTitle: t.termTitle,
-      ssh: t.ssh ? { connectionId: t.ssh.connectionId, label: t.ssh.label } : null,
+      ssh: t.ssh ? { connectionId: t.ssh.connectionId, label: t.ssh.label, sessionName: t.ssh.sessionName, persistence: t.ssh.persistence } : null,
       sshFsAvailable: t._sshFsAvailable ?? null
     })))
     this._store.set('tabs.activeIndex', this.activeIndex)
@@ -53,7 +70,10 @@ export class TabBar {
     this.terminalContainerEl.appendChild(container)
     term.open(container)
 
-    const element = this._createTabEl(folderName, '', !!ssh)
+    // Известно уже здесь для восстановленных вкладок (persistence пережил tabs-state.json);
+    // для новых — уточнится позже через setTabTmux() из connectSshTab, когда main подтвердит
+    // resolved persistence (см. shared/ssh-persistence.js).
+    const element = this._createTabEl(folderName, '', !!ssh, ssh?.persistence === 'tmux' ? tmuxBadgeText(ssh) : null)
 
     const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '', tabId, ssh: ssh || null,
       remoteCwd: remoteCwd || null,
@@ -156,9 +176,11 @@ export class TabBar {
     this._updateTabLabel(tab)
   }
 
-  _createTabEl(folderName, termTitle, isSsh = false) {
+  /** @param {string|null} tmuxBadge — текст бейджа tmux-вкладки (см. tmuxBadgeText), null — не tmux */
+  _createTabEl(folderName, termTitle, isSsh = false, tmuxBadge = null) {
     const el = document.createElement('div')
     el.className = isSsh ? 'tab tab-ssh' : 'tab'
+    if (tmuxBadge) el.classList.add('tab-tmux')
 
     const handle = document.createElement('span')
     handle.className = 'tab-drag-handle'
@@ -171,6 +193,13 @@ export class TabBar {
       icon.className = 'tab-icon'
       icon.innerHTML = Icons.ssh
       el.appendChild(icon)
+    }
+
+    if (tmuxBadge) {
+      const badge = document.createElement('span')
+      badge.className = 'tab-badge'
+      badge.textContent = tmuxBadge
+      el.appendChild(badge)
     }
 
     const folder = document.createElement('span')
@@ -263,7 +292,7 @@ export class TabBar {
         rootPath: t.rootPath,
         isActive: i === this.activeIndex,
         tabId: t.tabId,
-        ssh: t.ssh ? { connectionId: t.ssh.connectionId, label: t.ssh.label } : undefined,
+        ssh: t.ssh ? { connectionId: t.ssh.connectionId, label: t.ssh.label, sessionName: t.ssh.sessionName, persistence: t.ssh.persistence } : undefined,
         // Последний известный удалённый cwd — при восстановлении пытаемся открыть именно его,
         // а не заново $HOME (см. index.js: restore + connectSshTab)
         remoteCwd: t.ssh ? (t.remoteCwd || undefined) : undefined
@@ -297,6 +326,36 @@ export class TabBar {
     tab.element.querySelector('.tab-title').textContent = tab.termTitle
     // SSH-вкладки держат folderName === ssh.label (не переименовываются по cd, см.
     // updateRootPath) — реальный текущий путь виден по hover через title.
-    if (tab.ssh) tab.element.title = `${tab.ssh.label}: ${tab.rootPath || ''}`
+    if (tab.ssh) {
+      const sessionPart = tab.ssh.persistence === 'tmux' && tab.ssh.sessionName ? ` · tmux:${tab.ssh.sessionName}` : ''
+      tab.element.title = `${tab.ssh.label}${sessionPart} — ${tab.rootPath || ''}`
+    }
+  }
+
+  /**
+   * Переключает индикацию tmux-вкладки (бейдж + класс) уже ПОСЛЕ создания элемента — нужно
+   * для новых (не восстановленных) вкладок: `persistence` этого запуска подтверждается main
+   * асинхронно (см. `resolveSshPersistence`), после того как элемент вкладки уже создан
+   * (`addTab()` строит его синхронно ДО ответа `pty:create`).
+   */
+  setTabTmux(tab, isTmux) {
+    if (!tab?.element) return
+    tab.element.classList.toggle('tab-tmux', !!isTmux)
+    let badge = tab.element.querySelector('.tab-badge')
+    // Текст пересчитываем на каждом вызове, а не только при смене класса: имя сессии приходит/
+    // меняется уже после создания элемента (переподключение, переименование из панели).
+    if (isTmux && badge) {
+      badge.textContent = tmuxBadgeText(tab.ssh)
+    } else if (isTmux && !badge) {
+      badge = document.createElement('span')
+      badge.className = 'tab-badge'
+      badge.textContent = tmuxBadgeText(tab.ssh)
+      // После .tab-icon (если есть) и до .tab-folder — тот же порядок, что в _createTabEl().
+      const icon = tab.element.querySelector('.tab-icon')
+      const folder = tab.element.querySelector('.tab-folder')
+      tab.element.insertBefore(badge, icon ? icon.nextSibling : folder)
+    } else if (!isTmux && badge) {
+      badge.remove()
+    }
   }
 }

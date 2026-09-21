@@ -1,9 +1,10 @@
 import fs from 'fs'
-import os from 'os'
 import path from 'path'
-import log from 'electron-log'
 import { buildRemoteInitCommand } from './ssh/remote-shell-hooks.js'
 import { createControlSocket } from './ssh/ssh-control-channel.js'
+import { applyAskpassEnv } from './ssh/askpass.js'
+import { resolveSshPersistence } from '../shared/ssh-persistence.js'
+import { SSH_SESSION_CONFIG } from '../shared/ssh-session-config.js'
 
 const IS_WIN = process.platform === 'win32'
 
@@ -11,8 +12,11 @@ const SSH_CANDIDATES = IS_WIN
   ? [path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'OpenSSH', 'ssh.exe')]
   : ['/usr/bin/ssh', '/bin/ssh', '/opt/homebrew/bin/ssh', '/usr/local/bin/ssh']
 
-/** Ищет исполняемый `ssh` в resolvedPath (PATH), иначе — в типовых системных путях. */
-function findSshBinary(resolvedPath) {
+/**
+ * Ищет исполняемый `ssh` в resolvedPath (PATH), иначе — в типовых системных путях. Экспортируется
+ * — переиспользуется `SshConnectionMaster` (ssh/ssh-connection-master.js) для панельного мастера.
+ */
+export function findSshBinary(resolvedPath) {
   const dirs = (resolvedPath || '').split(path.delimiter).filter(Boolean)
   const name = IS_WIN ? 'ssh.exe' : 'ssh'
   for (const dir of dirs) {
@@ -35,32 +39,30 @@ function findSshBinary(resolvedPath) {
   return IS_WIN ? 'ssh.exe' : 'ssh'
 }
 
-/** Создаёт временный SSH_ASKPASS-скрипт, печатающий пароль из переменной окружения. */
-function createAskpassScript() {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'etty-ssh-'))
-  const scriptPath = path.join(tmpDir, 'askpass.sh')
-  fs.writeFileSync(scriptPath, '#!/bin/sh\nprintf \'%s\' "$ETTY_SSH_PASS"\n', { mode: 0o700 })
-  fs.chmodSync(scriptPath, 0o700)
-  return { tmpDir, scriptPath }
-}
-
 /**
  * Собирает параметры запуска `ssh` для node-pty. Побочный эффект: при наличии
  * сохранённого пароля/passphrase на macOS/Linux создаёт временный SSH_ASKPASS-скрипт
  * (вызывающий код обязан очистить `tmpDir`, как и обычный ZDOTDIR).
  *
- * @param {{ connection: object, resolvedPath: string|null, skipShellIntegration?: boolean }} params
+ * @param {{ connection: object, resolvedPath: string|null, skipShellIntegration?: boolean,
+ *   sessionName?: string|null, persistence?: 'off'|'tmux' }} params
  *   `connection` — результат `ssh-store.getConnectionForLaunch()` (с расшифрованным `secret`).
  *   `skipShellIntegration` — форсированно отключить инжект хуков для ОДНОЙ попытки подключения
  *   (используется при авто-реконнекте после быстрого падения PTY, см. `connectSshTab` в renderer) —
  *   не путать с `connection.injectShellIntegration`, постоянной настройкой самого подключения.
+ *   `persistence` — режим ЭТОГО запуска (панель SSH/tmux в renderer передаёт его явно с каждым
+ *   pty:create); не задан — используется `connection.persistence` как fallback обратной
+ *   совместимости, см. `ssh/ssh-persistence.js`. При `'tmux'` remote-команда (и, значит, сама
+ *   tmux-сессия) нужна ВСЕГДА, даже если `skipShellIntegration` отключает именно OSC/ZDOTDIR-хуки —
+ *   см. `hooksWanted` ниже; `sessionName` в этом случае обязателен (валидируется в
+ *   `buildRemoteInitCommand`).
  * @returns {{ file: string, args: string[], env: object, tmpDir: string|null,
  *   control: { dir: string, path: string, target: string, port: number } | null }}
  *   `control` — параметры ControlMaster-сокета для `SshControlChannel` (Этап 4, удалённая ФС),
  *   `null` на Windows (OpenSSH для Windows не поддерживает мультиплексирование) либо когда путь
  *   к сокету не влезает в лимит `sun_path` даже с фолбэком на `/tmp` (см. `createControlSocket`).
  */
-export function buildSshLaunch({ connection, resolvedPath, skipShellIntegration = false }) {
+export function buildSshLaunch({ connection, resolvedPath, skipShellIntegration = false, sessionName = null, persistence = undefined }) {
   const file = findSshBinary(resolvedPath)
   const port = connection.port || 22
   const target = `${connection.user}@${connection.host}`
@@ -103,8 +105,20 @@ export function buildSshLaunch({ connection, resolvedPath, skipShellIntegration 
   // как раз нужен — с remote-командой ssh по умолчанию tty не выделяет. Один элемент argv,
   // без локального shell — node-pty вызывает ssh через execve, поэтому OpenSSH получит
   // этот текст как один-единственный «command», без собственного join/re-quoting.
-  if (connection.injectShellIntegration !== false && !skipShellIntegration) {
-    args.push(buildRemoteInitCommand())
+  //
+  // persistence:'tmux' требует remote-команду ВСЕГДА — это она поднимает саму tmux-сессию,
+  // а не только хуки. Поэтому условие — «хуки ИЛИ персистентность», не только хуки (ловушка,
+  // см. план: без этого выключенные хуки на подключении с включённым tmux молча ломали бы
+  // персистентность).
+  const resolvedPersistence = resolveSshPersistence({ persistence }, connection)
+  const hooksWanted = connection.injectShellIntegration !== false && !skipShellIntegration
+  if (resolvedPersistence === 'tmux' || hooksWanted) {
+    args.push(buildRemoteInitCommand({
+      persistence: resolvedPersistence,
+      sessionName: resolvedPersistence === 'tmux' ? sessionName : null,
+      hooks: hooksWanted,
+      socketName: connection.tmuxSocket ?? SSH_SESSION_CONFIG.DEFAULT_SOCKET
+    }))
   }
 
   const env = {
@@ -114,24 +128,10 @@ export function buildSshLaunch({ connection, resolvedPath, skipShellIntegration 
     LC_CTYPE: process.env.LC_CTYPE || 'en_US.UTF-8'
   }
 
-  let tmpDir = null
   // Секрет используется и для пароля пользователя, и для passphrase приватного ключа —
   // SSH_ASKPASS перехватывает оба типа запросов одинаково.
   const wantsAskpass = !IS_WIN && connection.secret && (connection.authType === 'password' || connection.authType === 'key')
-
-  if (wantsAskpass) {
-    try {
-      const askpass = createAskpassScript()
-      tmpDir = askpass.tmpDir
-      env.ETTY_SSH_PASS = connection.secret
-      env.SSH_ASKPASS = askpass.scriptPath
-      env.SSH_ASKPASS_REQUIRE = 'force'
-      // DISPLAY гарантирует, что старые версии ssh не откажутся вызывать askpass
-      if (!env.DISPLAY) env.DISPLAY = ':0'
-    } catch (e) {
-      log.warn('ssh-command: failed to create askpass script, password won\'t be auto-filled', e.message)
-    }
-  }
+  const { tmpDir } = wantsAskpass ? applyAskpassEnv(env, connection.secret) : { tmpDir: null }
 
   return { file, args, env, tmpDir, control }
 }

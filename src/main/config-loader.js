@@ -49,7 +49,8 @@ export function getConfigDefaults() {
       proxyEnabled: false
     },
     ssh: {
-      panelPosition: 'off'
+      panelPosition: 'off',
+      panelMode: 'ssh'
     },
     quickReplies: {
       groups: [],

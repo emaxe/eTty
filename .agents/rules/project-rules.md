@@ -41,13 +41,22 @@ src/
       local-fs-provider.js    — тонкая обёртка над FileManager
       ssh-fs-provider.js      — удалённая ФС по SSH: exec() из remote-scripts.js + polling-watcher
       fs-provider-registry.js — resolve(ctx) → провайдер; отсутствие ctx = локальный (совместимость)
-    ssh-store.js               — хранилище SSH-подключений (ssh-connections.json), шифрование secret через safeStorage
+    ssh-store.js               — хранилище SSH-подключений (ssh-connections.json), шифрование secret через safeStorage;
+                                  поле persistence ('off'|'tmux', deprecated) — только fallback обратной совместимости,
+                                  режим запуска выбирается в панели (см. shared/ssh-persistence.js); tmuxSocket — настройка подключения
     ssh-command.js             — сборка argv `ssh` (ControlMaster, remote-хуки, askpass) для node-pty
     ssh/
       ssh-control-channel.js  — служебный канал по ControlMaster: -O check/exit, exec() для remote-scripts
-      ssh-session-registry.js — Map<pid, {channel, caps, fsProvider}> — живёт вместе с PTY-сессией
-      remote-shell-hooks.js   — генерация remote-команды: OSC 7/133-хуки на удалённой стороне (zsh/bash)
-      remote-scripts.js       — POSIX sh-скрипты для readDir/rename/copy/move/read/write/stat (argv-safe)
+      ssh-session-registry.js — Map<pid, {channel, caps, fsProvider, connectionId}> — живёт вместе с PTY-сессией;
+                                 findLiveChannelFor() — «одолженный» канал для SshConnectionMaster
+      ssh-connection-master.js — служебный ControlMaster НА ПОДКЛЮЧЕНИЕ (не на PTY) — источник списка
+                                 tmux-сессий для панели, см. docs/features/ssh-tmux-sessions-panel/
+      ssh-connection-master-registry.js — реестр SshConnectionMaster по connectionId, acquire/release/exec
+      askpass.js               — SSH_ASKPASS-скрипт + env, общий для интерактивных вкладок и панельного мастера
+      remote-shell-hooks.js   — генерация remote-команды: OSC 7/133-хуки (zsh/bash) + персистентные
+                                 tmux-сессии (persistence:'tmux', см. docs/features/ssh-persistent-sessions/)
+      remote-scripts.js       — POSIX sh-скрипты для readDir/rename/copy/move/read/write/stat/tmux-сессий
+                                 (list/kill/rename, argv-safe)
       remote-parse.js         — чистые парсеры вывода remote-scripts.js (NUL-разделённые списки и т.п.)
     history-manager.js        — история команд (глобальная + per-tab, мержинг, мьютекс)
     tab-state.js               — сохранение/восстановление вкладок между сессиями
@@ -78,9 +87,14 @@ src/
       terminal-osc-handler.js      — OSC 7 (cwd), OSC 133 (busy)
       terminal-scroll-button.js    — плавающая кнопка "прокрутить вниз"
     features/ssh/                — SSH-подключения
-      ssh-panel.js               — боковая панель подключений: список, CRUD, drag-and-drop
-      ssh-connection-dialog.js   — форма добавления/редактирования подключения
-      ssh-tab-overlay.js         — оверлей вкладки: подключение/ошибка/подключение удалено
+      ssh-panel.js               — боковая панель подключений: список, CRUD, drag-and-drop;
+                                    сегмент SSH/tmux — режим клика по строке, в tmux раскрывается
+                                    в список сессий (SshConnectionMaster) с автополлингом и
+                                    внеочередным обновлением по событию `ssh.session.activity`
+                                    (открытие/закрытие/обрыв tmux-вкладки)
+      ssh-connection-dialog.js   — форма добавления/редактирования подключения (без режима —
+                                    он выбирается в панели, не в форме)
+      ssh-tab-overlay.js         — оверлей вкладки: подключение/ошибка/подключение удалено/перехвачено
     features/git/                — модульная Git-панель (мастер/деталь)
       git-panel.js               — оркестратор: overlay, ветки, commit/push/discard
       git-file-list.js           — левая панель: список файлов по группам, staging, контекстное меню
@@ -94,7 +108,8 @@ src/
       button/button.js
       context-menu/context-menu.js
       tabs/draggable-tabs.js    — generic drag-and-drop для вкладок
-    tab-bar.js                — вкладки терминала (на DraggableTabs)
+    tab-bar.js                — вкладки терминала (на DraggableTabs); setTabTmux() — бейдж/класс
+                                 tab-tmux для tmux-вкладок (persistence:'tmux')
     file-tree.js               — дерево файлов с lazy-load, DnD, multi-select, undo
     editor-panel.js            — CodeMirror 6 редактор с подсветкой (20+ языков)
     editor-languages.js        — динамическая загрузка языков (code-splitting)
@@ -115,6 +130,14 @@ src/
     path-utils.js            — POSIX/Windows-safe пути без node:path (createPathUtils(sep)) — общий
                                  для main (SshFsProvider) и renderer (FileTree._path)
     ssh-fs-config.js         — таймауты/интервалы транспорта удалённой ФС (main не видит renderer/core/config)
+    ssh-session-config.js    — константы персистентных удалённых сессий (tmux): SESSION_NAME_RE,
+                                 HOOK_DIR, версии tmux, интервалы ресинка, тайминги SshConnectionMaster
+    ssh-persistence.js       — resolveSshPersistence(): режим запуска SSH-вкладки (явный
+                                 options.ssh.persistence либо fallback на connection.persistence) —
+                                 общая для main (pty-handlers.js) и renderer (index.js, синхронно
+                                 до ответа pty:create)
+    ssh-session-name.js      — buildSessionNameBase()/pickFreeSessionName() — имена tmux-сессий,
+                                 общие для панели (ssh-panel.js) и наследования вкладки по "+"
 out/                         — артефакты electron-vite build (НЕ редактировать вручную)
 dist/                        — артефакты electron-builder (НЕ коммитить)
 build/                       — ресурсы для сборки (иконки, entitlements)
@@ -147,11 +170,17 @@ docs/                        — спецификации, планы, чекл�
 - Кнопка «прокрутить вниз» при скролле в историю (`TerminalScrollButton`)
 
 ### SSH-подключения
-- Панель подключений (`features/ssh/ssh-panel.js`): список, CRUD, drag-and-drop reorder; хранилище — `ssh-store.js` (`ssh-connections.json`, секрет через `safeStorage`)
+- Панель подключений (`features/ssh/ssh-panel.js`): список, CRUD, drag-and-drop reorder (только
+  в режиме SSH); хранилище — `ssh-store.js` (`ssh-connections.json`, секрет через `safeStorage`).
+  Сегмент **SSH | tmux** в шапке переключает режим клика по строке: SSH — обычная вкладка,
+  tmux — строка раскрывается в список tmux-сессий сервера (см. «Персистентные удалённые сессии» ниже)
 - SSH-вкладка — PTY, в котором node-pty напрямую спавнит системный `ssh` (`ssh-command.js`), не библиотека
 - ControlMaster-мультиплексирование (`-o ControlMaster=auto`, сокет в `os.tmpdir()/etty-cm-*`): один
   параллельный служебный канал (`SshControlChannel`) для операций удалённой ФС без повторной
-  аутентификации; недоступно на Windows (OpenSSH для Windows не поддерживает мультиплексирование)
+  аутентификации; недоступно на Windows (OpenSSH для Windows не поддерживает мультиплексирование).
+  Отдельно — `SshConnectionMaster`/`SshConnectionMasterRegistry` (`main/ssh/`): служебный мастер
+  НА ПОДКЛЮЧЕНИЕ (не на PTY), для листинга/kill/rename tmux-сессий панелью без открытой вкладки;
+  сперва пробует «одолжить» канал уже живой вкладки этого подключения
 - Remote-хуки (`remote-shell-hooks.js`): при подключении инжектируется remote-команда, которая на
   удалённой стороне воспроизводит логику локального `_createZdotdir` — временный rc с precmd/preexec
   для OSC 7/133 (zsh и bash отдельными ветками), fallback без хуков для прочих shell (fish/csh/...).
@@ -163,6 +192,22 @@ docs/                        — спецификации, планы, чекл�
 - Lazy connect: восстановленная SSH-вкладка подключается при первом переключении на неё
 - Разрыв соединения не закрывает вкладку — оверлей с кнопкой «Переподключиться» (`SshTabOverlay`)
 - Наследование подключения по «+» на активной SSH-вкладке
+- **Персистентные удалённые сессии** (`persistence:'off'|'tmux'` — режим КОНКРЕТНОГО ЗАПУСКА
+  вкладки, выбирается сегментом SSH/tmux в панели, передаётся явно с каждым `pty:create`;
+  `connection.persistence` в `ssh-store.js` — только deprecated-fallback для вкладок/подключений
+  без явного значения, см. `shared/ssh-persistence.js` и `docs/features/ssh-tmux-sessions-panel/`):
+  вкладка подключается к именованной tmux-сессии на выделенном сокете (`-L`, свой `tmux.conf` —
+  `allow-passthrough`, `prefix None`, `mouse on`, RGB) вместо голого login-shell; разрыв связи/сон/
+  перезапуск eTty не убивают процессы на сервере. Имя сессии — `etty-<8 alnum connectionId>`,
+  при занятости `-2`/`-3`/… (`shared/ssh-session-name.js`) — несколько независимых сессий на одно
+  подключение, каждая в своей вкладке. OSC 7/133 наружу из tmux не проходят сами по себе —
+  заворачиваются в DCS-passthrough (`_etty_emit`, tmux ≥ 3.3, `PROBE_SCRIPT` детектит версию);
+  на более старых tmux/без passthrough — ресинк одним запросом сразу после attach
+  (`TMUX_SESSION_STATE_SCRIPT` → `ssh:session-state`). Закрытие вкладки — detach (SIGHUP
+  локальному `ssh`), не kill; перехват сессии другим клиентом (`new-session -A -D`) даёт
+  `exitCode 0` — отдельная ветка `SshTabOverlay.showDetached()`. Список сессий сервера (включая
+  созданные не через eTty), kill/rename — панель SSH/tmux (`SshConnectionMaster`, автополлинг,
+  контекстное меню). tmux-вкладка индицируется бейджем/классом `tab-tmux` в tab-bar
 
 ### История команд (zsh, macOS/Linux)
 - Глобальная история (5000 строк, `~/.config/eTty/history/global.zsh_history`)
@@ -281,7 +326,7 @@ docs/                        — спецификации, планы, чекл�
 | `app:*` | homedir, open-external | Системные |
 | `search:*` | query, cancel | Поиск по проекту |
 | `node-version:*` | get-current, list-installed, list-remote, install, use, uninstall, detect-manager, install-manager | Менеджер версий Node.js |
-| `ssh:*` | list, save, delete, reorder, fs-ready (push), fs-retry | SSH-подключения + готовность удалённой ФС |
+| `ssh:*` | list, save, delete, reorder, fs-ready (push), fs-retry, session-state (push), tmux-missing (push), master-acquire, master-release, sessions-list, session-kill, session-rename | SSH-подключения + готовность удалённой ФС + ресинк tmux-сессии + панель tmux-сессий (SshConnectionMaster) |
 
 ## Команды
 
@@ -401,7 +446,7 @@ electron-builder делает это автоматически через `"npm
 - `checklist.md` — прогресс
 - `starter-prompt.md` — промпт для новой сессии
 
-Текущие фичи: `init`, `sidebar-file-tree`, `tab-persistence`, `git-panel`, `app-packaging`, `config`, `fs-watch-recursive`, `file-tree-dnd`, `quick-reply-settings`, `project-search`, `git-diff-highlight`, `custom-ai-agents`, `editor-file-sync`, `statusbar-size`, `quick-reply-groups`.
+Текущие фичи: `init`, `sidebar-file-tree`, `tab-persistence`, `git-panel`, `app-packaging`, `config`, `fs-watch-recursive`, `file-tree-dnd`, `quick-reply-settings`, `project-search`, `git-diff-highlight`, `custom-ai-agents`, `editor-file-sync`, `statusbar-size`, `quick-reply-groups`, `ssh-persistent-sessions`, `ssh-tmux-sessions-panel`.
 
 ## Хранилище данных
 

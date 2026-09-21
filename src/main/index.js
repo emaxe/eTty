@@ -15,6 +15,7 @@ import { AgentService } from './agent-service.js'
 import { ShellPathResolver } from './shell-path-resolver.js'
 import { NodeVersionManager } from './services/node-version-manager.js'
 import { SshSessionRegistry } from './ssh/ssh-session-registry.js'
+import { SshConnectionMasterRegistry } from './ssh/ssh-connection-master-registry.js'
 import { FsProviderRegistry } from './fs/fs-provider-registry.js'
 import {
   saveTabState, loadTabState, deleteTabState, hasTabState, validatePath
@@ -40,6 +41,7 @@ import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
 const shellPathResolver = new ShellPathResolver()
 const sshSessionRegistry = new SshSessionRegistry()
+const sshConnectionMasters = new SshConnectionMasterRegistry({ sshSessionRegistry, shellPathResolver })
 
 const ptyManager = new PtyManager({ shellPathResolver, sshSessionRegistry })
 const fileManager = new FileManager()
@@ -56,15 +58,18 @@ const appService = new AppService({
   tabState: { saveTabState, loadTabState, deleteTabState, hasTabState, validatePath },
   loadSettings,
   saveSettings,
+  sshConnectionMasters,
 })
 
 let diagnosticsInterval = null
 let isQuitting = false
 
 /**
- * Удаляет осиротевшие каталоги ControlMaster-сокетов (`etty-cm-*` в os.tmpdir()) старше суток —
- * например после аварийного завершения (kill -9), когда PtyManager.killAll() не успел отработать.
- * `SshControlChannel.dispose()` штатно чистит их сама при обычном закрытии вкладки/приложения.
+ * Удаляет осиротевшие каталоги ControlMaster-сокетов (`etty-cm-*`) и askpass-скриптов
+ * (`etty-ssh-*`) в `os.tmpdir()` старше суток — например после аварийного завершения (kill -9),
+ * когда `PtyManager.killAll()`/`SshConnectionMasterRegistry.disposeAll()` не успели отработать.
+ * `SshControlChannel.dispose()`/`SshConnectionMaster.dispose()` штатно чистят их сами при
+ * обычном закрытии вкладки/панели/приложения.
  */
 function cleanupOrphanedControlSockets() {
   const tmpDir = os.tmpdir()
@@ -76,7 +81,7 @@ function cleanupOrphanedControlSockets() {
     return
   }
   for (const entry of entries) {
-    if (!entry.isDirectory() || !entry.name.startsWith('etty-cm-')) continue
+    if (!entry.isDirectory() || !(entry.name.startsWith('etty-cm-') || entry.name.startsWith('etty-ssh-'))) continue
     const dirPath = path.join(tmpDir, entry.name)
     try {
       const stat = fs.statSync(dirPath)
@@ -107,7 +112,7 @@ app.whenReady().then(async () => {
   registerGitHandlers(ipcMain)
   registerSearchHandlers(ipcMain, { fileManager })
   registerNodeVersionHandlers(ipcMain, { nodeVersionManager })
-  registerSshHandlers(ipcMain, { sshStore, sshSessionRegistry })
+  registerSshHandlers(ipcMain, { sshStore, sshSessionRegistry, sshConnectionMasters })
 
   ipcMain.on(IPC_CHANNELS.TABS_STATE_CHANGED, () => appService.rebuildMenu())
 

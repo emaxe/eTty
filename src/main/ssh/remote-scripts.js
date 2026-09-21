@@ -27,7 +27,21 @@ export const PROBE_SCRIPT = [
   'if stat -c %Y . >/dev/null 2>&1; then echo gnu; else echo bsd; fi',
   'if find . -maxdepth 0 -print0 >/dev/null 2>&1; then echo find0; else echo nofind0; fi',
   'if command -v inotifywait >/dev/null 2>&1; then echo inotify; else echo -; fi',
-  'if command -v rg >/dev/null 2>&1; then echo rg; else echo -; fi'
+  'if command -v rg >/dev/null 2>&1; then echo rg; else echo -; fi',
+  // Версия tmux — определяет доступность персистентных сессий (Этап 1) и DCS-passthrough
+  // OSC 7/133 (Этап 2, нужен tmux >= 3.3, см. SSH_SESSION_CONFIG). `tmux -V` печатает
+  // "tmux X.Y" (или "tmux next-Y" на снапшотах) — версия целиком, парсится в parseProbe.
+  'if command -v tmux >/dev/null 2>&1; then tmux -V; else echo -; fi',
+  // Менеджер пакетов — только для предложения команды установки tmux, если его нет
+  // (см. tmux-install.js). Первый найденный, порядок — по распространённости на серверах.
+  'if command -v apt-get >/dev/null 2>&1; then echo apt; ' +
+    'elif command -v dnf >/dev/null 2>&1; then echo dnf; ' +
+    'elif command -v yum >/dev/null 2>&1; then echo yum; ' +
+    'elif command -v apk >/dev/null 2>&1; then echo apk; ' +
+    'elif command -v pacman >/dev/null 2>&1; then echo pacman; ' +
+    'elif command -v zypper >/dev/null 2>&1; then echo zypper; ' +
+    'elif command -v brew >/dev/null 2>&1; then echo brew; ' +
+    'else echo -; fi'
 ].join('; ')
 
 /**
@@ -166,3 +180,83 @@ export const STAT_FILE_BSD_SCRIPT = 'stat -f "%m %z" -- "$1"'
 /** `$1..$N` — каталоги; печатает mtime (сек) на каждый, либо `x` если каталог исчез. Для polling-watcher (Этап 5). */
 export const POLL_MTIME_GNU_SCRIPT = 'for d in "$@"; do stat -c %Y -- "$d" 2>/dev/null || echo x; done'
 export const POLL_MTIME_BSD_SCRIPT = 'for d in "$@"; do stat -f %m -- "$d" 2>/dev/null || echo x; done'
+
+/**
+ * Персистентные сессии (tmux, Этап 2): `$1` — сокет (`-L`, пусто = сокет по умолчанию),
+ * `$2` — имя сессии. Печатает одну строку `<pane_current_path>|<pane_path>|<pane_current_command>`
+ * либо ничего, если сокета/сессии нет (не ошибка — обрабатывается по коду возврата на стороне
+ * вызывающего). `pane_path` — то, что tmux сам забрал из НАШЕГО OSC 7 (см. remote-shell-hooks.js) —
+ * рабочий фолбэк для ресинка cwd даже без DCS-passthrough/на tmux < 3.3.
+ */
+export const TMUX_SESSION_STATE_SCRIPT =
+  's=$1; n=$2; [ -n "$s" ] && o="-L $s" || o=; ' +
+  'tmux $o display-message -p -t "$n" "#{pane_current_path}|#{pane_path}|#{pane_current_command}" 2>/dev/null'
+
+/**
+ * Список tmux-сессий на сокете `$1` (пусто = сокет по умолчанию) — панель показывает ВСЕ
+ * сессии на сокете, не только `etty-*` (созданные вручную тоже видны и управляемы). `exit 127` —
+ * tmux не установлен (проверяется до попытки его вызвать).
+ *
+ * `list-sessions -F` не умеет NUL-разделители — tmux печатает поля через TAB (реальный байт
+ * в самой строке `-F`: формат tmux не обрабатывает `\`-escape в литеральном тексте, только
+ * `#{...}`), перевод TAB → NUL делает `tr` уже на сервере (символьный `\t` в аргументе `tr` —
+ * часть POSIX-спецификации, портируемо между GNU/BSD). NEWLINE НЕ трогается — остаётся
+ * естественным разделителем записей (одна строка на сессию/панель от самого tmux). Две секции
+ * (сессии; активная команда каждой сессии) разделены ОДНОЙ ПУСТОЙ строкой (`printf '\n'`): это
+ * надёжнее лишнего `\0`-разделителя (как в READ_DIR_SCRIPT) — `#{session_activity}` может быть
+ * пустым полем на старом tmux (< 2.1), и после конвертации TAB→NUL пустое поле было бы
+ * неотличимо от разделителя секций; пустая же строка целиком гарантированно не встречается
+ * среди самих записей — у них всегда есть минимум 4 NUL-байта между 5 полями.
+ *
+ * В первой секции числовые поля идут ПЕРВЫМИ — `parseTmuxSessions` (см. remote-parse.js)
+ * отбрасывает запись, если они не числа (защита от TAB в имени сессии, возможного только через
+ * ручной `rename-session` — сам tmux таких имён не создаёт).
+ *
+ * Активная команда — отдельным проходом `list-panes -a` (в `list-sessions -F` нет готового поля
+ * «команда активной панели активного окна»), фильтр по `window_active`/`pane_active` — в JS,
+ * не через `tmux -f` (та опция требует tmux >= 2.6, а `SSH_SESSION_CONFIG.TMUX_MIN_VERSION`
+ * проекта — 1.8).
+ */
+export const TMUX_LIST_SESSIONS_SCRIPT = [
+  's=$1',
+  '[ -n "$s" ] && o="-L $s" || o=',
+  'command -v tmux >/dev/null 2>&1 || exit 127',
+  // Подтверждено вживую: неинтерактивная SSH-сессия по умолчанию не наследует LANG/LC_*
+  // клиента (нужен AcceptEnv на сервере, чего нельзя гарантировать) — без UTF-8-локали tmux
+  // заменяет непечатаемые байты в `-F` (в т.ч. наш TAB-разделитель) на `_`, и парсер ломается.
+  // tmux смотрит только на ТЕКСТ LC_ALL (есть ли в нём "UTF-8"), реально установленная локаль
+  // не нужна — C.UTF-8 в этом смысле безопасен независимо от того, знает ли её сама система.
+  'export LC_ALL=C.UTF-8',
+  'tmux $o list-sessions -F "#{session_windows}\t#{session_attached}\t#{session_created}\t#{session_activity}\t#{session_name}" 2>/dev/null | tr "\\t" "\\0"',
+  'printf \'\\n\'',
+  'tmux $o list-panes -a -F "#{window_active}\t#{pane_active}\t#{pane_current_command}\t#{session_name}" 2>/dev/null | tr "\\t" "\\0"'
+].join('; ')
+
+/**
+ * Убивает tmux-сессию `$2` на сокете `$1` (пусто = по умолчанию). `-t "=name"` (точное
+ * совпадение у tmux) поддерживается только с tmux >= 2.4 — без гарда обычный prefix-match `-t`
+ * у более старых версий мог бы задеть СОСЕДНЮЮ сессию с более длинным именем (`etty-ab` →
+ * `etty-abcd`), поэтому существование проверяется вручную через точное сравнение (`grep -qxF`)
+ * перед вызовом. `exit 3` — сессии с таким именем нет.
+ */
+export const TMUX_KILL_SESSION_SCRIPT = [
+  's=$1',
+  '[ -n "$s" ] && o="-L $s" || o=',
+  'tmux $o list-sessions -F "#{session_name}" 2>/dev/null | grep -qxF -- "$2" || exit 3',
+  'tmux $o kill-session -t "$2"'
+].join('; ')
+
+/**
+ * Переименовывает tmux-сессию `$2` → `$3` на сокете `$1` (пусто = по умолчанию). Тот же
+ * `grep -qxF`-гард, что у kill (`exit 3` — сессии `$2` нет), плюс проверка, что `$3` свободно
+ * (`exit 17` — занято). `--` перед `$3` в `rename-session` — новое имя (позиционный аргумент,
+ * не значение опции) не должно быть принято за флаг, если начинается с `-` (SESSION_NAME_RE
+ * такое разрешает).
+ */
+export const TMUX_RENAME_SESSION_SCRIPT = [
+  's=$1',
+  '[ -n "$s" ] && o="-L $s" || o=',
+  'tmux $o list-sessions -F "#{session_name}" 2>/dev/null | grep -qxF -- "$2" || exit 3',
+  'tmux $o list-sessions -F "#{session_name}" 2>/dev/null | grep -qxF -- "$3" && exit 17',
+  'tmux $o rename-session -t "$2" -- "$3"'
+].join('; ')
