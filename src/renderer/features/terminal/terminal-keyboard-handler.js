@@ -63,6 +63,27 @@ export class TerminalKeyboardHandler {
       }
     }
 
+    // Copy selection when text is selected in terminal:
+    // - macOS: Cmd+C (if term has selection)
+    // - All platforms: Ctrl+Shift+C
+    // - Windows/Linux: Ctrl+C (if term has selection, avoids SIGINT)
+    if (event.key === 'c' || event.key === 'C') {
+      const isCopyCombo =
+        (IS_MAC && event.metaKey && !event.ctrlKey && !event.altKey) ||
+        (event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey) ||
+        (!IS_MAC && event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && this._term?.hasSelection())
+
+      if (isCopyCombo && this._term?.hasSelection()) {
+        if (event.type === 'keydown') {
+          const text = this._term.getSelection()
+          if (text) {
+            navigator.clipboard?.writeText?.(text).catch((e) => console.warn('[terminal] copy to clipboard failed:', e))
+          }
+        }
+        return false
+      }
+    }
+
     // macOS: Cmd+ArrowLeft / Cmd+ArrowRight → Home / End
     if (
       IS_MAC &&

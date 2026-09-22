@@ -51,8 +51,16 @@ check('tmux/hooks — new-session -A -D с именем сессии', () => {
   assert(inner.includes('n=etty-4f2a9c1b'), 'имя сессии должно попасть в текст')
   assert(inner.includes('-L etty'), 'ожидался отдельный сокет')
   assert(inner.includes('allow-passthrough on'), 'ожидался allow-passthrough в tmux.conf')
+  assert(inner.includes('set -g mouse off'), 'ожидался mouse off — выделение отдано нативному xterm.js')
+  assert(inner.includes('set-clipboard on'), 'ожидался set-clipboard в tmux.conf')
+  assert(inner.includes('extended-keys on'), 'ожидался extended-keys в tmux.conf')
+  assert(inner.includes('S-Enter'), 'ожидался биндинг S-Enter в tmux.conf')
+  assert(inner.includes('C-M-S-Up'), 'ожидался биндинг прокрутки вверх (замена колеса при mouse off)')
+  assert(inner.includes('C-M-S-Down'), 'ожидался биндинг прокрутки вниз (замена колеса при mouse off)')
   assert(inner.includes('prefix None'), 'ожидался prefix None')
   assert(inner.includes('_etty_emit'), 'ожидался DCS-эмиттер в rc')
+  assert(inner.includes('-L etty list-sessions') && inner.includes('-L etty source-file'),
+    'ожидался догон уже поднятого сервера через source-file (иначе -f не долетит до старых сессий)')
 })
 
 check('tmux/no-hooks — tmux есть, хуков нет', () => {
@@ -65,6 +73,8 @@ check('tmux/compat-socket — без -L, с фолбэком allow-passthrough',
   const inner = innerOf(buildRemoteInitCommand({ persistence: 'tmux', sessionName: 'etty-4f2a9c1b', hooks: true, socketName: '' }))
   assert(!inner.includes('-L '), 'пустой сокет — без -L (сокет по умолчанию)')
   assert(inner.includes('tmux set -p allow-passthrough on'), 'ожидался панельный фолбэк allow-passthrough')
+  assert(inner.includes('"$t" -u list-sessions') && inner.includes('"$t" -u source-file'),
+    'ожидался догон уже поднятого сервера сокета по умолчанию через source-file')
 })
 
 check('невалидные имена сессий отвергаются', () => {

@@ -238,6 +238,23 @@ export class SettingsPage {
             this._scheduleSave()
           }
         )
+      },
+      {
+        label: 'Режим Shift+Enter по умолчанию',
+        control: this._createSelect(
+          [
+            { key: 'kitty', name: 'Протокол Kitty (\\x1b[13;2u)' },
+            { key: 'newline', name: 'Перевод строки (\\n)' },
+            { key: 'ctrl-j', name: 'Ctrl+J (\\x0A)' }
+          ],
+          this._config.terminal?.defaultKeyboardMode || 'kitty',
+          (val) => {
+            if (!this._config.terminal) this._config.terminal = {}
+            this._config.terminal.defaultKeyboardMode = val
+            this._bus.emit('settings.changed', { key: 'terminal.defaultKeyboardMode', value: val })
+            this._scheduleSave()
+          }
+        )
       }
     ]))
 

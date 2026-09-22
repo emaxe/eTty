@@ -37,4 +37,13 @@ export const SSH_SESSION_CONFIG = Object.freeze({
   MASTER_FAILURE_COOLDOWN_MS: 30000,
   MASTER_CONTROL_PERSIST: '5m',
   SESSIONS_OP_TIMEOUT_MS: 15000,
+
+  // Колесо мыши в tmux-вкладке: tmux работает с `mouse off` (см. remote-shell-hooks.js —
+  // выделение отдано нативному xterm.js), поэтому обычное wheel-событие tmux не видит.
+  // TerminalWheelHandler транслирует его в CSI-u последовательность несуществующей комбинации
+  // клавиш (Ctrl+Alt+Shift+Up/Down), которую распознают биндинги `bind-key -n C-M-S-Up/Down`
+  // в generated tmux.conf (remote-shell-hooks.js) — они входят в copy-mode и скроллят реальную
+  // историю. Общие для main (текст биндинга) и renderer (байты, которые шлём в PTY).
+  WHEEL_SCROLL_UP_SEQ: '\x1b[1;8A',
+  WHEEL_SCROLL_DOWN_SEQ: '\x1b[1;8B',
 })

@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-22
+
+### Added
+
+- **Default Shift+Enter mode setting** — Settings → Terminal now has a "Default Shift+Enter mode" selector (Kitty protocol / newline / Ctrl+J) that controls the fallback used for agents without a specific per-agent override, instead of always defaulting to Kitty
+
+### Fixed
+
+- **Mouse selection/copy in tmux SSH tabs** — dragging over text no longer opens tmux's copy-mode indicator and losing the selection on mouse-up: the generated remote `tmux.conf` now runs with `mouse off`, so selection and Cmd+C behave exactly as in a local tab. Scrollback via the mouse wheel is preserved through a synthetic key-sequence bridge (`TerminalWheelHandler`) that still drives tmux's history scroll. The updated config is also applied to already-running tmux servers on attach (previously `-f` only took effect when the server first started, so long-lived sessions never picked it up)
+
 ## [0.3.0] - 2026-09-21
 
 ### Added

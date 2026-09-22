@@ -31,6 +31,7 @@ import { TERMINAL_CONFIG } from './core/config/terminal-config.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 import { TerminalKeyboardHandler } from './features/terminal/terminal-keyboard-handler.js'
 import { TerminalOscHandler } from './features/terminal/terminal-osc-handler.js'
+import { TerminalWheelHandler } from './features/terminal/terminal-wheel-handler.js'
 import { TerminalScrollButton } from './features/terminal/terminal-scroll-button.js'
 import { EventBus } from './core/event-bus.js'
 import { StateStore } from './core/state-store.js'
@@ -1092,6 +1093,10 @@ async function init() {
     if (key === 'terminal.tabSwitchHotkey') {
       tabSwitchHotkey = value
     }
+    if (key === 'terminal.defaultKeyboardMode') {
+      if (!config.terminal) config.terminal = {}
+      config.terminal.defaultKeyboardMode = value
+    }
     if (key === 'quickReplies') {
       config.quickReplies = { items: value.items || [], groups: value.groups || [] }
       appStore.set('quickReplies', config.quickReplies)
@@ -1368,12 +1373,17 @@ async function init() {
       (pid) => {
         const t = tabBar.tabs.find(t => t.pid === pid)
         const agentId = t?.activeAgentId
-        if (!agentId) return 'kitty'
-        return config.agents?.keyboardModes?.[agentId] || ((agentId === 'qwen' || agentId === 'agento') ? 'ctrl-j' : 'kitty')
+        const defaultMode = config.terminal?.defaultKeyboardMode || 'kitty'
+        if (!agentId) return defaultMode
+        return config.agents?.keyboardModes?.[agentId] || ((agentId === 'qwen' || agentId === 'agento') ? 'ctrl-j' : defaultMode)
       }
     )
     keyboardHandler.attach(tab.term, tab.pid)
     tab._keyboardHandler = keyboardHandler
+
+    const wheelHandler = new TerminalWheelHandler({ write: (pid, data) => api.ptyWrite(pid, data) })
+    wheelHandler.attach(tab.term, tab.pid, { isTmux: !!tab._sshPersistent })
+    tab._wheelHandler = wheelHandler
 
     const oscHandler = new TerminalOscHandler({
       onCwdChange: (newPath, pid) => {

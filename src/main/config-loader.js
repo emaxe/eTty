@@ -22,7 +22,8 @@ export function getConfigDefaults() {
     terminal: {
       promptStyle: 'default',
       newTabPlacement: 'modifierAdjacent',
-      tabSwitchHotkey: 'none'
+      tabSwitchHotkey: 'none',
+      defaultKeyboardMode: 'kitty'
     },
     agents: {
       forceDisabled: {

@@ -197,7 +197,11 @@ docs/                        — спецификации, планы, чекл�
   `connection.persistence` в `ssh-store.js` — только deprecated-fallback для вкладок/подключений
   без явного значения, см. `shared/ssh-persistence.js` и `docs/features/ssh-tmux-sessions-panel/`):
   вкладка подключается к именованной tmux-сессии на выделенном сокете (`-L`, свой `tmux.conf` —
-  `allow-passthrough`, `prefix None`, `mouse on`, RGB) вместо голого login-shell; разрыв связи/сон/
+  `allow-passthrough`, `prefix None`, `mouse off` (выделение мышью — нативное xterm.js, как в
+  локальной вкладке; колесо эмулируется мостом `TerminalWheelHandler` через синтетический
+  CSI-u биндинг, см. `docs/features/ssh-persistent-sessions/spec.md#req-2a`), RGB) вместо голого
+  login-shell; конфиг догоняется на уже поднятый сервер через `source-file` (`-f` учитывается
+  только при старте); разрыв связи/сон/
   перезапуск eTty не убивают процессы на сервере. Имя сессии — `etty-<8 alnum connectionId>`,
   при занятости `-2`/`-3`/… (`shared/ssh-session-name.js`) — несколько независимых сессий на одно
   подключение, каждая в своей вкладке. OSC 7/133 наружу из tmux не проходят сами по себе —

@@ -269,9 +269,32 @@ export function buildRemoteInitCommand({
       'set -g allow-passthrough on',
       // Реattach другого размера иначе ещё и сдвигает содержимое на строку.
       'set -g status off',
-      // Выбор пользователя (см. план): колесо мыши работает по реальной tmux-истории вместо
-      // почти всегда пустого xterm.js-буфера; плата — выделение текста идёт через copy-mode.
-      'set -g mouse on',
+      // mouse off: выделение мышью отдаётся нативному xterm.js (как в локальной вкладке) —
+      // при mouse on tmux перехватывает ЛЮБОЙ drag под свой copy-mode (индикатор [0/0] в углу,
+      // выделение пропадает по MouseDragEnd1Pane, копия уходит в буфер tmux, а не системы).
+      // Приложениям внутри панели (vim/htop/агенты), которые сами запрашивают mouse-tracking,
+      // это не мешает: tmux с mouse off не трогает их DECSET-запросы, события идут напрямую —
+      // так же, как в локальной вкладке без tmux вовсе.
+      'set -g mouse off',
+      // Трансляция выделения и копирования в системный буфер обмена через OSC 52 — путь для
+      // приложений внутри панели (vim/агенты), которые сами копируют через clipboard-протокол.
+      'set -s set-clipboard on',
+      'set -as terminal-features ",*:clipboard"',
+      'bind-key -T copy-mode Enter send-keys -X copy-pipe-and-cancel',
+      'bind-key -T copy-mode-vi Enter send-keys -X copy-pipe-and-cancel',
+      'bind-key -T copy-mode-vi y send-keys -X copy-pipe-and-cancel',
+      // Поддержка расширенных клавиш (Kitty keyboard protocol / csi-u):
+      // пересылка Shift+Enter (\x1b[13;2u) приложениям и агентам внутри tmux
+      'set -s extended-keys on',
+      'set -as terminal-features ",*:extkeys"',
+      'bind-key -n S-Enter send-keys Escape "[13;2u"',
+      // Колесо мыши больше не ловится tmux (mouse off) — TerminalWheelHandler на стороне eTty
+      // транслирует прокрутку в эти два синтетических биндинга (CSI-u, не пересекаются с
+      // реальными хоткеями): войти в copy-mode и прокрутить историю вверх/вниз. `-e` у
+      // scroll-up — автовыход из copy-mode, когда докрутили обратно до низа. alternate_on —
+      // не мешать полноэкранным приложениям (они сами решают, что делать с этим сочетанием).
+      'bind-key -n C-M-S-Up if -F "#{alternate_on}" "" "copy-mode -e ; send-keys -X -N 3 scroll-up"',
+      'bind-key -n C-M-S-Down if -F "#{alternate_on}" "" "send-keys -X -N 3 scroll-down"',
       'set -g history-limit 10000',
       'set -g escape-time 10',
       'set -g focus-events on',
@@ -298,6 +321,17 @@ export function buildRemoteInitCommand({
       `printf "%s\\n" ${tmuxConfLines.map((line) => `"${posixDquote(line)}"`).join(' ')} > "$c/tmux.conf.$$"`,
       'printf "set -g default-command \\"/bin/sh %s/init\\"\\n" "$c" >> "$c/tmux.conf.$$"',
       'mv -f "$c/tmux.conf.$$" "$c/tmux.conf"'
+    )
+
+    // `-f` учитывается tmux только при СТАРТЕ сервера — уже поднятая (часами/днями раньше)
+    // сессия обновлённый tmux.conf сама не подхватит. Догоняем её явным source-file, ДО
+    // new-session ниже: list-sessions — гард «сервер уже есть» (голый source-file поднял бы
+    // сервер БЕЗ нашего -f, с чужими дефолтами). Неудача любого из шагов (сервера ещё нет) —
+    // не ошибка, следующий new-session всё равно поднимет его правильно, уже со свежим -f.
+    l1Statements.push(
+      socketName
+        ? `[ -n "$t" ] && "$t" -u -L ${socketName} list-sessions >/dev/null 2>&1 && "$t" -u -L ${socketName} source-file "$c/tmux.conf" >/dev/null 2>&1`
+        : `[ -n "$t" ] && "$t" -u list-sessions >/dev/null 2>&1 && "$t" -u source-file "$c/tmux.conf" >/dev/null 2>&1`
     )
 
     if (!socketName) {
