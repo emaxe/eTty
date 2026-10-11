@@ -393,7 +393,11 @@ class _TerminalTabView extends StatelessWidget {
   }
 
   Widget _terminalStack(BuildContext context) {
+    // `fit: expand` обязателен: в `connected` оверлей — непозиционированный `SizedBox.shrink()`, и
+    // без него loose-`Stack` внутри `Column` схлопывается до нулевой ширины → xterm считает 1
+    // колонку и шлёт серверу PTY-размер 1 колонка (текст «по символу на строку»).
     return Stack(
+      fit: StackFit.expand,
       children: [
         Positioned.fill(
           child: ScrollBridge(
