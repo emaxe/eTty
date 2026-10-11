@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mobile/app/providers/connection_providers.dart';
+import 'package:mobile/app/providers/file_tree_providers.dart';
 import 'package:mobile/app/providers/host_keys_provider.dart';
 import 'package:mobile/app/ssh_connector.dart';
 import 'package:mobile/data/connection_store.dart';
@@ -24,6 +25,10 @@ import 'package:mobile/ui/files/file_tree.dart';
 /// поверх ТОГО ЖЕ [SshFsProvider] (задача #27) — отдельного подключения редактору не нужно.
 ///
 /// Открывается из `TerminalPage` (кнопка «Файлы» в AppBar).
+///
+/// Результат маршрута — `String?`: `pop(path)` означает «запустить tmux-сессию в папке `path`»
+/// (пункт меню папки; доступен только при `profile.persistence == 'tmux'`), обработка — в
+/// `TerminalPage`. `null` — экран закрыт без выбора.
 class RemoteFileTreeScreen extends ConsumerStatefulWidget {
   const RemoteFileTreeScreen({super.key, required this.profile});
 
@@ -150,11 +155,33 @@ class _RemoteFileTreeScreenState extends ConsumerState<RemoteFileTreeScreen> {
         ),
       );
     }
+    final showHidden = ref.watch(showHiddenFilesProvider).value ?? false;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.profile.label)),
+      appBar: AppBar(
+        title: Text(widget.profile.label),
+        actions: [
+          // Иконка показывает ТЕКУЩЕЕ состояние: глаз — скрытые видны, перечёркнутый — скрыты.
+          IconButton(
+            key: const Key('toggle-hidden-files'),
+            icon: Icon(
+              showHidden
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+            ),
+            tooltip: showHidden ? 'Скрыть скрытые' : 'Показать скрытые',
+            onPressed: () => ref
+                .read(showHiddenFilesProvider.notifier)
+                .setEnabled(!showHidden),
+          ),
+        ],
+      ),
       body: FileTree(
         provider: _provider!,
         rootPath: _rootPath!,
+        showHidden: showHidden,
+        onStartSession: widget.profile.persistence == 'tmux'
+            ? (path) => Navigator.of(context).pop<String>(path)
+            : null,
         onOpenFile: (path) => Navigator.of(context).push<void>(
           MaterialPageRoute(
             builder: (_) => FileEditorScreen(provider: _provider!, path: path),

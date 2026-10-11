@@ -71,10 +71,20 @@ const _root = '/home/user';
 SshFsProvider _provider(_FakeRemoteExec exec, {String root = _root}) =>
     SshFsProvider(exec: exec, root: root, statFlavorGnu: true, find0: true);
 
-Widget _app(SshFsProvider provider, {String rootPath = _root}) {
+Widget _app(
+  SshFsProvider provider, {
+  String rootPath = _root,
+  bool showHidden = false,
+  void Function(String path)? onStartSession,
+}) {
   return MaterialApp(
     home: Scaffold(
-      body: FileTree(provider: provider, rootPath: rootPath),
+      body: FileTree(
+        provider: provider,
+        rootPath: rootPath,
+        showHidden: showHidden,
+        onStartSession: onStartSession,
+      ),
     ),
   );
 }
@@ -239,4 +249,227 @@ void main() {
       provider.dispose();
     },
   );
+
+  group('скрытые файлы (showHidden)', () {
+    _FakeRemoteExec fakeWith(
+      Map<String, ({List<String> dirs, List<String> files})> tree,
+    ) => _FakeRemoteExec()
+      ..responder = (script, args) {
+        if (script != RemoteScripts.readDirScript) return _ok();
+        final e = tree[args.first];
+        if (e == null) return _ok(stdout: _readDirStdout());
+        return _ok(
+          stdout: _readDirStdout(dirs: e.dirs, files: e.files),
+        );
+      };
+
+    testWidgets('по умолчанию дотфайлы и дотпапки скрыты', (tester) async {
+      final provider = _provider(
+        fakeWith({
+          _root: (dirs: ['.git', 'src'], files: ['.env', 'a.txt']),
+        }),
+      );
+
+      await tester.pumpWidget(_app(provider));
+      await tester.pumpAndSettle();
+
+      expect(find.text('src'), findsOneWidget);
+      expect(find.text('a.txt'), findsOneWidget);
+      expect(find.text('.git'), findsNothing);
+      expect(find.text('.env'), findsNothing);
+
+      provider.dispose();
+    });
+
+    testWidgets('showHidden = true показывает дотфайлы и дотпапки', (
+      tester,
+    ) async {
+      final provider = _provider(
+        fakeWith({
+          _root: (dirs: ['.git', 'src'], files: ['.env', 'a.txt']),
+        }),
+      );
+
+      await tester.pumpWidget(_app(provider, showHidden: true));
+      await tester.pumpAndSettle();
+
+      expect(find.text('.git'), findsOneWidget);
+      expect(find.text('.env'), findsOneWidget);
+      expect(find.text('src'), findsOneWidget);
+
+      provider.dispose();
+    });
+
+    testWidgets('корень с точкой в имени не скрывается', (tester) async {
+      const dotRoot = '/home/u/.config';
+      final provider = _provider(
+        fakeWith({
+          dotRoot: (dirs: ['.hid'], files: ['x.txt']),
+        }),
+        root: dotRoot,
+      );
+
+      await tester.pumpWidget(_app(provider, rootPath: dotRoot));
+      await tester.pumpAndSettle();
+
+      expect(find.text('.config'), findsOneWidget);
+      expect(find.text('x.txt'), findsOneWidget);
+      expect(find.text('.hid'), findsNothing);
+
+      provider.dispose();
+    });
+
+    testWidgets(
+      'раскрытая дот-папка остаётся раскрытой после скрыть/показать',
+      (tester) async {
+        final provider = _provider(
+          fakeWith({
+            _root: (dirs: ['.git'], files: []),
+            '$_root/.git': (dirs: [], files: ['HEAD']),
+          }),
+        );
+
+        await tester.pumpWidget(_app(provider, showHidden: true));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('.git'));
+        await tester.pumpAndSettle();
+        expect(find.text('HEAD'), findsOneWidget);
+
+        await tester.pumpWidget(_app(provider, showHidden: false));
+        await tester.pumpAndSettle();
+        expect(find.text('.git'), findsNothing);
+        expect(find.text('HEAD'), findsNothing);
+
+        await tester.pumpWidget(_app(provider, showHidden: true));
+        await tester.pumpAndSettle();
+        expect(find.text('.git'), findsOneWidget);
+        expect(find.text('HEAD'), findsOneWidget);
+
+        provider.dispose();
+      },
+    );
+
+    testWidgets('вложенные дотфайлы внутри обычной папки скрыты', (
+      tester,
+    ) async {
+      final provider = _provider(
+        fakeWith({
+          _root: (dirs: ['src'], files: []),
+          '$_root/src': (dirs: [], files: ['.hidden', 'main.dart']),
+        }),
+      );
+
+      await tester.pumpWidget(_app(provider));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('src'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('main.dart'), findsOneWidget);
+      expect(find.text('.hidden'), findsNothing);
+
+      provider.dispose();
+    });
+
+    testWidgets('параметр showHidden виджета переключается через pump', (
+      tester,
+    ) async {
+      final provider = _provider(
+        fakeWith({
+          _root: (dirs: [], files: ['.env', 'a.txt']),
+        }),
+      );
+
+      await tester.pumpWidget(_app(provider));
+      await tester.pumpAndSettle();
+      expect(find.text('.env'), findsNothing);
+
+      await tester.pumpWidget(_app(provider, showHidden: true));
+      await tester.pumpAndSettle();
+      expect(find.text('.env'), findsOneWidget);
+
+      await tester.pumpWidget(_app(provider));
+      await tester.pumpAndSettle();
+      expect(find.text('.env'), findsNothing);
+
+      provider.dispose();
+    });
+  });
+
+  group('запуск tmux-сессии (onStartSession)', () {
+    const startItem = Key('menu-start-session');
+
+    _FakeRemoteExec fake() => _FakeRemoteExec()
+      ..responder = (script, args) {
+        if (script != RemoteScripts.readDirScript) return _ok();
+        return _ok(
+          stdout: args.first == _root
+              ? _readDirStdout(dirs: ['proj'], files: ['a.txt'])
+              : _readDirStdout(),
+        );
+      };
+
+    testWidgets('у папки пункт есть и вызывает колбэк с путём папки', (
+      tester,
+    ) async {
+      String? started;
+      final provider = _provider(fake());
+      await tester.pumpWidget(
+        _app(provider, onStartSession: (p) => started = p),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.text('proj'));
+      await tester.pumpAndSettle();
+      expect(find.text('Запустить tmux-сессию здесь'), findsOneWidget);
+      await tester.tap(find.byKey(startItem));
+      await tester.pumpAndSettle();
+
+      expect(started, '$_root/proj');
+      provider.dispose();
+    });
+
+    testWidgets('у корня пункт есть и вызывает колбэк с путём корня', (
+      tester,
+    ) async {
+      String? started;
+      final provider = _provider(fake());
+      await tester.pumpWidget(
+        _app(provider, onStartSession: (p) => started = p),
+      );
+      await tester.pumpAndSettle();
+
+      // Корень — первая строка списка.
+      await tester.longPress(find.byType(InkWell).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(startItem));
+      await tester.pumpAndSettle();
+
+      expect(started, _root);
+      provider.dispose();
+    });
+
+    testWidgets('у файла пункта нет', (tester) async {
+      final provider = _provider(fake());
+      await tester.pumpWidget(_app(provider, onStartSession: (_) {}));
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.text('a.txt'));
+      await tester.pumpAndSettle();
+      expect(find.text('Удалить'), findsOneWidget); // меню открыто
+      expect(find.byKey(startItem), findsNothing);
+      provider.dispose();
+    });
+
+    testWidgets('при onStartSession == null пункта нет', (tester) async {
+      final provider = _provider(fake());
+      await tester.pumpWidget(_app(provider));
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.text('proj'));
+      await tester.pumpAndSettle();
+      expect(find.text('Новый файл'), findsOneWidget); // меню открыто
+      expect(find.byKey(startItem), findsNothing);
+      provider.dispose();
+    });
+  });
 }

@@ -52,4 +52,50 @@ void main() {
       expect(backing.values['etty.connection.a'], 'x');
     });
   });
+  group('SecureAppSettingsStore — скрытые файлы', () {
+    test('по умолчанию выключено (нет записи)', () async {
+      final store = SecureAppSettingsStore(_InMemorySecureStore());
+
+      expect(await store.getShowHiddenFiles(), isFalse);
+    });
+
+    test('setShowHiddenFiles(true) -> getShowHiddenFiles() true', () async {
+      final backing = _InMemorySecureStore();
+      final store = SecureAppSettingsStore(backing);
+
+      await store.setShowHiddenFiles(true);
+
+      expect(await store.getShowHiddenFiles(), isTrue);
+      expect(backing.values['etty.settings.showHiddenFiles'], 'true');
+    });
+
+    test('setShowHiddenFiles(false) после true снова выключает', () async {
+      final store = SecureAppSettingsStore(_InMemorySecureStore());
+
+      await store.setShowHiddenFiles(true);
+      await store.setShowHiddenFiles(false);
+
+      expect(await store.getShowHiddenFiles(), isFalse);
+    });
+
+    test('постороннее значение трактуется как false', () async {
+      final backing = _InMemorySecureStore()
+        ..values['etty.settings.showHiddenFiles'] = 'yes';
+      final store = SecureAppSettingsStore(backing);
+
+      expect(await store.getShowHiddenFiles(), isFalse);
+    });
+
+    test('ключ не пересекается с биометрической блокировкой', () async {
+      final store = SecureAppSettingsStore(_InMemorySecureStore());
+
+      await store.setShowHiddenFiles(true);
+      expect(await store.getBiometricLockEnabled(), isFalse);
+
+      await store.setBiometricLockEnabled(true);
+      await store.setShowHiddenFiles(false);
+      expect(await store.getBiometricLockEnabled(), isTrue);
+      expect(await store.getShowHiddenFiles(), isFalse);
+    });
+  });
 }

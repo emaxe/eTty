@@ -70,6 +70,29 @@ class FileTreeController extends ChangeNotifier {
 
   bool _disposed = false;
 
+  bool _showHidden = false;
+
+  /// Показывать ли скрытые узлы (имя начинается с `.`). Фильтрация чисто клиентская: данные
+  /// провайдера и состояние `expanded`/`children` узлов не меняются, поэтому раскрытая папка
+  /// после «скрыть → показать» остаётся раскрытой.
+  bool get showHidden => _showHidden;
+
+  set showHidden(bool value) {
+    if (_showHidden == value) return;
+    _showHidden = value;
+    _notify();
+  }
+
+  /// Виден ли [node] при текущем [showHidden]. Корень не скрывается никогда.
+  bool isVisible(FileTreeNode node) =>
+      _showHidden || identical(node, root) || !node.name.startsWith('.');
+
+  /// Дети [node], видимые при текущем [showHidden] (пусто, если дети не загружены).
+  List<FileTreeNode> visibleChildren(FileTreeNode node) => [
+    for (final child in node.children ?? const <FileTreeNode>[])
+      if (isVisible(child)) child,
+  ];
+
   Future<void> init() {
     _dirChangedSub = provider.onDirChanged.listen(_onDirChanged);
     return _loadChildren(root, isRoot: true);

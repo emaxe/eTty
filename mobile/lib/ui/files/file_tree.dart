@@ -14,15 +14,24 @@ class FileTree extends StatefulWidget {
     required this.provider,
     required this.rootPath,
     this.onOpenFile,
+    this.showHidden = false,
+    this.onStartSession,
   });
 
   final SshFsProvider provider;
   final String rootPath;
 
+  /// Показывать ли скрытые файлы/папки (имя начинается с `.`); корень не скрывается никогда.
+  final bool showHidden;
+
   /// Тап по файлу (не по папке — те раскрываются/сворачиваются через [FileTreeController]).
   /// `null` по умолчанию — тап по файлу тогда ничего не делает (обратная совместимость с местами,
   /// где просмотр/правка не подключены).
   final void Function(String path)? onOpenFile;
+
+  /// Запуск tmux-сессии в папке [path] (пункт «Запустить tmux-сессию здесь» в меню папки, включая
+  /// корень). `null` — пункта в меню нет (например, у профиля не tmux-персистентность).
+  final void Function(String path)? onStartSession;
 
   @override
   State<FileTree> createState() => _FileTreeState();
@@ -32,7 +41,7 @@ class _FileTreeState extends State<FileTree> {
   late final FileTreeController _controller = FileTreeController(
     provider: widget.provider,
     rootPath: widget.rootPath,
-  );
+  )..showHidden = widget.showHidden;
 
   String? _shownOpError;
 
@@ -41,6 +50,14 @@ class _FileTreeState extends State<FileTree> {
     super.initState();
     _controller.addListener(_onControllerChanged);
     _controller.init();
+  }
+
+  @override
+  void didUpdateWidget(FileTree oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.showHidden != widget.showHidden) {
+      _controller.showHidden = widget.showHidden;
+    }
   }
 
   @override
@@ -68,7 +85,7 @@ class _FileTreeState extends State<FileTree> {
     void walk(FileTreeNode node, int depth) {
       out.add((node: node, depth: depth));
       if (node.isDirectory && node.expanded) {
-        for (final child in node.children ?? const <FileTreeNode>[]) {
+        for (final child in _controller.visibleChildren(node)) {
           walk(child, depth + 1);
         }
       }
@@ -137,6 +154,8 @@ class _FileTreeState extends State<FileTree> {
         _controller.cutToClipboard(node);
       case _NodeMenuAction.paste:
         await _controller.pasteInto(node);
+      case _NodeMenuAction.startSession:
+        widget.onStartSession?.call(node.path);
     }
   }
 
@@ -172,6 +191,7 @@ class _FileTreeState extends State<FileTree> {
                 node: entry.node,
                 depth: entry.depth,
                 hasClipboard: _controller.clipboard != null,
+                canStartSession: widget.onStartSession != null,
                 onTap: entry.node.isDirectory
                     ? () => _controller.toggleExpand(entry.node)
                     : widget.onOpenFile == null
@@ -188,7 +208,16 @@ class _FileTreeState extends State<FileTree> {
   }
 }
 
-enum _NodeMenuAction { newFile, newDir, rename, delete, copy, cut, paste }
+enum _NodeMenuAction {
+  newFile,
+  newDir,
+  rename,
+  delete,
+  copy,
+  cut,
+  paste,
+  startSession,
+}
 
 class _FileTreeRow extends StatelessWidget {
   const _FileTreeRow({
@@ -196,6 +225,7 @@ class _FileTreeRow extends StatelessWidget {
     required this.node,
     required this.depth,
     required this.hasClipboard,
+    required this.canStartSession,
     required this.onTap,
     required this.onMenuAction,
   });
@@ -203,6 +233,9 @@ class _FileTreeRow extends StatelessWidget {
   final FileTreeNode node;
   final int depth;
   final bool hasClipboard;
+
+  /// Показывать ли в меню папки пункт запуска tmux-сессии (задан [FileTree.onStartSession]).
+  final bool canStartSession;
 
   /// Уже вычислен вызывающей стороной с учётом [node.isDirectory] (раскрытие каталога / открытие
   /// файла / `null`, если для файла не задан [FileTree.onOpenFile]) — этот виджет тап не гейтит
@@ -324,6 +357,12 @@ class _FileTreeRow extends StatelessWidget {
           const PopupMenuItem(
             value: _NodeMenuAction.paste,
             child: Text('Вставить сюда'),
+          ),
+        if (node.isDirectory && canStartSession)
+          const PopupMenuItem(
+            key: Key('menu-start-session'),
+            value: _NodeMenuAction.startSession,
+            child: Text('Запустить tmux-сессию здесь'),
           ),
       ],
     );

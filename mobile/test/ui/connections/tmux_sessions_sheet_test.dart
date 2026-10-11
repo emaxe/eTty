@@ -89,13 +89,14 @@ class _FakeRemoteExec implements RemoteExec {
   }
 }
 
-Widget _app(TmuxSessionsService service) {
+Widget _app(TmuxSessionsService service, {ValueChanged<String>? onSelect}) {
   return MaterialApp(
     home: Scaffold(
       body: TmuxSessionsSheet(
         title: 'Test Server',
         createService: () async =>
             TmuxSessionsHandle(service: service, close: () async {}),
+        onSelect: onSelect,
       ),
     ),
   );
@@ -212,5 +213,138 @@ void main() {
     expect(find.text('tmux не установлен на сервере'), findsOneWidget);
 
     await _unmount(tester);
+  });
+
+  group('выбор сессии', () {
+    Future<List<String>> pumpSheet(
+      WidgetTester tester,
+      List<_FakeSession> sessions, {
+      bool withSelect = true,
+    }) async {
+      final selected = <String>[];
+      final service = TmuxSessionsService(
+        exec: _FakeRemoteExec(sessions),
+        socket: 'etty',
+      );
+      await tester.pumpWidget(
+        _app(service, onSelect: withSelect ? selected.add : null),
+      );
+      await _settle(tester);
+      return selected;
+    }
+
+    testWidgets('свободная сессия: onSelect без диалога', (tester) async {
+      final selected = await pumpSheet(tester, [_FakeSession(name: 'free')]);
+
+      await tester.tap(find.byKey(const Key('tmux-session-free')));
+      await _settle(tester);
+
+      expect(selected, ['free']);
+      expect(find.text('Перехватить сессию?'), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('активная: диалог, отмена не выбирает', (tester) async {
+      final selected = await pumpSheet(tester, [
+        _FakeSession(name: 'busy', attached: 1),
+      ]);
+
+      await tester.tap(find.byKey(const Key('tmux-session-busy')));
+      await _settle(tester);
+      expect(find.text('Перехватить сессию?'), findsOneWidget);
+      expect(find.text('Прежний клиент будет отключён.'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Отмена'));
+      await _settle(tester);
+
+      expect(selected, isEmpty);
+      expect(find.text('Перехватить сессию?'), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('активная: «Перехватить» вызывает onSelect', (tester) async {
+      final selected = await pumpSheet(tester, [
+        _FakeSession(name: 'busy', attached: 2),
+      ]);
+
+      await tester.tap(find.byKey(const Key('tmux-session-busy')));
+      await _settle(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Перехватить'));
+      await _settle(tester);
+
+      expect(selected, ['busy']);
+      await _unmount(tester);
+    });
+
+    testWidgets('имя вне sessionNameRe: неактивно, onSelect не вызывается', (
+      tester,
+    ) async {
+      final selected = await pumpSheet(tester, [_FakeSession(name: 'my.work')]);
+
+      expect(find.text('my.work'), findsOneWidget);
+      expect(find.textContaining('имя не поддерживается'), findsOneWidget);
+      final tile = tester.widget<ListTile>(
+        find.byKey(const Key('tmux-session-my.work')),
+      );
+      expect(tile.enabled, isFalse);
+
+      await tester.tap(find.byKey(const Key('tmux-session-my.work')));
+      await _settle(tester);
+
+      expect(selected, isEmpty);
+      await _unmount(tester);
+    });
+
+    testWidgets('тап по kill/rename не выбирает строку', (tester) async {
+      final selected = await pumpSheet(tester, [_FakeSession(name: 'free')]);
+
+      await tester.tap(find.byKey(const Key('tmux-kill-free')));
+      await _settle(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Отмена'));
+      await _settle(tester);
+      await tester.tap(find.byKey(const Key('tmux-rename-free')));
+      await _settle(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Отмена'));
+      await _settle(tester);
+
+      expect(selected, isEmpty);
+      await _unmount(tester);
+    });
+
+    testWidgets('без onSelect тап ничего не делает', (tester) async {
+      await pumpSheet(tester, [
+        _FakeSession(name: 'busy', attached: 1),
+      ], withSelect: false);
+
+      final tile = tester.widget<ListTile>(
+        find.byKey(const Key('tmux-session-busy')),
+      );
+      expect(tile.onTap, isNull);
+
+      await tester.tap(find.byKey(const Key('tmux-session-busy')));
+      await _settle(tester);
+
+      expect(find.text('Перехватить сессию?'), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('активная плитка подсвечена, свободная нет', (tester) async {
+      await pumpSheet(tester, [
+        _FakeSession(name: 'busy', attached: 1),
+        _FakeSession(name: 'free'),
+      ]);
+
+      expect(find.byKey(const Key('tmux-attached-busy')), findsOneWidget);
+      expect(find.byKey(const Key('tmux-attached-free')), findsNothing);
+      final busy = tester.widget<ListTile>(
+        find.byKey(const Key('tmux-session-busy')),
+      );
+      final free = tester.widget<ListTile>(
+        find.byKey(const Key('tmux-session-free')),
+      );
+      expect(busy.tileColor, isNotNull);
+      expect(free.tileColor, isNull);
+      await _unmount(tester);
+    });
   });
 }

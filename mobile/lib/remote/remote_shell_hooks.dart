@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:mobile/core/config/ssh_session_config.dart';
 import 'package:mobile/remote/posix_quote.dart';
 
@@ -85,6 +87,13 @@ class RemoteShellHooks {
     return 'printf "%s\\n" $args > $tmpExpr && mv -f $tmpExpr $fileNameExpr';
   }
 
+  /// Каждый байт UTF-8 -> `\ooo` (три восьмеричные цифры). Результат состоит только из `\` и
+  /// цифр — безопасен для L0 и для формата `printf` в любом POSIX sh.
+  static String _octalEncode(String text) => utf8
+      .encode(text)
+      .map((b) => '\\${b.toRadixString(8).padLeft(3, '0')}')
+      .join();
+
   static void _assertL0Safe(String text, String label) {
     if (text.contains("'") || text.contains('!')) {
       throw ArgumentError(
@@ -152,14 +161,39 @@ class RemoteShellHooks {
   ///
   /// Возвращает remote-команду — позиционный аргумент exec-запроса.
   ///
-  /// Бросает [ArgumentError] при невалидном `sessionName`/`socketName` в режиме `tmux`.
+  /// [startDir] — стартовая папка НОВОЙ tmux-сессии (`new-session -c`). Для уже существующей
+  /// сессии tmux её игнорирует (attach). Действует только при `persistence: 'tmux'`; при `'off'`
+  /// непустой [startDir] — ошибка (молча проигнорировать значило бы скрыть баг вызывающего).
+  /// При `null` вывод побайтово совпадает с версией без параметра (golden-фикстуры).
+  ///
+  /// Путь нельзя вставлять в L1 как есть: в INNER запрещены `'` и `!`, а `$`, `` ` ``, `\`, `"`
+  /// пришлось бы экранировать. Поэтому каждый байт UTF-8 кодируется восьмеричным escape-ом
+  /// `\ooo` (включая `%` и `\` — они спецсимволы формата `printf`), и в INNER попадают только
+  /// `\` и цифры; значение присваивается переменной `d` (в tmux-ветке она свободна) через
+  /// `d=$(printf "...")` и подставляется как `-c "$d"`.
+  ///
+  /// Бросает [ArgumentError] при невалидном `sessionName`/`socketName` в режиме `tmux`, а также
+  /// при [startDir]: пустом, неабсолютном, содержащем NUL/`\n`/`\r`, или заданном вне `tmux`.
   static String buildRemoteInitCommand({
     String persistence = 'off',
     String? sessionName,
     bool hooks = true,
     String socketName = SshSessionConfig.defaultSocket,
+    String? startDir,
   }) {
     final useTmux = persistence == 'tmux';
+
+    if (startDir != null) {
+      if (!useTmux) {
+        throw ArgumentError('remote-shell-hooks: startDir поддерживается только при persistence tmux');
+      }
+      if (!startDir.startsWith('/') ||
+          startDir.contains('\x00') ||
+          startDir.contains('\n') ||
+          startDir.contains('\r')) {
+        throw ArgumentError('remote-shell-hooks: startDir должен быть абсолютным путём без NUL/CR/LF');
+      }
+    }
 
     if (useTmux && !SshSessionConfig.sessionNameRe.hasMatch(sessionName ?? '')) {
       throw ArgumentError('remote-shell-hooks: некорректное имя tmux-сессии');
@@ -292,6 +326,10 @@ class RemoteShellHooks {
         l1.add('[ -n "\$TMUX" ] && tmux set -p allow-passthrough on 2>/dev/null');
       }
 
+      final startDirAssign = startDir == null ? null : 'd=\$(printf "${_octalEncode(startDir)}")';
+      if (startDirAssign != null) l1.add(startDirAssign);
+      final cArg = startDir == null ? '' : ' -c "\$d"';
+
       l1.addAll([
         // tmux на сервере нет — сегодняшнее поведение (обычный login-shell с хуками), без
         // жёсткой ошибки.
@@ -299,9 +337,9 @@ class RemoteShellHooks {
         // -u: локаль на сервер не уезжает — без неё tmux ломает псевдографику. -A -D: attach,
         // если сессия есть, с отцепкой прочих клиентов («последний attach выигрывает»).
         socketName.isNotEmpty
-            ? 'exec "\$t" -u -L $socketName -f "\$c/tmux.conf" new-session -A -D -s "\$n" '
+            ? 'exec "\$t" -u -L $socketName -f "\$c/tmux.conf" new-session -A -D -s "\$n"$cArg '
                 '"/bin/sh \$c/init"'
-            : 'exec "\$t" -u -f "\$c/tmux.conf" new-session -A -D -s "\$n" "/bin/sh \$c/init"',
+            : 'exec "\$t" -u -f "\$c/tmux.conf" new-session -A -D -s "\$n"$cArg "/bin/sh \$c/init"',
       ]);
     }
 

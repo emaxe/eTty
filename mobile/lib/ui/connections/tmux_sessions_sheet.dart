@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:mobile/core/config/ssh_session_config.dart';
 import 'package:mobile/domain/tmux_sessions.dart';
 import 'package:mobile/remote/remote_parse.dart';
 
@@ -37,11 +38,18 @@ class TmuxSessionsSheet extends StatefulWidget {
     super.key,
     required this.title,
     required this.createService,
+    this.onSelect,
   });
 
   /// Заголовок панели (обычно `profile.label`).
   final String title;
   final TmuxSessionsServiceFactory createService;
+
+  /// Вызывается с именем сессии, выбранной тапом по строке (для активной, `attached > 0`, — только
+  /// после подтверждения «Перехватить»). `null` — строки не кликабельны (режим просмотра/управления).
+  /// Строки с именем вне [SshSessionConfig.sessionNameRe] не выбираются никогда. Панель сама
+  /// ничего не закрывает после выбора: `Navigator.pop` делает вызывающая сторона в этом колбэке.
+  final ValueChanged<String>? onSelect;
 
   @override
   State<TmuxSessionsSheet> createState() => _TmuxSessionsSheetState();
@@ -173,6 +181,32 @@ class _TmuxSessionsSheetState extends State<TmuxSessionsSheet> {
     }
   }
 
+  /// Выбор сессии тапом. Активную (к ней подключён другой клиент) выбираем только после
+  /// подтверждения — диалог без контроллеров, поэтому отдельного `StatefulWidget` не требует.
+  Future<void> _select(TmuxSessionInfo session) async {
+    if (session.attached > 0) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Перехватить сессию?'),
+          content: const Text('Прежний клиент будет отключён.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Перехватить'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    widget.onSelect?.call(session.name);
+  }
+
   Future<void> _rename(TmuxSessionInfo session) async {
     final newName = await showDialog<String>(
       context: context,
@@ -269,6 +303,9 @@ class _TmuxSessionsSheetState extends State<TmuxSessionsSheet> {
                   key: ValueKey(session.name),
                   session: session,
                   formatTime: _formatTime,
+                  onTap: widget.onSelect == null
+                      ? null
+                      : () => _select(session),
                   onKill: () => _kill(session),
                   onRename: () => _rename(session),
                 ),
@@ -338,12 +375,16 @@ class _SessionTile extends StatelessWidget {
     super.key,
     required this.session,
     required this.formatTime,
+    required this.onTap,
     required this.onKill,
     required this.onRename,
   });
 
   final TmuxSessionInfo session;
   final String Function(int millis) formatTime;
+
+  /// `null` — плитка не кликабельна (нет `onSelect` у панели).
+  final VoidCallback? onTap;
   final VoidCallback onKill;
   final VoidCallback onRename;
 
@@ -351,16 +392,25 @@ class _SessionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final activityAt = session.activityAt;
     final currentCommand = session.currentCommand;
+    final nameSupported = SshSessionConfig.sessionNameRe.hasMatch(session.name);
+    final active = session.attached > 0;
     final subtitleParts = [
       '${session.windows} окон',
       'создана ${formatTime(session.createdAt)}',
       if (activityAt != null) 'активность ${formatTime(activityAt)}',
       ?currentCommand,
+      if (!nameSupported) 'имя не поддерживается',
     ];
     return ListTile(
+      key: Key('tmux-session-${session.name}'),
+      enabled: nameSupported,
+      onTap: nameSupported ? onTap : null,
+      tileColor: active
+          ? Theme.of(context).colorScheme.secondaryContainer
+          : null,
       title: Text(session.name),
       subtitle: Text(subtitleParts.join(' · ')),
-      leading: session.attached > 0
+      leading: active
           ? Chip(
               key: Key('tmux-attached-${session.name}'),
               label: Text('активна · ${session.attached}'),

@@ -62,6 +62,7 @@ class TabController {
     this.hooksEnabled = true,
     this.socketName = SshSessionConfig.defaultSocket,
     String? sessionName,
+    this.startDir,
     Iterable<String> takenSessionNames = const [],
     this.onCwdChange,
     this.onBusyChange,
@@ -91,6 +92,13 @@ class TabController {
 
   /// `null` при `persistence == 'off'` — обычная SSH-сессия не именуется.
   final String? sessionName;
+
+  /// Стартовая папка НОВОЙ tmux-сессии (`new-session -c`). Для уже существующей сессии tmux её
+  /// игнорирует (REQ-10). Учитывается только при `persistence == 'tmux'`: при `'off'` в
+  /// [RemoteShellHooks.buildRemoteInitCommand] передаётся `null` (без assert/исключения — вкладка
+  /// просто открывается в домашней папке). Final-поле, поэтому сохраняется при авто-ретрае без
+  /// хуков и при повторном [connect].
+  final String? startDir;
 
   /// Предпочтение пользователя (профиль подключения) — не мутируется авто-ретраем, см.
   /// [_hooksForThisAttempt].
@@ -149,6 +157,7 @@ class TabController {
         sessionName: sessionName,
         hooks: _hooksForThisAttempt,
         socketName: socketName,
+        startDir: persistence == 'tmux' ? startDir : null,
       );
 
       final ShellSession session;

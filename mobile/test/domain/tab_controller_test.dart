@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/domain/tab_controller.dart';
+import 'package:mobile/remote/remote_shell_hooks.dart';
 import 'package:mobile/remote/session_name.dart';
 import 'package:mobile/transport/ssh_connection.dart';
 import 'package:mockito/annotations.dart';
@@ -390,6 +391,143 @@ void main() {
         );
       },
     );
+  });
+
+  group('TabController — startDir', () {
+    const dir = '/home/user/my project';
+
+    test('без startDir команда равна команде без параметра и без -c', () async {
+      final controller = TabController(
+        clientSource: clientSource,
+        connectionId: 'c1',
+        cols: 80,
+        rows: 24,
+        sessionName: 's1',
+      );
+      await controller.connect();
+      await _settle();
+
+      expect(commands.single, isNot(contains(' -c "\$d"')));
+      expect(
+        commands.single,
+        RemoteShellHooks.buildRemoteInitCommand(
+          persistence: 'tmux',
+          sessionName: 's1',
+        ),
+      );
+    });
+
+    test('со startDir команда содержит -c "\$d" и совпадает с эталоном', () async {
+      final controller = TabController(
+        clientSource: clientSource,
+        connectionId: 'c1',
+        cols: 80,
+        rows: 24,
+        sessionName: 's1',
+        startDir: dir,
+      );
+      await controller.connect();
+      await _settle();
+
+      expect(commands.single, contains(' -c "\$d"'));
+      expect(
+        commands.single,
+        RemoteShellHooks.buildRemoteInitCommand(
+          persistence: 'tmux',
+          sessionName: 's1',
+          startDir: dir,
+        ),
+      );
+    });
+
+    test('авто-ретрай без хуков сохраняет startDir', () async {
+      final firstDone = Completer<void>();
+      when(session.done).thenAnswer((_) => firstDone.future);
+      final controller = TabController(
+        clientSource: clientSource,
+        connectionId: 'c1',
+        cols: 80,
+        rows: 24,
+        sessionName: 's1',
+        startDir: dir,
+      );
+      await controller.connect();
+      await _settle();
+
+      final secondDone = Completer<void>();
+      when(session.done).thenAnswer((_) => secondDone.future);
+      when(session.exitCode).thenReturn(1);
+      firstDone.complete();
+      await _settle();
+
+      expect(commands, hasLength(2));
+      expect(commands[1], isNot(contains('_etty_emit')));
+      expect(commands[1], contains(' -c "\$d"'));
+      expect(
+        commands[1],
+        RemoteShellHooks.buildRemoteInitCommand(
+          persistence: 'tmux',
+          sessionName: 's1',
+          hooks: false,
+          startDir: dir,
+        ),
+      );
+    });
+
+    test('повторный connect() использует тот же startDir', () async {
+      final controller = TabController(
+        clientSource: clientSource,
+        connectionId: 'c1',
+        cols: 80,
+        rows: 24,
+        sessionName: 's1',
+        startDir: dir,
+      );
+      await controller.connect();
+      await _settle();
+      await controller.close();
+      await controller.connect();
+      await _settle();
+
+      expect(commands, hasLength(2));
+      expect(commands[1], commands[0]);
+      expect(commands[1], contains(' -c "\$d"'));
+    });
+
+    test('persistence off без startDir работает как раньше', () async {
+      final controller = TabController(
+        clientSource: clientSource,
+        connectionId: 'c1',
+        cols: 80,
+        rows: 24,
+        persistence: 'off',
+      );
+      await controller.connect();
+      await _settle();
+
+      expect(
+        commands.single,
+        RemoteShellHooks.buildRemoteInitCommand(persistence: 'off'),
+      );
+    });
+
+    test('persistence off со startDir игнорирует его (без исключения)', () async {
+      final controller = TabController(
+        clientSource: clientSource,
+        connectionId: 'c1',
+        cols: 80,
+        rows: 24,
+        persistence: 'off',
+        startDir: dir,
+      );
+      await controller.connect();
+      await _settle();
+
+      expect(
+        commands.single,
+        RemoteShellHooks.buildRemoteInitCommand(persistence: 'off'),
+      );
+    });
   });
 
   group('TabController — close()/dispose()', () {
