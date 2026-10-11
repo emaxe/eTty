@@ -1,0 +1,54 @@
+[
+  {
+    "sshOptions": {
+      "persistence": "tmux"
+    },
+    "connection": null,
+    "expected": "tmux"
+  },
+  {
+    "sshOptions": {
+      "persistence": "off"
+    },
+    "connection": {
+      "persistence": "tmux"
+    },
+    "expected": "off"
+  },
+  {
+    "connection": {
+      "persistence": "tmux"
+    },
+    "expected": "tmux"
+  },
+  {
+    "connection": {
+      "persistence": "off"
+    },
+    "expected": "off"
+  },
+  {
+    "connection": null,
+    "expected": "off"
+  },
+  {
+    "sshOptions": {},
+    "connection": {
+      "persistence": "tmux"
+    },
+    "expected": "tmux"
+  },
+  {
+    "sshOptions": {
+      "persistence": "bogus"
+    },
+    "connection": {
+      "persistence": "tmux"
+    },
+    "expected": "tmux"
+  },
+  {
+    "sshOptions": null,
+    "expected": "off"
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "open-artifacts": {
+      "source": "emaxe/open-artifacts",
+      "sourceType": "github",
+      "skillPath": "skills/open-artifacts/SKILL.md",
+      "computedHash": "4fb7205248ef8c94dc6e7fc40fb163219fd55f6498a215b98d324d3e22279892"
+    }
+  }
+}

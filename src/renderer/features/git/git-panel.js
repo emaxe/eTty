@@ -30,6 +30,7 @@ export class GitPanel {
     this._onClose = onClose
 
     this._rootPath = null
+    this._ctx = null
     this._branch = null
     this._ahead = 0
     this._behind = 0
@@ -182,8 +183,9 @@ export class GitPanel {
     document.addEventListener('mouseup', onUp)
   }
 
-  async show(rootPath) {
+  async show(rootPath, ctx = null) {
     this._rootPath = rootPath
+    this._ctx = ctx
     this._overlayEl.classList.remove('hidden')
     this._diffView.clear()
     this._showRootPath()
@@ -197,6 +199,7 @@ export class GitPanel {
    */
   showUnavailable(message) {
     this._rootPath = null
+    this._ctx = null
     this._overlayEl.classList.remove('hidden')
     this._diffView.clear()
     this._showRootPath()
@@ -211,7 +214,7 @@ export class GitPanel {
     if (!this._rootPathEl) return
     if (!this._rootPath) { this._rootPathEl.textContent = ''; return }
     const pollPath = this._rootPath
-    const root = await this._api.gitGetRoot(this._rootPath)
+    const root = await this._api.gitGetRoot(this._rootPath, this._ctx)
     if (this._rootPath !== pollPath) return
     this._rootPathEl.textContent = root || this._rootPath
   }
@@ -242,8 +245,8 @@ export class GitPanel {
     try {
       const rootPath = this._rootPath
       const [status, branches] = await Promise.all([
-        this._api.gitGetStatus(rootPath),
-        this._api.gitGetBranches(rootPath),
+        this._api.gitGetStatus(rootPath, this._ctx),
+        this._api.gitGetBranches(rootPath, this._ctx),
       ])
       if (this._rootPath !== rootPath) return // stale — panel switched repos while awaiting
 
@@ -327,7 +330,7 @@ export class GitPanel {
       file,
       async () => {
         if (isIgnoredGroup) return ''
-        const result = await this._api.gitGetDiff(this._rootPath, file.path, { staged, untracked })
+        const result = await this._api.gitGetDiff(this._rootPath, file.path, { staged, untracked }, this._ctx)
         return typeof result === 'string' ? result : ''
       },
       {
@@ -339,14 +342,14 @@ export class GitPanel {
 
   async _doStage(files) {
     if (!files || files.length === 0 || !this._rootPath) return
-    const result = await this._api.gitStage(this._rootPath, files.map(f => f.path))
+    const result = await this._api.gitStage(this._rootPath, files.map(f => f.path), this._ctx)
     if (result?.error) this._showToast(result.error, 'error')
     else await this._refresh()
   }
 
   async _doUnstage(files) {
     if (!files || files.length === 0 || !this._rootPath) return
-    const result = await this._api.gitUnstage(this._rootPath, files.map(f => f.path))
+    const result = await this._api.gitUnstage(this._rootPath, files.map(f => f.path), this._ctx)
     if (result?.error) this._showToast(result.error, 'error')
     else await this._refresh()
   }
@@ -360,7 +363,7 @@ export class GitPanel {
       cancelText: 'Cancel',
     })
     if (!confirmed) return
-    const result = await this._api.gitDiscardFile(this._rootPath, [file.path], { untracked: !!file.untracked })
+    const result = await this._api.gitDiscardFile(this._rootPath, [file.path], { untracked: !!file.untracked }, this._ctx)
     if (result?.error) this._showToast(result.error, 'error')
     else await this._refresh()
   }
@@ -389,7 +392,7 @@ export class GitPanel {
     }
     this._setActionsDisabled(true)
     const stageAll = this._lastStagedCount === 0
-    const result = await this._api.gitCommit(this._rootPath, msg, { stageAll })
+    const result = await this._api.gitCommit(this._rootPath, msg, { stageAll }, this._ctx)
     if (result?.error) {
       this._showToast(result.error, 'error')
     } else {
@@ -405,7 +408,7 @@ export class GitPanel {
     this._setActionsDisabled(true)
     const originalLabel = this._btnPush.textContent
     this._btnPush.textContent = '…'
-    const result = await this._api.gitPush(this._rootPath)
+    const result = await this._api.gitPush(this._rootPath, this._ctx)
     if (result?.error) this._showToast(result.error, 'error')
     else this._showToast('Pushed successfully', 'success')
     this._btnPush.textContent = originalLabel
@@ -434,7 +437,7 @@ export class GitPanel {
       cancelText: 'Cancel',
     })
     if (!confirmed) return
-    const result = await this._api.gitDiscard(this._rootPath)
+    const result = await this._api.gitDiscard(this._rootPath, this._ctx)
     if (result?.error) {
       this._showToast(result.error, 'error')
     } else {
@@ -573,14 +576,14 @@ export class GitPanel {
 
   async _checkoutBranch(name) {
     if (!this._rootPath) return
-    const result = await this._api.gitCheckout(this._rootPath, name)
+    const result = await this._api.gitCheckout(this._rootPath, name, this._ctx)
     if (result?.error) this._showToast(result.error, 'error')
     else await this._refresh()
   }
 
   async _createBranch(name) {
     if (!name || !this._rootPath) return
-    const result = await this._api.gitCreateBranch(this._rootPath, name)
+    const result = await this._api.gitCreateBranch(this._rootPath, name, this._ctx)
     if (result?.error) this._showToast(result.error, 'error')
     else await this._refresh()
   }
@@ -602,7 +605,7 @@ export class GitPanel {
       cancelText: 'Cancel',
     })
     if (!confirmed) return
-    const result = await this._api.gitDeleteBranch(this._rootPath, name)
+    const result = await this._api.gitDeleteBranch(this._rootPath, name, this._ctx)
     if (result?.error) this._showToast(result.error, 'error')
     else await this._refresh()
   }

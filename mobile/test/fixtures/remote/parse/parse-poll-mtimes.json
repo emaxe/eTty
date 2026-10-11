@@ -1,0 +1,67 @@
+[
+  {
+    "name": "mixed_present_and_missing",
+    "dirPaths": [
+      "/a",
+      "/b",
+      "/c"
+    ],
+    "inputBase64": "MTcwMDAwMDAwMAp4CjE3MDAwMDAyMDAK",
+    "expected": [
+      [
+        "/a",
+        1700000000
+      ],
+      [
+        "/b",
+        null
+      ],
+      [
+        "/c",
+        1700000200
+      ]
+    ]
+  },
+  {
+    "name": "all_present",
+    "dirPaths": [
+      "/a",
+      "/b"
+    ],
+    "inputBase64": "MTcwMDAwMDAwMAoxNzAwMDAwMTAwCg==",
+    "expected": [
+      [
+        "/a",
+        1700000000
+      ],
+      [
+        "/b",
+        1700000100
+      ]
+    ]
+  },
+  {
+    "name": "all_missing",
+    "dirPaths": [
+      "/a",
+      "/b"
+    ],
+    "inputBase64": "eAp4Cg==",
+    "expected": [
+      [
+        "/a",
+        null
+      ],
+      [
+        "/b",
+        null
+      ]
+    ]
+  },
+  {
+    "name": "empty_dir_list",
+    "dirPaths": [],
+    "inputBase64": "",
+    "expected": []
+  }
+]

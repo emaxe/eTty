@@ -1,11 +1,23 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import fs from 'fs/promises'
-import path from 'path'
 import log from 'electron-log'
+import { SSH_FS_CONFIG } from '../../shared/ssh-fs-config.js'
+import {
+  stripTerminalEscapes,
+  parseNvmList,
+  parseNvmRemote,
+  parseFnmList,
+  parseFnmRemote,
+  parseAsdfList,
+  parseAsdfRemote,
+  versionFromNodePath,
+  validateVersion,
+} from './node-version-parse.js'
 
 const execFileAsync = promisify(execFile)
 const COMMAND_TIMEOUT_MS = 15000
+const INSTALL_TIMEOUT_MS = 10 * 60 * 1000
+const DETECT_CACHE_MS = 60 * 1000
 const NVM_INSTALL_URL = 'https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh'
 
 const MANAGERS = Object.freeze({
@@ -14,269 +26,198 @@ const MANAGERS = Object.freeze({
   ASDF: 'asdf',
 })
 
-/** Valid Node version identifiers: semver, or known aliases like 'lts', 'latest', 'node'. */
-const VERSION_RE = /^\d+\.\d+\.\d+|[a-zA-Z][a-zA-Z0-9._-]*$/
+/**
+ * nvm — shell-функция: в интерактивном шелле она уже есть (если .zshrc/.bashrc её загружает),
+ * иначе пробуем типовые расположения nvm.sh, включая Homebrew. NVM_DIR раскрывает сам шелл —
+ * process.env у Electron при запуске из Finder пуст.
+ */
+const NVM_PRELUDE =
+  'if ! command -v nvm >/dev/null 2>&1; then ' +
+  'for f in "${NVM_DIR:-$HOME/.nvm}/nvm.sh" /opt/homebrew/opt/nvm/nvm.sh /usr/local/opt/nvm/nvm.sh; do ' +
+  '[ -s "$f" ] && . "$f" && break; done; fi'
+
+/** Печатает имя менеджера и его версию (две строки) либо ничего. */
+const DETECT_SCRIPT = [
+  NVM_PRELUDE,
+  'if command -v nvm >/dev/null 2>&1; then echo nvm; nvm --version',
+  'elif command -v fnm >/dev/null 2>&1; then echo fnm; fnm --version',
+  'elif command -v asdf >/dev/null 2>&1; then echo asdf; asdf --version',
+  'fi'
+].join('; ')
 
 function isUnix() {
   return process.platform !== 'win32'
 }
 
-function validateVersion(version) {
-  if (!version || !VERSION_RE.test(version)) {
-    throw new Error(`Invalid Node version: ${version}`)
-  }
-  return version
-}
-
 /**
- * Универсальный менеджер версий Node.js.
- * Поддерживает nvm, fnm, asdf.
- * Все команды запускаются через shell с resolved PATH (ShellPathResolver).
+ * Универсальный менеджер версий Node.js (nvm, fnm, asdf).
+ * Команды выполняются в login+interactive шелле — локальном или удалённом (по SSH-каналу вкладки),
+ * в зависимости от `ctx` (`{kind:'ssh', sessionId}` | undefined). Переключение версии
+ * в терминале вкладки делает renderer (команда в PTY), здесь только запросы и установка.
  */
 export class NodeVersionManager {
-  constructor({ shellPathResolver }) {
+  /**
+   * @param {{ shellPathResolver: import('../shell-path-resolver.js').ShellPathResolver,
+   *   sshSessionRegistry?: import('../ssh/ssh-session-registry.js').SshSessionRegistry }} deps
+   */
+  constructor({ shellPathResolver, sshSessionRegistry = null }) {
     this._resolver = shellPathResolver
+    this._sshSessionRegistry = sshSessionRegistry
+    /** @type {Map<string, {at: number, promise: Promise<object>}>} */
+    this._detectCache = new Map()
   }
 
   // ── Detection ──
 
   /**
-   * Определяет, какой менеджер версий доступен в системе.
-   * Возвращает { manager: 'nvm'|'fnm'|'asdf'|null, path: string|null }.
+   * Определяет доступный менеджер версий. Результат кэшируется на минуту по контексту
+   * (каждое обращение — запуск интерактивного шелла с загрузкой rc-файлов).
+   * @returns {Promise<{manager: 'nvm'|'fnm'|'asdf'|null, version: string|null}>}
    */
-  async detectManager() {
-    const resolvedPath = this._resolver.getResolvedPath()
-    if (!resolvedPath) {
-      log.warn('[NodeVersionManager] PATH not resolved yet')
-      return { manager: null, path: null }
-    }
+  detectManager(ctx) {
+    const key = this._ctxKey(ctx)
+    const cached = this._detectCache.get(key)
+    if (cached && Date.now() - cached.at < DETECT_CACHE_MS) return cached.promise
 
-    const env = { ...process.env, PATH: resolvedPath }
+    const promise = this._detectManager(ctx)
+    this._detectCache.set(key, { at: Date.now(), promise })
+    // Не кэшируем сбои/«не найден» дольше обычного — но и не дёргаем шелл параллельно
+    promise.catch(() => this._detectCache.delete(key))
+    return promise
+  }
 
-    for (const manager of [MANAGERS.NVM, MANAGERS.FNM, MANAGERS.ASDF]) {
-      try {
-        const cmd = manager === MANAGERS.NVM
-          ? this._nvmShellCommand('nvm --version')
-          : `${manager} --version`
-        const { stdout } = await this._exec(cmd, env)
-        const version = stdout.trim()
-        if (version) {
-          log.info(`[NodeVersionManager] Detected ${manager} v${version}`)
-          return { manager, version }
-        }
-      } catch (e) {
-        // Not found, continue
+  async _detectManager(ctx) {
+    try {
+      const { stdout } = await this._exec(ctx, DETECT_SCRIPT)
+      const [manager, version] = stripTerminalEscapes(stdout).split('\n').map(l => l.trim()).filter(Boolean)
+      if (Object.values(MANAGERS).includes(manager)) {
+        log.info(`[NodeVersionManager] Detected ${manager} ${version || ''} (${this._ctxKey(ctx)})`)
+        return { manager, version: version || null }
       }
+    } catch (e) {
+      log.warn('[NodeVersionManager] detectManager failed:', e.message)
     }
-
-    log.info('[NodeVersionManager] No node version manager detected')
     return { manager: null, version: null }
   }
 
   /**
-   * Возвращает текущую версию Node.js для указанной папки.
-   * Сначала проверяет .nvmrc / .node-version / .tool-versions,
-   * затем запускает `node --version` в shell с resolved PATH.
+   * Версия node по абсолютному пути к бинарю (приходит из OSC 6973 шелла вкладки).
+   * Типовые менеджеры (nvm/fnm/asdf/volta image) определяются по пути без запуска процесса,
+   * для shim'ов и системных установок спрашивается сам бинарь.
+   * @returns {Promise<{version: string, source: 'path'|'binary'}|null>}
    */
-  async getCurrentVersion(cwd) {
-    const resolvedPath = this._resolver.getResolvedPath()
-    if (!resolvedPath) return null
-
-    const env = { ...process.env, PATH: resolvedPath }
-
-    // Check version files first
-    const { manager: detectedManager } = await this.detectManager()
-    const versionFile = await this._readVersionFile(cwd, detectedManager)
-    if (versionFile) {
-      return {
-        version: versionFile.version,
-        source: versionFile.source,
-        manager: versionFile.manager,
-      }
-    }
-
-    // Fallback: ask node directly
+  async resolveNodePath(nodePath, ctx) {
+    if (typeof nodePath !== 'string' || !nodePath.startsWith('/')) return null
+    const fromPath = versionFromNodePath(nodePath)
+    if (fromPath) return { version: fromPath, source: 'path' }
     try {
-      const { stdout } = await this._exec('node --version', env, cwd)
-      const v = stdout.trim()
-      if (v.startsWith('v')) {
-        return { version: v.slice(1), source: 'node', manager: null }
-      }
-      return { version: v, source: 'node', manager: null }
+      const { stdout } = await this._exec(ctx, '"$1" --version', [nodePath], { interactive: false })
+      const m = stripTerminalEscapes(stdout).trim().match(/^v?(\d+\.\d+\.\d+)/)
+      return m ? { version: m[1], source: 'binary' } : null
     } catch (e) {
-      log.warn('[NodeVersionManager] Failed to get node version:', e.message)
+      log.warn('[NodeVersionManager] resolveNodePath failed:', e.message)
       return null
     }
   }
 
-  /**
-   * Список установленных версий Node.js.
-   */
-  async listInstalled() {
-    const { manager } = await this.detectManager()
-    if (!manager) return { manager: null, versions: [] }
+  // ── Queries ──
 
-    const env = this._env()
+  async listInstalled(ctx) {
+    const { manager } = await this.detectManager(ctx)
+    if (!manager) return { manager: null, versions: [] }
 
     try {
       switch (manager) {
         case MANAGERS.NVM: {
-          const { stdout } = await this._exec(this._nvmShellCommand('nvm ls --no-colors'), env)
-          return { manager, versions: this._parseNvmList(stdout) }
+          const { stdout } = await this._exec(ctx, `${NVM_PRELUDE}; nvm ls --no-colors`)
+          return { manager, versions: parseNvmList(stdout) }
         }
         case MANAGERS.FNM: {
-          const { stdout } = await this._exec('fnm list', env)
-          return { manager, versions: this._parseFnmList(stdout) }
+          const { stdout } = await this._exec(ctx, 'fnm list')
+          return { manager, versions: parseFnmList(stdout) }
         }
         case MANAGERS.ASDF: {
-          const { stdout } = await this._exec('asdf list nodejs', env)
-          return { manager, versions: this._parseAsdfList(stdout) }
+          const { stdout } = await this._exec(ctx, 'asdf list nodejs')
+          return { manager, versions: parseAsdfList(stdout) }
         }
       }
     } catch (e) {
       log.warn(`[NodeVersionManager] Failed to list installed versions (${manager}):`, e.message)
-      return { manager, versions: [] }
     }
+    return { manager, versions: [] }
   }
 
-  /**
-   * Список доступных для установки версий (remote).
-   */
-  async listRemote() {
-    const { manager } = await this.detectManager()
+  async listRemote(ctx) {
+    const { manager } = await this.detectManager(ctx)
     if (!manager) return { manager: null, versions: [] }
-
-    const env = this._env()
 
     try {
       switch (manager) {
         case MANAGERS.NVM: {
-          const { stdout } = await this._exec(this._nvmShellCommand('nvm ls-remote --no-colors'), env)
-          return { manager, versions: this._parseNvmRemote(stdout) }
+          const { stdout } = await this._exec(ctx, `${NVM_PRELUDE}; nvm ls-remote --no-colors`, [], { timeoutMs: 60000 })
+          return { manager, versions: parseNvmRemote(stdout) }
         }
         case MANAGERS.FNM: {
-          const { stdout } = await this._exec('fnm list-remote', env)
-          return { manager, versions: this._parseFnmRemote(stdout) }
+          const { stdout } = await this._exec(ctx, 'fnm list-remote', [], { timeoutMs: 60000 })
+          return { manager, versions: parseFnmRemote(stdout) }
         }
         case MANAGERS.ASDF: {
-          const { stdout } = await this._exec('asdf list-all nodejs', env)
-          return { manager, versions: this._parseAsdfRemote(stdout) }
+          const { stdout } = await this._exec(ctx, 'asdf list-all nodejs', [], { timeoutMs: 60000 })
+          return { manager, versions: parseAsdfRemote(stdout) }
         }
       }
     } catch (e) {
       log.warn(`[NodeVersionManager] Failed to list remote versions (${manager}):`, e.message)
-      return { manager, versions: [] }
     }
+    return { manager, versions: [] }
   }
 
-  /**
-   * Установить версию Node.js.
-   */
-  async install(version) {
+  // ── Mutations ──
+
+  async install(version, ctx) {
+    return this._versionCommand('install', version, ctx)
+  }
+
+  async uninstall(version, ctx) {
+    return this._versionCommand('uninstall', version, ctx)
+  }
+
+  /** `install`/`uninstall` выбранной версии; версия передаётся позиционным аргументом, не в строке команды. */
+  async _versionCommand(action, version, ctx) {
     const v = validateVersion(version)
-    const { manager } = await this.detectManager()
+    const { manager } = await this.detectManager(ctx)
     if (!manager) throw new Error('No node version manager found')
 
-    const env = this._env()
+    const script = {
+      [MANAGERS.NVM]: `${NVM_PRELUDE}; nvm ${action} "$1"`,
+      [MANAGERS.FNM]: `fnm ${action} "$1"`,
+      [MANAGERS.ASDF]: `asdf ${action} nodejs "$1"`,
+    }[manager]
 
     try {
-      switch (manager) {
-        case MANAGERS.NVM:
-          await this._exec(this._nvmShellCommand(`nvm install ${v}`), env)
-          break
-        case MANAGERS.FNM:
-          await this._exec(`fnm install ${v}`, env)
-          break
-        case MANAGERS.ASDF:
-          await this._exec(`asdf install nodejs ${v}`, env)
-          break
-      }
+      await this._exec(ctx, script, [v], { timeoutMs: INSTALL_TIMEOUT_MS })
       return { success: true, manager, version: v }
     } catch (e) {
-      log.warn(`[NodeVersionManager] Failed to install ${v} (${manager}):`, e.message)
+      log.warn(`[NodeVersionManager] Failed to ${action} ${v} (${manager}):`, e.message)
       throw e
     }
   }
 
-  /**
-   * Переключить версию Node.js для указанной папки.
-   * Для nvm/fnm — создаёт/обновляет .nvmrc; для asdf — обновляет .tool-versions.
-   */
-  async use(version, cwd) {
-    const v = validateVersion(version)
-    const { manager } = await this.detectManager()
-    if (!manager) throw new Error('No node version manager found')
-
-    const env = this._env()
-
-    try {
-      switch (manager) {
-        case MANAGERS.NVM: {
-          await this._exec(this._nvmShellCommand(`nvm use ${v}`), env, cwd)
-          await fs.writeFile(path.join(cwd, '.nvmrc'), v + '\n')
-          break
-        }
-        case MANAGERS.FNM: {
-          await this._exec(`fnm use ${v}`, env, cwd)
-          await fs.writeFile(path.join(cwd, '.nvmrc'), v + '\n')
-          break
-        }
-        case MANAGERS.ASDF: {
-          await this._exec(`asdf local nodejs ${v}`, env, cwd)
-          break
-        }
-      }
-      return { success: true, manager, version: v }
-    } catch (e) {
-      log.warn(`[NodeVersionManager] Failed to use ${v} (${manager}):`, e.message)
-      throw e
+  /** Автоустановка nvm (только локально). */
+  async installManager(ctx) {
+    if (ctx?.kind === 'ssh') {
+      throw new Error('Automatic nvm installation is only supported for local tabs. Install nvm on the server manually.')
     }
-  }
-
-  /**
-   * Удалить версию Node.js.
-   */
-  async uninstall(version) {
-    const v = validateVersion(version)
-    const { manager } = await this.detectManager()
-    if (!manager) throw new Error('No node version manager found')
-
-    const env = this._env()
-
-    try {
-      switch (manager) {
-        case MANAGERS.NVM:
-          await this._exec(this._nvmShellCommand(`nvm uninstall ${v}`), env)
-          break
-        case MANAGERS.FNM:
-          await this._exec(`fnm uninstall ${v}`, env)
-          break
-        case MANAGERS.ASDF:
-          await this._exec(`asdf uninstall nodejs ${v}`, env)
-          break
-      }
-      return { success: true, manager, version: v }
-    } catch (e) {
-      log.warn(`[NodeVersionManager] Failed to uninstall ${v} (${manager}):`, e.message)
-      throw e
-    }
-  }
-
-  /**
-   * Автоматическая установка nvm.
-   * Возвращает { success: boolean, output: string }.
-   */
-  async installManager() {
     if (!isUnix()) {
       throw new Error('Automatic nvm installation is only supported on Unix-like systems. Please install nvm manually.')
     }
 
     try {
-      const { stdout, stderr } = await this._exec(
-        `curl -o- ${NVM_INSTALL_URL} | bash`,
-        process.env
-      )
+      const { stdout, stderr } = await this._exec(undefined, `curl -o- ${NVM_INSTALL_URL} | bash`, [], { timeoutMs: INSTALL_TIMEOUT_MS })
+      this._detectCache.clear()
+      // invalidate() обнуляет кэш PATH — сразу пересобираем, иначе последующие вызовы остались бы без PATH
       this._resolver.invalidate()
+      await this._resolver.resolve()
       return { success: true, output: stdout + stderr }
     } catch (e) {
       log.warn('[NodeVersionManager] Failed to install nvm:', e.message)
@@ -286,127 +227,48 @@ export class NodeVersionManager {
 
   // ── Private helpers ──
 
-  _env() {
-    const resolvedPath = this._resolver.getResolvedPath()
-    return { ...process.env, PATH: resolvedPath || process.env.PATH }
+  _ctxKey(ctx) {
+    return ctx?.kind === 'ssh' ? `ssh:${ctx.sessionId}` : 'local'
   }
 
-  async _exec(command, env, cwd) {
-    const shell = isUnix() ? '/bin/zsh' : (process.env.ComSpec || 'cmd.exe')
-    const args = isUnix() ? ['-l', '-i', '-c', command] : ['/c', command]
-    return execFileAsync(shell, args, {
-      timeout: COMMAND_TIMEOUT_MS,
+  /**
+   * Выполняет `script` в login-шелле: локально (`$SHELL`) или на удалённом хосте через
+   * SSH-канал вкладки. Аргументы доступны скрипту как `$1..` (не интерполируются в строку).
+   * @returns {Promise<{stdout: string, stderr: string}>}
+   */
+  async _exec(ctx, script, args = [], { timeoutMs = COMMAND_TIMEOUT_MS, interactive = true } = {}) {
+    if (ctx?.kind === 'ssh') return this._execRemote(ctx, script, args, timeoutMs, interactive)
+
+    const resolvedPath = await this._resolver.resolve()
+    const env = { ...process.env, PATH: resolvedPath || process.env.PATH }
+    const shell = isUnix() ? (process.env.SHELL || this._resolver.getDefaultShell()) : (process.env.ComSpec || 'cmd.exe')
+    const shellArgs = isUnix()
+      ? ['-l', ...(interactive ? ['-i'] : []), '-c', script, 'etty', ...args]
+      : ['/c', script]
+    const { stdout, stderr } = await execFileAsync(shell, shellArgs, {
+      timeout: timeoutMs,
       env,
-      cwd: cwd || process.env.HOME,
+      cwd: process.env.HOME,
     })
+    return { stdout: stripTerminalEscapes(stdout), stderr }
   }
 
-  _nvmShellCommand(cmd) {
-    const nvmDir = process.env.NVM_DIR || `${process.env.HOME}/.nvm`
-    return `[ -s "${nvmDir}/nvm.sh" ] && . "${nvmDir}/nvm.sh" && ${cmd}`
-  }
+  async _execRemote(ctx, script, args, timeoutMs, interactive) {
+    const session = this._sshSessionRegistry?.get(ctx.sessionId)
+    if (!session?.fsProvider) throw new Error('SSH session is not ready')
 
-  async _readVersionFile(cwd, detectedManager) {
-    const files = [
-      { name: '.nvmrc', manager: MANAGERS.NVM },
-      { name: '.node-version', manager: detectedManager },
-      { name: '.tool-versions', manager: MANAGERS.ASDF },
-    ]
-
-    for (const { name, manager } of files) {
-      try {
-        const filePath = path.join(cwd, name)
-        const content = await fs.readFile(filePath, 'utf-8')
-        let version = content.trim().split('\n')[0].trim()
-        if (name === '.tool-versions') {
-          const match = content.match(/^nodejs\s+(.+)$/m)
-          if (!match) continue
-          version = match[1].trim()
-        }
-        return { version, source: name, manager }
-      } catch (e) {
-        // File not found, continue
-      }
-    }
-    return null
-  }
-
-  // ── Parsers ──
-
-  _parseNvmList(stdout) {
-    const lines = stdout.split('\n')
-    const versions = []
-    for (const line of lines) {
-      const match = line.match(/(->)?\s*v?(\d+\.\d+\.\d+|[a-z]+)\s*/)
-      if (match) {
-        versions.push({
-          version: match[2],
-          current: line.includes('->'),
-          lts: line.includes('LTS') || line.includes('lts'),
-        })
-      }
-    }
-    return versions
-  }
-
-  _parseNvmRemote(stdout) {
-    const lines = stdout.split('\n')
-    const versions = []
-    for (const line of lines) {
-      const match = line.match(/\s*v?(\d+\.\d+\.\d+|[a-z]+)\s*/)
-      if (match) {
-        versions.push({
-          version: match[1],
-          lts: line.includes('LTS') || line.includes('lts'),
-        })
-      }
-    }
-    return versions.reverse()
-  }
-
-  _parseFnmList(stdout) {
-    const lines = stdout.split('\n')
-    const versions = []
-    for (const line of lines) {
-      const match = line.match(/(\*|default)?\s*(\d+\.\d+\.\d+)\s*/)
-      if (match) {
-        versions.push({
-          version: match[2],
-          current: line.includes('*'),
-        })
-      }
-    }
-    return versions
-  }
-
-  _parseFnmRemote(stdout) {
-    const lines = stdout.split('\n')
-    return lines
-      .map(l => l.trim())
-      .filter(l => /^\d+\.\d+\.\d+/.test(l))
-      .map(v => ({ version: v }))
-  }
-
-  _parseAsdfList(stdout) {
-    const lines = stdout.split('\n')
-    const versions = []
-    for (const line of lines) {
-      const match = line.match(/(\*)?\s*(\d+\.\d+\.\d+)\s*/)
-      if (match) {
-        versions.push({
-          version: match[2],
-          current: line.includes('*'),
-        })
-      }
-    }
-    return versions
-  }
-
-  _parseAsdfRemote(stdout) {
-    const lines = stdout.split('\n')
-    return lines
-      .map(l => l.trim())
-      .filter(l => /^\d+\.\d+\.\d+/.test(l))
-      .map(v => ({ version: v }))
+    // login(+interactive) шелл пользователя: nvm/fnm обычно подключаются в .bashrc/.zshrc
+    const wrapper = interactive
+      ? 'exec "${SHELL:-/bin/sh}" -l -i -c "$@"'
+      : 'exec "${SHELL:-/bin/sh}" -l -c "$@"'
+    const result = await session.channel.exec(wrapper, [script, 'etty', ...args], {
+      timeoutMs: Math.max(timeoutMs, SSH_FS_CONFIG.OP_TIMEOUT_MS),
+    })
+    if (result.error) throw new Error(result.error)
+    if (result.timedOut) throw new Error('timeout')
+    const stdout = stripTerminalEscapes(result.stdout.toString('utf-8'))
+    const stderr = result.stderr.toString('utf-8')
+    if (result.code !== 0) throw new Error(stderr.trim() || `exit code ${result.code}`)
+    return { stdout, stderr }
   }
 }

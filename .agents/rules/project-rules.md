@@ -18,7 +18,7 @@ src/
     index.js                 — bootstrap: сервисы, IPC handlers, запуск AppService
     services/
       app-service.js         — жизненный цикл: окно, меню, автообновление, сохранение состояния
-      node-version-manager.js — nvm/fnm/asdf: детект менеджера, list/switch/install/uninstall версий Node
+      node-version-manager.js — nvm/fnm/asdf: детект менеджера, list/install/uninstall, версия по пути node (локально и по SSH); node-version-parse.js — парсеры/валидация
     ipc-handlers/            — регистрация IPC-обработчиков по доменам
       index.js               — barrel export всех register*Handlers
       pty-handlers.js        — PTY create/write/resize/kill
@@ -31,7 +31,7 @@ src/
       history-handlers.js    — история: cleanup
       git-handlers.js        — Git операции: status/diff/branches/commit/push/stage/discard
       search-handlers.js     — поиск по проекту: query/cancel
-      node-version-handlers.js — менеджер версий Node: list/switch/install/uninstall
+      node-version-handlers.js — менеджер версий Node: list/install/uninstall/resolve (ctx для SSH)
       ssh-handlers.js         — SSH-подключения: list/save/delete/reorder, ssh:fs-retry
     pty-manager.js            — управление PTY-сессиями (node-pty + shell); для SSH дополнительно
                                  поднимает SshControlChannel через sshSessionRegistry
@@ -329,7 +329,8 @@ docs/                        — спецификации, планы, чекл�
 | `window:*` | get-position, move, fullscreen-change, minimize, maximize, close, is-maximized, maximized-change | Окно |
 | `app:*` | homedir, open-external | Системные |
 | `search:*` | query, cancel | Поиск по проекту |
-| `node-version:*` | get-current, list-installed, list-remote, install, use, uninstall, detect-manager, install-manager | Менеджер версий Node.js |
+| `node-version:*` | resolve, list-installed, list-remote, install, uninstall, detect-manager, install-manager (все с `ctx`) | Менеджер версий Node.js |
+| `clipboard:upload-image` | upload-image | Загрузка изображения из буфера на SSH-хост (вставка картинок в SSH-вкладках) |
 | `ssh:*` | list, save, delete, reorder, fs-ready (push), fs-retry, session-state (push), tmux-missing (push), master-acquire, master-release, sessions-list, session-kill, session-rename | SSH-подключения + готовность удалённой ФС + ресинк tmux-сессии + панель tmux-сессий (SshConnectionMaster) |
 
 ## Команды

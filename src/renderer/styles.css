@@ -1227,6 +1227,20 @@ body.platform-darwin .window-controls {
 .git-toast.visible { max-height: 32px; padding: 6px 12px; opacity: 1; }
 .git-toast.success { color: var(--green); }
 
+.ssh-panel-toast {
+  font-size: 12px;
+  color: var(--red);
+  padding: 0 12px;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  white-space: pre-line;
+  transition: max-height 0.15s, opacity 0.15s, padding 0.15s;
+  flex-shrink: 0;
+}
+.ssh-panel-toast.visible { max-height: 120px; padding: 6px 12px; opacity: 1; overflow-y: auto; }
+.ssh-panel-toast.success { color: var(--green); }
+
 /* — Branch popover — */
 .git-branch-popover {
   position: fixed;
@@ -3455,3 +3469,23 @@ button svg {
   font-size: 12px;
   color: var(--subtext);
 }
+
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%);
+  max-width: 70vw;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 10000;
+}
+.app-toast.visible { opacity: 1; }
+.app-toast.error { color: var(--red); }

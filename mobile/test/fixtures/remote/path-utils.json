@@ -1,0 +1,133 @@
+{
+  "join": [
+    {
+      "dir": "/home/user",
+      "parts": [
+        "sub",
+        "file.txt"
+      ],
+      "expected": "/home/user/sub/file.txt"
+    },
+    {
+      "dir": "/home/user/",
+      "parts": [
+        "/sub/",
+        "a.txt"
+      ],
+      "expected": "/home/user/sub/a.txt"
+    },
+    {
+      "dir": "relative",
+      "parts": [
+        "a",
+        "b"
+      ],
+      "expected": "relative/a/b"
+    },
+    {
+      "dir": "/",
+      "parts": [
+        "a"
+      ],
+      "expected": "/a"
+    },
+    {
+      "dir": "/a/b",
+      "parts": [],
+      "expected": "/a/b"
+    },
+    {
+      "dir": "/a",
+      "parts": [
+        "..",
+        "b"
+      ],
+      "expected": "/a/../b"
+    }
+  ],
+  "singleArg": [
+    {
+      "input": "/a/b/c",
+      "dirname": "/a/b",
+      "basename": "c",
+      "extname": "",
+      "normalize": "/a/b/c"
+    },
+    {
+      "input": "/a",
+      "dirname": "/",
+      "basename": "a",
+      "extname": "",
+      "normalize": "/a"
+    },
+    {
+      "input": "a",
+      "dirname": "/",
+      "basename": "a",
+      "extname": "",
+      "normalize": "a"
+    },
+    {
+      "input": "/a/b/",
+      "dirname": "/a",
+      "basename": "b",
+      "extname": "",
+      "normalize": "/a/b"
+    },
+    {
+      "input": "/",
+      "dirname": "/",
+      "basename": "",
+      "extname": "",
+      "normalize": "/"
+    },
+    {
+      "input": "",
+      "dirname": "/",
+      "basename": "",
+      "extname": "",
+      "normalize": "."
+    },
+    {
+      "input": "/a//b///c",
+      "dirname": "/a/b",
+      "basename": "c",
+      "extname": "",
+      "normalize": "/a/b/c"
+    },
+    {
+      "input": "/a/./b/../c",
+      "dirname": "/a/./b/..",
+      "basename": "c",
+      "extname": "",
+      "normalize": "/a/c"
+    }
+  ],
+  "isInside": [
+    {
+      "root": "/root",
+      "child": "/root/sub/file",
+      "expected": true
+    },
+    {
+      "root": "/root",
+      "child": "/rootother/file",
+      "expected": false
+    },
+    {
+      "root": "/root",
+      "child": "/root",
+      "expected": true
+    },
+    {
+      "root": "/root/",
+      "child": "/root/sub",
+      "expected": true
+    },
+    {
+      "root": "/root",
+      "child": "/other/root",
+      "expected": false
+    }
+  ]
+}

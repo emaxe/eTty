@@ -1,0 +1,95 @@
+[
+  {
+    "name": "two_sessions_with_active_panes",
+    "inputBase64": "MgAxADE3MDAwMDAwMDAAMTcwMDAwMDEwMABldHR5LTRmMmE5YzFiCjEAMAAxNzAwMDAwMDUwADE3MDAwMDAwNjAAZXR0eS05YThiN2M2ZAoKMQAxAHZpbQBldHR5LTRmMmE5YzFiCjAAMQB6c2gAZXR0eS00ZjJhOWMxYgoxADEAaHRvcABldHR5LTlhOGI3YzZkCg==",
+    "expected": [
+      {
+        "name": "etty-4f2a9c1b",
+        "windows": 2,
+        "attached": 1,
+        "createdAt": 1700000000000,
+        "activityAt": 1700000100000,
+        "currentCommand": "vim"
+      },
+      {
+        "name": "etty-9a8b7c6d",
+        "windows": 1,
+        "attached": 0,
+        "createdAt": 1700000050000,
+        "activityAt": 1700000060000,
+        "currentCommand": "htop"
+      }
+    ]
+  },
+  {
+    "name": "empty_server",
+    "inputBase64": "Cg==",
+    "expected": []
+  },
+  {
+    "name": "empty_activity_field",
+    "inputBase64": "MQAwADE3MDAwMDAwMDAAAGV0dHktb2xkCgoK",
+    "expected": [
+      {
+        "name": "etty-old",
+        "windows": 1,
+        "attached": 0,
+        "createdAt": 1700000000000,
+        "activityAt": null,
+        "currentCommand": null
+      }
+    ]
+  },
+  {
+    "name": "malformed_record_dropped",
+    "inputBase64": "bm90LWEtbnVtYmVyADEAMTcwMDAwMDAwMAAxNzAwMDAwMDEwAHdlaXJkCjEAMQAxNzAwMDAwMDIwADE3MDAwMDAwMzAAZXR0eS12YWxpZAoKCg==",
+    "expected": [
+      {
+        "name": "etty-valid",
+        "windows": 1,
+        "attached": 1,
+        "createdAt": 1700000020000,
+        "activityAt": 1700000030000,
+        "currentCommand": null
+      }
+    ]
+  },
+  {
+    "name": "sort_order",
+    "inputBase64": "MQAwADE3MDAwMDAwMDAAAGV0dHktbm8tYWN0aXZpdHkKMQAwADE3MDAwMDAwMDAAMTcwMDAwMDA1MABldHR5LW9sZGVyLWFjdGl2aXR5CjEAMQAxNzAwMDAwMDAwADE3MDAwMDAwMTAAZXR0eS1hdHRhY2hlZAoxADAAMTcwMDAwMDAwMAAxNzAwMDAwMDkwAGV0dHktbmV3ZXN0LWFjdGl2aXR5CgoK",
+    "expected": [
+      {
+        "name": "etty-attached",
+        "windows": 1,
+        "attached": 1,
+        "createdAt": 1700000000000,
+        "activityAt": 1700000010000,
+        "currentCommand": null
+      },
+      {
+        "name": "etty-newest-activity",
+        "windows": 1,
+        "attached": 0,
+        "createdAt": 1700000000000,
+        "activityAt": 1700000090000,
+        "currentCommand": null
+      },
+      {
+        "name": "etty-older-activity",
+        "windows": 1,
+        "attached": 0,
+        "createdAt": 1700000000000,
+        "activityAt": 1700000050000,
+        "currentCommand": null
+      },
+      {
+        "name": "etty-no-activity",
+        "windows": 1,
+        "attached": 0,
+        "createdAt": 1700000000000,
+        "activityAt": null,
+        "currentCommand": null
+      }
+    ]
+  }
+]

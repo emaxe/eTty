@@ -1,0 +1,141 @@
+[
+  {
+    "id": "off_hooks_true",
+    "params": {
+      "persistence": "off",
+      "hooks": true
+    },
+    "expectThrow": false,
+    "outputFile": "init-command/off_hooks_true.txt"
+  },
+  {
+    "id": "off_hooks_false",
+    "params": {
+      "persistence": "off",
+      "hooks": false
+    },
+    "expectThrow": false,
+    "outputFile": "init-command/off_hooks_false.txt"
+  },
+  {
+    "id": "tmux_hooks_true_socket_etty",
+    "params": {
+      "persistence": "tmux",
+      "hooks": true,
+      "socketName": "etty",
+      "sessionName": "etty-4f2a9c1b"
+    },
+    "expectThrow": false,
+    "outputFile": "init-command/tmux_hooks_true_socket_etty.txt"
+  },
+  {
+    "id": "tmux_hooks_true_socket_etty_suffixed",
+    "params": {
+      "persistence": "tmux",
+      "hooks": true,
+      "socketName": "etty",
+      "sessionName": "etty-4f2a9c1b-12"
+    },
+    "expectThrow": false,
+    "outputFile": "init-command/tmux_hooks_true_socket_etty_suffixed.txt"
+  },
+  {
+    "id": "tmux_hooks_true_default_socket",
+    "params": {
+      "persistence": "tmux",
+      "hooks": true,
+      "socketName": "",
+      "sessionName": "etty-4f2a9c1b"
+    },
+    "expectThrow": false,
+    "outputFile": "init-command/tmux_hooks_true_default_socket.txt"
+  },
+  {
+    "id": "tmux_hooks_false_socket_etty",
+    "params": {
+      "persistence": "tmux",
+      "hooks": false,
+      "socketName": "etty",
+      "sessionName": "etty-4f2a9c1b"
+    },
+    "expectThrow": false,
+    "outputFile": "init-command/tmux_hooks_false_socket_etty.txt"
+  },
+  {
+    "id": "tmux_hooks_false_default_socket",
+    "params": {
+      "persistence": "tmux",
+      "hooks": false,
+      "socketName": "",
+      "sessionName": "etty-4f2a9c1b"
+    },
+    "expectThrow": false,
+    "outputFile": "init-command/tmux_hooks_false_default_socket.txt"
+  },
+  {
+    "id": "tmux_hooks_true_custom_socket",
+    "params": {
+      "persistence": "tmux",
+      "hooks": true,
+      "socketName": "mysock",
+      "sessionName": "A_z-0"
+    },
+    "expectThrow": false,
+    "outputFile": "init-command/tmux_hooks_true_custom_socket.txt"
+  },
+  {
+    "id": "tmux_hooks_true_max_length_session_name",
+    "params": {
+      "persistence": "tmux",
+      "hooks": true,
+      "socketName": "etty",
+      "sessionName": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expectThrow": false,
+    "outputFile": "init-command/tmux_hooks_true_max_length_session_name.txt"
+  },
+  {
+    "id": "tmux_invalid_session_name_space",
+    "params": {
+      "persistence": "tmux",
+      "hooks": true,
+      "socketName": "etty",
+      "sessionName": "bad name"
+    },
+    "expectThrow": true,
+    "errorMessage": "remote-shell-hooks: некорректное имя tmux-сессии"
+  },
+  {
+    "id": "tmux_invalid_session_name_null",
+    "params": {
+      "persistence": "tmux",
+      "hooks": true,
+      "socketName": "etty",
+      "sessionName": null
+    },
+    "expectThrow": true,
+    "errorMessage": "remote-shell-hooks: некорректное имя tmux-сессии"
+  },
+  {
+    "id": "tmux_invalid_session_name_too_long",
+    "params": {
+      "persistence": "tmux",
+      "hooks": true,
+      "socketName": "etty",
+      "sessionName": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expectThrow": true,
+    "errorMessage": "remote-shell-hooks: некорректное имя tmux-сессии"
+  },
+  {
+    "id": "tmux_invalid_socket_name_space",
+    "params": {
+      "persistence": "tmux",
+      "hooks": true,
+      "socketName": "bad socket",
+      "sessionName": "etty-4f2a9c1b"
+    },
+    "expectThrow": true,
+    "errorMessage": "remote-shell-hooks: некорректное имя tmux-сокета"
+  }
+]

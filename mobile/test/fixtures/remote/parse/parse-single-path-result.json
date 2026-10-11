@@ -1,0 +1,22 @@
+[
+  {
+    "name": "value_with_nul_terminator",
+    "inputBase64": "L2RzdC9maWxlIChjb3B5KS50eHQA",
+    "expected": "/dst/file (copy).txt"
+  },
+  {
+    "name": "only_nul",
+    "inputBase64": "AA==",
+    "expected": null
+  },
+  {
+    "name": "empty_no_nul",
+    "inputBase64": "",
+    "expected": null
+  },
+  {
+    "name": "unicode_name",
+    "inputBase64": "L2RzdC/RhNCw0LnQuyDwn5iALnR4dABleHRyYS1hZnRlci1udWwtaWdub3JlZA==",
+    "expected": "/dst/файл 😀.txt"
+  }
+]

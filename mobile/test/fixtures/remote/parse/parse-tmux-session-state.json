@@ -1,0 +1,39 @@
+[
+  {
+    "name": "normal",
+    "inputBase64": "L2hvbWUvZGV2L3Byb2plY3R8L2hvbWUvZGV2L3Byb2plY3R8enNoCg==",
+    "expected": {
+      "currentPath": "/home/dev/project",
+      "pathFromOsc": "/home/dev/project",
+      "currentCommand": "zsh"
+    }
+  },
+  {
+    "name": "missing_fields",
+    "inputBase64": "b25seXBhdGgK",
+    "expected": {
+      "currentPath": "onlypath",
+      "pathFromOsc": "",
+      "currentCommand": ""
+    }
+  },
+  {
+    "name": "empty",
+    "inputBase64": "",
+    "expected": null
+  },
+  {
+    "name": "all_fields_empty",
+    "inputBase64": "fHwK",
+    "expected": null
+  },
+  {
+    "name": "extra_lines_ignored",
+    "inputBase64": "L2F8L2J8dmltClNIT1VMRF9CRV9JR05PUkVECg==",
+    "expected": {
+      "currentPath": "/a",
+      "pathFromOsc": "/b",
+      "currentCommand": "vim"
+    }
+  }
+]

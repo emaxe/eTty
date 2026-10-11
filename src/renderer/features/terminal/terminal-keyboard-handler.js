@@ -10,9 +10,11 @@ export class TerminalKeyboardHandler {
   /**
    * @param {Object} ptyApi — object with `write(pid, data)` method
    * @param {Function} getKeyboardMode — (pid) => 'kitty' | 'newline' | 'ctrl-j'
+   * @param {Function} [onCtrlV] — () => boolean; true, если Ctrl+V обработан (вставка картинки в SSH)
    */
-  constructor(ptyApi, getKeyboardMode) {
+  constructor(ptyApi, getKeyboardMode, onCtrlV) {
     this._ptyApi = ptyApi
+    this._onCtrlV = onCtrlV || null
     this._getKeyboardMode = getKeyboardMode || (() => 'kitty')
     this._term = null
   }
@@ -35,6 +37,7 @@ export class TerminalKeyboardHandler {
       this._term = null
     }
     this._ptyApi = null
+    this._onCtrlV = null
   }
 
   _handleKeyEvent(event, pid) {
@@ -80,6 +83,19 @@ export class TerminalKeyboardHandler {
             navigator.clipboard?.writeText?.(text).catch((e) => console.warn('[terminal] copy to clipboard failed:', e))
           }
         }
+        return false
+      }
+    }
+
+    // Ctrl+V с картинкой в буфере (SSH-вкладка): xterm.js отправил бы голый ^V, а удалённый агент
+    // не видит буфер Mac — обработчик сам загрузит картинку и вставит путь (иначе вернёт false)
+    if (
+      (event.key === 'v' || event.key === 'V') &&
+      event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey &&
+      this._onCtrlV
+    ) {
+      if (event.type === 'keydown' && this._onCtrlV()) {
+        event.preventDefault()
         return false
       }
     }

@@ -65,19 +65,22 @@ export class ElectronApiAdapter {
   onTabsTriggerRestore(fn) { return this._on('tabsTriggerRestore', fn) }
 
   // — Git —
-  gitGetRoot(cwd) { return this._api.gitGetRoot(cwd) }
-  gitGetStatus(cwd) { return this._api.gitGetStatus(cwd) }
-  gitGetDiff(cwd, filePath, opts) { return this._api.gitGetDiff(cwd, filePath, opts) }
-  gitGetBranches(cwd) { return this._api.gitGetBranches(cwd) }
-  gitCheckout(cwd, branch) { return this._api.gitCheckout(cwd, branch) }
-  gitCreateBranch(cwd, name) { return this._api.gitCreateBranch(cwd, name) }
-  gitDeleteBranch(cwd, name) { return this._api.gitDeleteBranch(cwd, name) }
-  gitCommit(cwd, message, opts) { return this._api.gitCommit(cwd, message, opts) }
-  gitPush(cwd) { return this._api.gitPush(cwd) }
-  gitDiscard(cwd) { return this._api.gitDiscard(cwd) }
-  gitStage(cwd, paths) { return this._api.gitStage(cwd, paths) }
-  gitUnstage(cwd, paths) { return this._api.gitUnstage(cwd, paths) }
-  gitDiscardFile(cwd, paths, opts) { return this._api.gitDiscardFile(cwd, paths, opts) }
+  gitGetRoot(cwd, ctx) { return this._api.gitGetRoot(cwd, ctx) }
+  gitGetStatus(cwd, ctx) { return this._api.gitGetStatus(cwd, ctx) }
+  gitGetDiff(cwd, filePath, opts, ctx) { return this._api.gitGetDiff(cwd, filePath, opts, ctx) }
+  gitGetBranches(cwd, ctx) { return this._api.gitGetBranches(cwd, ctx) }
+  gitCheckout(cwd, branch, ctx) { return this._api.gitCheckout(cwd, branch, ctx) }
+  gitCreateBranch(cwd, name, ctx) { return this._api.gitCreateBranch(cwd, name, ctx) }
+  gitDeleteBranch(cwd, name, ctx) { return this._api.gitDeleteBranch(cwd, name, ctx) }
+  gitCommit(cwd, message, opts, ctx) { return this._api.gitCommit(cwd, message, opts, ctx) }
+  gitPush(cwd, ctx) { return this._api.gitPush(cwd, ctx) }
+  gitDiscard(cwd, ctx) { return this._api.gitDiscard(cwd, ctx) }
+  gitStage(cwd, paths, ctx) { return this._api.gitStage(cwd, paths, ctx) }
+  gitUnstage(cwd, paths, ctx) { return this._api.gitUnstage(cwd, paths, ctx) }
+  gitDiscardFile(cwd, paths, opts, ctx) { return this._api.gitDiscardFile(cwd, paths, opts, ctx) }
+
+  // — Clipboard —
+  clipboardUploadImage(ctx) { return this._api.clipboardUploadImage(ctx) }
 
   // — Agents —
   agentsGetStatus() { return this._api.agentsGetStatus() }
@@ -95,14 +98,13 @@ export class ElectronApiAdapter {
   openExternal(path) { return this._api.appOpenExternal(path) }
 
   // — Node Version Manager —
-  nodeVersionGetCurrent(cwd) { return this._api.nodeVersionGetCurrent(cwd) }
-  nodeVersionDetectManager() { return this._api.nodeVersionDetectManager() }
-  nodeVersionListInstalled() { return this._api.nodeVersionListInstalled() }
-  nodeVersionListRemote() { return this._api.nodeVersionListRemote() }
-  nodeVersionInstall(version) { return this._api.nodeVersionInstall(version) }
-  nodeVersionUse(version, cwd) { return this._api.nodeVersionUse(version, cwd) }
-  nodeVersionUninstall(version) { return this._api.nodeVersionUninstall(version) }
-  nodeVersionInstallManager() { return this._api.nodeVersionInstallManager() }
+  nodeVersionResolve(nodePath, ctx) { return this._api.nodeVersionResolve(nodePath, ctx) }
+  nodeVersionDetectManager(ctx) { return this._api.nodeVersionDetectManager(ctx) }
+  nodeVersionListInstalled(ctx) { return this._api.nodeVersionListInstalled(ctx) }
+  nodeVersionListRemote(ctx) { return this._api.nodeVersionListRemote(ctx) }
+  nodeVersionInstall(version, ctx) { return this._api.nodeVersionInstall(version, ctx) }
+  nodeVersionUninstall(version, ctx) { return this._api.nodeVersionUninstall(version, ctx) }
+  nodeVersionInstallManager(ctx) { return this._api.nodeVersionInstallManager(ctx) }
 
   // — Search —
   searchQuery(dirPath, query, options) { return this._api.searchQuery(dirPath, query, options) }
@@ -112,6 +114,9 @@ export class ElectronApiAdapter {
   sshSave(connection) { return this._api.sshSave(connection) }
   sshDelete(id) { return this._api.sshDelete(id) }
   sshReorder(ids) { return this._api.sshReorder(ids) }
+  sshExportConnections(opts) { return this._api.sshExportConnections(opts) }
+  sshImportPickFile() { return this._api.sshImportPickFile() }
+  sshImportConnections(opts) { return this._api.sshImportConnections(opts) }
   onSshFsReady(fn) { return this._on('sshFsReady', fn) }
   sshFsRetry(sessionId) { return this._api.sshFsRetry(sessionId) }
   onSshSessionState(fn) { return this._on('sshSessionState', fn) }

@@ -1,0 +1,1 @@
+exec /bin/sh -c 's=${SHELL:-/bin/sh}; case "$s" in *zsh) m=z ;; *bash) m=b ;; *) m=n ;; esac; d=${TMPDIR:-/tmp}/etty-$$; if [ "$m" = n ]; then exec "$s" -l; fi; mkdir -m 700 "$d" 2>/dev/null || exec "$s" -l; ETTY_TMPDIR=$d; export ETTY_TMPDIR; exec "$s" -l'

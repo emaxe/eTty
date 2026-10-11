@@ -1,0 +1,72 @@
+{
+  "buildSessionNameBase": [
+    {
+      "connectionId": "abc123",
+      "expected": "etty-abc123"
+    },
+    {
+      "connectionId": "ABC-123-xyz!!!",
+      "expected": "etty-ABC123xy"
+    },
+    {
+      "connectionId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      "expected": "etty-f47ac10b"
+    },
+    {
+      "connectionId": "12345",
+      "expected": "etty-12345"
+    },
+    {
+      "connectionId": "ъ_юникод_連接",
+      "expected": "etty-"
+    }
+  ],
+  "pickFreeSessionName": [
+    {
+      "base": "etty-4f2a9c1b",
+      "taken": [],
+      "expected": "etty-4f2a9c1b"
+    },
+    {
+      "base": "etty-4f2a9c1b",
+      "taken": [
+        "etty-4f2a9c1b"
+      ],
+      "expected": "etty-4f2a9c1b-2"
+    },
+    {
+      "base": "etty-4f2a9c1b",
+      "taken": [
+        "etty-4f2a9c1b",
+        "etty-4f2a9c1b-2"
+      ],
+      "expected": "etty-4f2a9c1b-3"
+    },
+    {
+      "base": "etty-4f2a9c1b",
+      "taken": [
+        "etty-4f2a9c1b",
+        "etty-4f2a9c1b-2",
+        "etty-4f2a9c1b-3"
+      ],
+      "expected": "etty-4f2a9c1b-4"
+    },
+    {
+      "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "taken": [],
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "taken": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-2"
+    },
+    {
+      "base": "etty-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "taken": [],
+      "expected": "etty-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    }
+  ]
+}

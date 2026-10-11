@@ -13,6 +13,7 @@
 import { Icons } from '../../icons.js'
 import { ContextMenu } from '../../components/base/context-menu/context-menu.js'
 import { SshConnectionDialog } from './ssh-connection-dialog.js'
+import { EttyxDialog } from './ettyx-dialog.js'
 import { SSH_SESSION_CONFIG } from '../../../shared/ssh-session-config.js'
 import { buildSessionNameBase, pickFreeSessionName } from '../../../shared/ssh-session-name.js'
 
@@ -70,6 +71,7 @@ export class SshPanel {
     this._cleanupController = new AbortController()
     this._menu = new ContextMenu()
     this._dialog = new SshConnectionDialog({ api })
+    this._ettyxDialog = new EttyxDialog()
 
     this._buildDOM()
     this._bindEvents()
@@ -82,6 +84,8 @@ export class SshPanel {
       <div class="ssh-panel-header">
         <span class="ssh-panel-title">SSH</span>
         <button class="ssh-panel-refresh-btn" type="button" title="Обновить список сессий" hidden>${Icons.refresh}</button>
+        <button class="ssh-panel-import-btn" type="button" title="Импортировать подключения (.ettyx)">${Icons.upload}</button>
+        <button class="ssh-panel-export-btn" type="button" title="Экспортировать подключения (.ettyx)">${Icons.download}</button>
         <button class="ssh-panel-add-btn" type="button" title="Добавить подключение">${Icons.plus}</button>
         <button class="ssh-panel-close-btn" type="button" title="Закрыть панель">${Icons.close}</button>
       </div>
@@ -89,12 +93,16 @@ export class SshPanel {
         <button class="ssh-mode-btn" type="button" data-mode="ssh" role="tab">SSH</button>
         <button class="ssh-mode-btn" type="button" data-mode="tmux" role="tab">tmux</button>
       </div>
+      <div class="ssh-panel-toast"></div>
       <div class="ssh-panel-list"></div>
     `
     this._btnAdd = this._panelEl.querySelector('.ssh-panel-add-btn')
     this._btnRefresh = this._panelEl.querySelector('.ssh-panel-refresh-btn')
+    this._btnImport = this._panelEl.querySelector('.ssh-panel-import-btn')
+    this._btnExport = this._panelEl.querySelector('.ssh-panel-export-btn')
     this._btnClose = this._panelEl.querySelector('.ssh-panel-close-btn')
     this._listEl = this._panelEl.querySelector('.ssh-panel-list')
+    this._toastEl = this._panelEl.querySelector('.ssh-panel-toast')
     this._modeButtons = [...this._panelEl.querySelectorAll('.ssh-mode-btn')]
     this._applyModeButtons()
   }
@@ -103,6 +111,8 @@ export class SshPanel {
     const signal = this._cleanupController.signal
     this._btnAdd.addEventListener('click', () => this._openDialog(null), { signal })
     this._btnRefresh.addEventListener('click', () => this._refreshExpandedSessions({ force: true }), { signal })
+    this._btnImport.addEventListener('click', () => this._importConnections(), { signal })
+    this._btnExport.addEventListener('click', () => this._exportConnections(), { signal })
     for (const btn of this._modeButtons) {
       btn.addEventListener('click', () => this._setMode(btn.dataset.mode), { signal })
     }
@@ -640,6 +650,63 @@ export class SshPanel {
     }
   }
 
+  // — Перенос профилей (*.ettyx, задача #31, REQ-22/23) —
+
+  _showToast(msg, type = 'error') {
+    clearTimeout(this._toastTimer)
+    this._toastEl.textContent = msg
+    this._toastEl.className = `ssh-panel-toast visible ${type === 'success' ? 'success' : 'error'}`
+    this._toastTimer = setTimeout(() => {
+      this._toastEl.classList.remove('visible')
+    }, type === 'success' ? 3000 : 6000)
+  }
+
+  async _exportConnections() {
+    if (this._connections.length === 0) {
+      this._showToast('Нет подключений для экспорта')
+      return
+    }
+    const form = await this._ettyxDialog.openExport()
+    if (!form) return
+
+    const result = await this._api.sshExportConnections({
+      passphrase: form.passphrase,
+      includePrivateKeys: form.includePrivateKeys,
+    })
+    if (result?.canceled) return
+    if (!result?.success) {
+      this._showToast(result?.error || 'Не удалось экспортировать подключения')
+      return
+    }
+    this._showToast(`Экспортировано ${result.count} подключений`, 'success')
+  }
+
+  async _importConnections() {
+    const picked = await this._api.sshImportPickFile()
+    if (picked?.canceled) return
+
+    const form = await this._ettyxDialog.openImport()
+    if (!form) return
+
+    const result = await this._api.sshImportConnections({
+      path: picked.path,
+      passphrase: form.passphrase,
+    })
+    if (!result?.success) {
+      this._showToast(result?.error || 'Не удалось импортировать подключения')
+      return
+    }
+    await this.refresh()
+    const warnings = result.warnings || []
+    if (warnings.length === 0) {
+      this._showToast(`Импортировано ${result.imported} подключений`, 'success')
+    } else {
+      // Успех и предупреждения — один тост (не два подряд, второй перетёр бы первый, см.
+      // _showToast/setTimeout): импорт всё равно прошёл, предупреждения — что доделать руками.
+      this._showToast(`Импортировано ${result.imported} подключений.\n${warnings.join('\n')}`)
+    }
+  }
+
   // — Автообновление списка сессий, пока панель видима в режиме tmux —
 
   _startPollingIfNeeded() {
@@ -709,6 +776,9 @@ export class SshPanel {
     this._menu = null
     this._dialog?.destroy()
     this._dialog = null
+    this._ettyxDialog?.destroy()
+    this._ettyxDialog = null
+    clearTimeout(this._toastTimer)
     if (this._panelEl) this._panelEl.innerHTML = ''
     this._panelEl = null
     this._resizeHandleEl = null

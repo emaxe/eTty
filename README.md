@@ -43,12 +43,15 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Click to connect** — opens a regular terminal tab (color-accented, SSH icon) running the system `ssh` binary — full support for `~/.ssh/config`, ssh-agent, `ProxyJump`, 2FA
 - **"+" clones the active connection** — pressing "+" while an SSH tab is active opens another tab to the same host
 - **Connection overlay** — spinner while connecting; on a dropped session, an error with exit code and a reconnect button, without closing the tab
+- **Export / import (`.ettyx`)** — move saved connections between machines or to the mobile app: an encrypted file (PBKDF2-SHA256 + AES-256-GCM) protected by a passphrase; private keys are included only if you tick the checkbox
 - **Session restore** — SSH tabs are saved and restored like local tabs; only the tab that was active reconnects automatically on launch, others reconnect lazily when you switch to them
 
 #### Remote file system and agents
 
 - **File tree and editor over SSH** — browse, create, rename, delete, copy, move, read and write remote files; operations run as short-lived non-interactive calls multiplexed over the system `ssh` (ControlMaster), so there's no extra authentication and nothing to install on the server
 - **Change detection** — polling of expanded directories (`fs.watch` isn't available over SSH) with an immediate refresh after your own changes
+- **Git over SSH** — branch, file statuses, editor gutter and the Git panel work for remote repositories (git runs on the server through the tab's SSH channel)
+- **Image paste** — `Cmd+V` / `Ctrl+V` with an image in the clipboard uploads it to the server (`/tmp/etty-paste/`) and pastes the remote path, so claude/opencode/agy can attach it
 - **CLI agents work remotely** — remote shell hooks (zsh and bash) report the working directory and busy state, so quick replies, Shift+Enter and the busy indicator behave as in local tabs; falls back to an optimistic busy state if the server blocks hooks (`RemoteCommand`/`ForceCommand`)
 
 #### Persistent sessions (tmux)
@@ -60,6 +63,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Taken over from elsewhere** — if another client attaches to the session, the tab shows a "detached" overlay rather than a generic error
 - **tmux not installed?** — eTty detects the server's package manager and offers to type the install command into the tab's own terminal; nothing runs without your confirmation, and any `sudo` password is entered by you
 - **Configurable socket** — per-connection tmux socket (`-L`, default `etty`; empty uses the server's default)
+- **Running agent restored** — a restored tmux tab whose session still has a CLI agent running (claude, opencode, …) brings back that agent's quick-reply panel; if the agent has since exited, the panel stays hidden
 
 ### Command History
 
@@ -162,7 +166,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **Detects nvm, fnm, and asdf** — reads the manager already installed on your system
 - **Switch, install, uninstall** Node.js versions from a dialog, no manual shell commands
 - **Current version** shown per-project, respecting `.nvmrc` where present
-- **Status bar indicator** — click to open the version dialog
+- **Status bar indicator** — shows the version actually running in the active tab (local or SSH), reported by the shell hook; click to open the version dialog
 
 ### Cross-Platform
 
