@@ -47,10 +47,13 @@ Future<TmuxSessionsHandle> _createTmuxSessionsHandle(
   );
 }
 
+/// Открывает панель сессий; выбор сессии закрывает панель и вызывает [onOpen] с её именем
+/// (REQ-6): `TerminalPage` подключится заново, панель свой SSH закрывает в dispose.
 Future<void> _openTmuxSessions(
   BuildContext context,
   WidgetRef ref,
   ConnectionProfile profile,
+  void Function(ConnectionProfile profile, {String? sessionName}) onOpen,
 ) {
   return showModalBottomSheet<void>(
     context: context,
@@ -60,6 +63,10 @@ Future<void> _openTmuxSessions(
       title: profile.label,
       createService: () =>
           _createTmuxSessionsHandle(sheetContext, ref, profile),
+      onSelect: (name) {
+        Navigator.of(sheetContext).pop();
+        onOpen(profile, sessionName: name);
+      },
     ),
   );
 }
@@ -71,7 +78,7 @@ Future<void> _openTmuxSessions(
 class ConnectionsScreen extends ConsumerWidget {
   const ConnectionsScreen({super.key, required this.onOpen});
 
-  final void Function(ConnectionProfile profile) onOpen;
+  final void Function(ConnectionProfile profile, {String? sessionName}) onOpen;
 
   Future<void> _openForm(BuildContext context, {ConnectionProfile? initial}) {
     return Navigator.of(context).push<void>(
@@ -160,7 +167,8 @@ class ConnectionsScreen extends ConsumerWidget {
                   profile: profile,
                   onTap: () => onOpen(profile),
                   onEdit: () => _openForm(context, initial: profile),
-                  onSessions: () => _openTmuxSessions(context, ref, profile),
+                  onSessions: () =>
+                      _openTmuxSessions(context, ref, profile, onOpen),
                 ),
               );
             },

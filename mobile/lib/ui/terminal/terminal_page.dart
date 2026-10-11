@@ -15,8 +15,10 @@ import 'package:mobile/data/connection_store.dart';
 import 'package:mobile/domain/lifecycle_controller.dart';
 import 'package:mobile/domain/tab_controller.dart' as domain;
 import 'package:mobile/platform/foreground_service.dart';
+import 'package:mobile/domain/tmux_sessions.dart';
 import 'package:mobile/transport/exec_channel.dart';
 import 'package:mobile/transport/ssh_connection.dart';
+import 'package:mobile/ui/connections/tmux_sessions_sheet.dart';
 import 'package:mobile/ui/files/remote_file_tree_screen.dart';
 import 'package:mobile/ui/terminal/input_handler.dart';
 import 'package:mobile/ui/terminal/key_bar.dart';
@@ -113,9 +115,18 @@ class _TerminalTab implements LifecycleTab {
 /// (дефолт) сам вызывает `terminal.onResize` при изменении доступного размера, а `Scaffold` по
 /// умолчанию ужимает body под системную клавиатуру (REQ-17).
 class TerminalPage extends ConsumerStatefulWidget {
-  const TerminalPage({super.key, required this.profile, required this.onBack});
+  const TerminalPage({
+    super.key,
+    required this.profile,
+    required this.onBack,
+    this.initialSessionName,
+  });
 
   final ConnectionProfile profile;
+
+  /// Имя tmux-сессии для первой автосозданной вкладки (выбор сессии в списке подключений,
+  /// REQ-6). `null` — автоимя, как при обычном открытии профиля.
+  final String? initialSessionName;
   final VoidCallback onBack;
 
   @override
@@ -204,7 +215,7 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
         socketName: widget.profile.tmuxSocket,
       );
       unawaited(_foregroundService.start());
-      _addTab();
+      _addTab(sessionName: widget.initialSessionName);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -214,12 +225,19 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
     }
   }
 
-  void _addTab() {
+  /// Добавляет вкладку. [sessionName] — явное имя tmux-сессии (иначе свободное автоимя из
+  /// `takenSessionNames`); [startDir] — стартовая папка новой tmux-сессии.
+  void _addTab({
+    String? sessionName,
+    String? startDir,
+    Iterable<String> serverSessionNames = const [],
+  }) {
     final connection = _connection;
     if (connection == null) return;
-    final takenSessionNames = _tabs
-        .map((t) => t.controller.sessionName)
-        .whereType<String>();
+    final takenSessionNames = [
+      ..._tabs.map((t) => t.controller.sessionName).whereType<String>(),
+      ...serverSessionNames,
+    ];
     final controller = domain.TabController(
       clientSource: connection,
       connectionId: widget.profile.id,
@@ -229,6 +247,8 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
       hooksEnabled: widget.profile.hooksEnabled,
       socketName: widget.profile.tmuxSocket,
       takenSessionNames: takenSessionNames,
+      sessionName: sessionName,
+      startDir: startDir,
     );
     final tab = _TerminalTab(controller: controller);
     _lifecycleController?.register(tab);
@@ -237,6 +257,72 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
       _activeIndex = _tabs.length - 1;
     });
     unawaited(controller.connect());
+  }
+
+  /// Открывает tmux-сессию [name]: если вкладка с ней уже есть — переключается на неё (дубль
+  /// отцепил бы собственную вкладку через `-D`), иначе создаёт новую (REQ-7).
+  void _openSession(String name) {
+    final index = _tabs.indexWhere((t) => t.controller.sessionName == name);
+    if (index >= 0) {
+      setState(() => _activeIndex = index);
+      return;
+    }
+    _addTab(sessionName: name);
+  }
+
+  /// Панель сессий на ОБЩЕМ [_connection] (REQ-5): закрытие панели подключение не закрывает.
+  Future<void> _openSessions() {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => TmuxSessionsSheet(
+        title: widget.profile.label,
+        createService: () async => TmuxSessionsHandle(
+          service: TmuxSessionsService(
+            exec: ExecChannel(clientSource: _connection!),
+            socket: widget.profile.tmuxSocket,
+          ),
+          close: () async {},
+        ),
+        onSelect: (name) {
+          Navigator.of(sheetContext).pop();
+          _openSession(name);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openFiles() async {
+    final path = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => RemoteFileTreeScreen(profile: widget.profile),
+      ),
+    );
+    if (path == null || path.isEmpty || !mounted) return;
+    // `-c` действует только на НОВУЮ сессию, а tmux-сессии персистентны: автоимя, свободное лишь
+    // среди локальных вкладок, может совпасть с живой серверной (от прошлого запуска/другого
+    // клиента) — тогда `new-session -A` присоединится к ней и проигнорирует папку. Поэтому
+    // занятые на сервере имена учитываем; не вышло получить список — остаёмся на локальных.
+    final serverNames = await _serverSessionNames();
+    if (!mounted) return;
+    _addTab(startDir: path, serverSessionNames: serverNames);
+  }
+
+  Future<List<String>> _serverSessionNames() async {
+    final connection = _connection;
+    if (connection == null) return const [];
+    final service = TmuxSessionsService(
+      exec: ExecChannel(clientSource: connection),
+      socket: widget.profile.tmuxSocket,
+    );
+    try {
+      return (await service.list()).map((s) => s.name).toList();
+    } catch (_) {
+      return const [];
+    } finally {
+      service.dispose();
+    }
   }
 
   void _closeTab(int index) {
@@ -314,14 +400,17 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
         title: Text(widget.profile.label),
         leading: BackButton(onPressed: _handleBack),
         actions: [
+          if (widget.profile.persistence == 'tmux' && _connection != null)
+            IconButton(
+              key: const Key('open-tmux-sessions'),
+              icon: const Icon(Icons.view_list_outlined),
+              tooltip: 'Сессии',
+              onPressed: _openSessions,
+            ),
           IconButton(
             icon: const Icon(Icons.folder_outlined),
             tooltip: 'Файлы',
-            onPressed: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(
-                builder: (_) => RemoteFileTreeScreen(profile: widget.profile),
-              ),
-            ),
+            onPressed: _openFiles,
           ),
         ],
       ),

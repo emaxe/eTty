@@ -31,7 +31,7 @@ ConnectionProfile _profile({
 
 Widget _app({
   required FileConnectionStore store,
-  required void Function(ConnectionProfile) onOpen,
+  required void Function(ConnectionProfile, {String? sessionName}) onOpen,
 }) {
   return ProviderScope(
     overrides: [connectionStoreProvider.overrideWith((ref) async => store)],
@@ -87,7 +87,9 @@ void main() {
         _profile(id: 'b', label: 'Server B', host: 'b.example.com'),
       );
 
-      await tester.pumpWidget(_app(store: store, onOpen: (_) {}));
+      await tester.pumpWidget(
+        _app(store: store, onOpen: (_, {sessionName}) {}),
+      );
       await _settle(tester);
 
       expect(find.text('Server A'), findsOneWidget);
@@ -97,7 +99,9 @@ void main() {
 
   testWidgets('пустой список показывает empty-state', (tester) async {
     await tester.runAsync(() async {
-      await tester.pumpWidget(_app(store: store, onOpen: (_) {}));
+      await tester.pumpWidget(
+        _app(store: store, onOpen: (_, {sessionName}) {}),
+      );
       await _settle(tester);
 
       expect(find.text('Пока нет ни одного подключения'), findsOneWidget);
@@ -109,7 +113,9 @@ void main() {
     tester,
   ) async {
     await tester.runAsync(() async {
-      await tester.pumpWidget(_app(store: store, onOpen: (_) {}));
+      await tester.pumpWidget(
+        _app(store: store, onOpen: (_, {sessionName}) {}),
+      );
       await _settle(tester);
 
       await tester.tap(find.byTooltip('Добавить подключение'));
@@ -141,7 +147,9 @@ void main() {
     await tester.runAsync(() async {
       await store.upsert(_profile(id: 'a', label: 'Server A'));
 
-      await tester.pumpWidget(_app(store: store, onOpen: (_) {}));
+      await tester.pumpWidget(
+        _app(store: store, onOpen: (_, {sessionName}) {}),
+      );
       await _settle(tester);
 
       expect(find.text('Server A'), findsOneWidget);
@@ -169,8 +177,17 @@ void main() {
     await tester.runAsync(() async {
       await store.upsert(_profile(id: 'a', label: 'Server A'));
       ConnectionProfile? opened;
+      String? openedSession = 'unset';
 
-      await tester.pumpWidget(_app(store: store, onOpen: (p) => opened = p));
+      await tester.pumpWidget(
+        _app(
+          store: store,
+          onOpen: (p, {sessionName}) {
+            opened = p;
+            openedSession = sessionName;
+          },
+        ),
+      );
       await _settle(tester);
 
       await tester.tap(find.text('Server A'));
@@ -178,6 +195,7 @@ void main() {
 
       expect(opened?.id, 'a');
       expect(opened?.label, 'Server A');
+      expect(openedSession, isNull);
     });
   });
 }

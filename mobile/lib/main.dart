@@ -54,6 +54,9 @@ class _RootShell extends ConsumerStatefulWidget {
 class _RootShellState extends ConsumerState<_RootShell>
     with WidgetsBindingObserver {
   ConnectionProfile? _openProfile;
+
+  /// Сессия tmux, выбранная в панели списка подключений (REQ-6) — имя первой вкладки терминала.
+  String? _openSessionName;
   AppLockController? _lock;
   StreamSubscription<AppLockState>? _lockSub;
 
@@ -114,11 +117,20 @@ class _RootShellState extends ConsumerState<_RootShell>
 
     final profile = _openProfile;
     if (profile == null) {
-      return ConnectionsScreen(onOpen: (p) => setState(() => _openProfile = p));
+      return ConnectionsScreen(
+        onOpen: (p, {sessionName}) => setState(() {
+          _openProfile = p;
+          _openSessionName = sessionName;
+        }),
+      );
     }
     return TerminalPage(
       profile: profile,
-      onBack: () => setState(() => _openProfile = null),
+      initialSessionName: _openSessionName,
+      onBack: () => setState(() {
+        _openProfile = null;
+        _openSessionName = null;
+      }),
     );
   }
 }
