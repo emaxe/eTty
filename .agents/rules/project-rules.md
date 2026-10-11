@@ -142,6 +142,11 @@ out/                         — артефакты electron-vite build (НЕ р
 dist/                        — артефакты electron-builder (НЕ коммитить)
 build/                       — ресурсы для сборки (иконки, entitlements)
 docs/                        — спецификации, планы, чеклисты по фичам
+mobile/                      — Flutter-приложение (iOS/Android): SSH/tmux-клиент, мобильный аналог
+                               десктопа. `lib/remote/` и `lib/core/config/` — ЧИСТЫЙ DART (без
+                               `package:flutter`), порт `src/main/ssh/*`/`shared/*.js`; побайтовая
+                               сверка — `scripts/gen-remote-fixtures.mjs` + golden-тесты. Полная
+                               спецификация и план — `docs/plans/mob/`
 ```
 
 `src/renderer/components/base/context-menu/context-menu.js` — единственная реализация контекстного меню в проекте; отдельного legacy `context-menu.js` в корне `renderer/` больше нет.
@@ -313,6 +318,23 @@ docs/                        — спецификации, планы, чекл�
 - Минимальные размеры 400x300
 - Перетаскивание окна за titlebar даже когда табы занимают всю ширину
 
+### Мобильное приложение (`mobile/`, Flutter — iOS/Android)
+- Мобильный аналог десктопа: SSH/tmux-клиент на `dartssh2` + `xterm` (см. `mobile/README.md`,
+  спецификация — `docs/plans/mob/plan.md`). State management / DI — `flutter_riverpod`
+  (аналог DI Container + StateStore десктопа)
+- **Персистентные tmux-сессии** — тот же сокет/конфиг/hooks, что на десктопе (REQ-2), поэтому одна
+  сессия шарится между десктопом и телефоном; `lib/remote/` — побайтовый порт
+  `remote-scripts`/`remote-parse`/`remote-shell-hooks`, сверяется golden-тестами
+- **Единый «протокол eTty»**: `lib/remote/` и `lib/core/config/` не импортируют `package:flutter`
+  (чистый Dart, тестируется и переносится независимо от UI). Golden-фикстуры
+  (`mobile/test/fixtures/remote/`) генерируются из JS десктопа скриптом
+  `scripts/gen-remote-fixtures.mjs` и коммитятся; CI сверяет их (`--check`)
+- Удалённая ФС (`SshFsProvider`), редактор (`re_editor`), панель tmux-сессий сервера,
+  биометрическая блокировка (`local_auth`), импорт профилей `.ettyx` (общий с десктопом
+  PBKDF2 + AES-256-GCM формат)
+- Иконка/splash генерируются из desktop-иконки (`build/icon.png`) через `flutter_launcher_icons` /
+  `flutter_native_splash` (`mobile/assets/icon/`, конфиг — в `mobile/pubspec.yaml`)
+
 ## IPC-каналы
 
 Полный список констант — `src/shared/ipc-channels.js` (единственный источник истины, не дублировать строковыми литералами).
@@ -342,6 +364,19 @@ docs/                        — спецификации, планы, чекл�
 | `npm run dist` | Собрать macOS .dmg → `dist/` (требует предварительного `build`) |
 | `npm run dist:win` | Собрать Windows NSIS (только на Windows) |
 | `npm run dist:linux` | Собрать Linux AppImage/deb (только на Linux) |
+
+### Мобильное приложение (`mobile/`)
+
+| Команда | Что делает |
+|---------|-----------|
+| `cd mobile && flutter pub get` | Установить зависимости |
+| `cd mobile && flutter analyze` | Статический анализ |
+| `cd mobile && flutter test` | Unit + golden тесты |
+| `cd mobile && flutter run` | Запустить на устройстве/симуляторе |
+| `node scripts/gen-remote-fixtures.mjs` | Перегенерировать golden-фикстуры из JS десктопа |
+| `node scripts/gen-remote-fixtures.mjs --check` | Проверить, что фикстуры не разошлись (CI) |
+| `cd mobile && dart run flutter_launcher_icons` | Перегенерировать иконки приложения |
+| `cd mobile && dart run flutter_native_splash:create` | Перегенерировать splash |
 
 ## Горячие клавиши
 
@@ -476,6 +511,7 @@ electron-builder делает это автоматически через `"npm
 | Config | Константы (числа, интервалы) — в `core/config/` | `core/config/*.js` |
 | Cleanup | Каждый компонент с подписками имеет `destroy()` | — |
 | Адаптер | Нет прямых `window.electronAPI` — через `core/adapters/electron-api.js` | `core/adapters/` |
+| Golden-паритет | `mobile/lib/remote/*` и `mobile/lib/core/config/*` побайтово совпадают с `src/main/ssh/*`/`shared/*.js` | `scripts/gen-remote-fixtures.mjs` |
 
 ## Чеклисты
 

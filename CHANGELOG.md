@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+## [0.5.0] - 2026-10-11
+
+### Added
+
+- **eTty Mobile (iOS / Android)** — Flutter-приложение `mobile/`, мобильный аналог десктопного eTty:
+  SSH-терминал на `dartssh2` с персистентными tmux-сессиями, удалённой файловой системой,
+  редактором файлов, панелью tmux-сессий сервера, биометрической блокировкой и импортом
+  профилей `.ettyx` с десктопа (общий крипто-формат). Протокол (`lib/remote/`, `lib/core/config/`) —
+  чистый Dart, сверяется golden-тестами с десктопным (`scripts/gen-remote-fixtures.mjs`).
+  Спецификация и план — `docs/plans/mob/`.
+
 ## [0.4.0] - 2026-10-05
 
 ### Added

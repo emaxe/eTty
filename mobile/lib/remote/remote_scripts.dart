@@ -154,6 +154,18 @@ abstract final class RemoteScripts {
     'cat > "\$t" && mv -- "\$t" "\$1"',
   ].join('; ');
 
+  /// `$1` — имя файла (без `/`), содержимое приходит через stdin. Кладёт в
+  /// `${TMPDIR:-/tmp}/etty-paste/` (права 700/600), чистит файлы старше суток и печатает путь.
+  static final String uploadPasteImageScript = [
+    'umask 077',
+    't="\${TMPDIR:-/tmp}"',
+    'd="\${t%/}/etty-paste"',
+    'mkdir -p -- "\$d" || exit 1',
+    'find "\$d" -type f -mmin +1440 -exec rm -f {} + 2>/dev/null',
+    'cat > "\$d/\$1" || exit 1',
+    'printf %s "\$d/\$1"',
+  ].join('; ');
+
   static final String statFileGnuScript = 'stat -c "%Y %s" -- "\$1"';
   static final String statFileBsdScript = 'stat -f "%m %z" -- "\$1"';
 

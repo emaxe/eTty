@@ -105,14 +105,18 @@ class RemoteShellHooks {
       '_etty_cwd() { _etty_emit "\$(printf "]7;file://%s\\007" "\$PWD")"; }',
       '_etty_pre() { _etty_emit "\$(printf "]133;C\\007")"; }',
       '_etty_post() { _etty_emit "\$(printf "]133;A\\007")"; }',
+      // OSC 6973: путь к node текущего шелла — паритет с десктопом (см. remote-shell-hooks.js)
+      '_etty_node() { _etty_emit "\$(printf "]6973;node=%s\\007" "\${commands[node]}")"; }',
       'add-zsh-hook precmd _etty_cwd',
       'add-zsh-hook preexec _etty_pre',
       'add-zsh-hook precmd _etty_post',
+      'add-zsh-hook precmd _etty_node',
     ];
     if (withCleanup) {
       lines.add('zshexit() { rm -rf "\$$_ettyTmpdirVar"; }');
     }
     lines.add('_etty_cwd');
+    lines.add('_etty_node');
     return lines;
   }
 
@@ -125,6 +129,7 @@ class RemoteShellHooks {
           'elif [ -f "\$HOME/.bashrc" ]; then . "\$HOME/.bashrc"; fi',
       _emitFn,
       '_etty_cwd() { _etty_emit "\$(printf "]7;file://%s\\007" "\$PWD")"; '
+          '_etty_emit "\$(printf "]6973;node=%s\\007" "\$(type -P node)")"; '
           '_etty_emit "\$(printf "]133;A\\007")"; }',
       '_etty_pre() { case "\$BASH_COMMAND" in _etty_cwd*) return ;; esac; '
           '_etty_emit "\$(printf "]133;C\\007")"; }',

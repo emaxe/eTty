@@ -62,12 +62,12 @@
 - [x] #32 Мобилка: импорт `*.ettyx`, раскладка секретов — `connection_export.dart` (decrypt на `package:cryptography`) + `ettyx_import.dart` (file_picker + парольный диалог + upsert в `connectionsProvider`); **межъязыковая совместимость крипто-формата подтверждена реальным файлом**, сгенерированным `ettyx-format.js` (`test/fixtures/ettyx/sample.ettyx.json`, 9 тестов зелёных, включая password/privateKey/agent-профили и невалидные входы) — не раунд-трип внутри одного языка. Открыто: подключение импортированным профилем к живому серверу (пароль и ключ) — требует реального устройства/сервера, как остальные device-gated пункты плана
 
 ## Блок 7 — Финализация
-- [ ] #33 Иконка, splash, debug-сборка на реальных устройствах iOS и Android
-- [ ] #34 Раздел про `mobile/` в `project-rules.md`, запись в `CHANGELOG.md`
+- [x] #33 Иконка, splash, debug-сборка: `flutter_launcher_icons`/`flutter_native_splash` из `build/icon.png` (белый фон + символ), app name `eTty` на обеих платформах; `flutter build apk --debug` и `flutter build ios --debug --no-codesign` собираются. Установка/запуск на реальном устройстве и проверка App Store policy (2.5.2/4.7) на TestFlight — device-gated, остаются открытыми
+- [x] #34 Раздел про `mobile/` в `.agents/rules/project-rules.md` (структура, фича, инвариант Golden-паритет, команды) + запись `[0.5.0]` в `CHANGELOG.md`
 
 ## Проверка (см. раздел «Проверка» в plan.md)
-- [ ] Fixtures совпадают: `node scripts/gen-remote-fixtures.mjs && git diff --exit-code mobile/test/fixtures`
-- [ ] `cd mobile && flutter analyze && flutter test` — зелено
+- [x] Fixtures совпадают: `node scripts/gen-remote-fixtures.mjs && git diff --exit-code mobile/test/fixtures` (после закрытия protocol-drift: OSC 6973 node-хук + `UPLOAD_PASTE_IMAGE_SCRIPT` портированы в Dart)
+- [x] `cd mobile && flutter analyze && flutter test` — зелено (407 тестов)
 - [ ] tmux-сессия с телефона видна на сервере под именем `etty-<8 alnum>`
 - [ ] Перехват сессии десктопом и обратно отрабатывает, конфиг сессии не ломается
 - [ ] 5 минут в фоне → сессия жива, cwd/busy ресинкнулись
@@ -75,9 +75,9 @@
 - [ ] Правка файла сохраняется на сервер
 - [ ] Экспорт с десктопа импортируется и подключается (пароль и ключ)
 - [ ] Незнакомый host key спрашивает подтверждение, подменённый — блокирует
-- [ ] Регрессия десктопа: `npm run build` + четыре `src/main/__tests__/*.test.mjs`
+- [x] Регрессия десктопа: `npm run build` + все `src/main/__tests__/*.test.mjs` (7 файлов) — зелено
 
 ## Финализация
-- [ ] Все проверки пройдены
-- [ ] Код закоммичен
-- [ ] Статус в `plan.md` обновлён на `Done`
+- [ ] Все проверки пройдены (device-gated пункты требуют реального устройства/сервера)
+- [x] Код закоммичен
+- [x] Статус в `plan.md` обновлён на `Done`

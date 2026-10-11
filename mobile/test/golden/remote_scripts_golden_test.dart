@@ -25,6 +25,7 @@ void main() {
     'COPY_MANY_SCRIPT': RemoteScripts.copyManyScript,
     'READ_FILE_SCRIPT': RemoteScripts.readFileScript,
     'WRITE_FILE_SCRIPT': RemoteScripts.writeFileScript,
+    'UPLOAD_PASTE_IMAGE_SCRIPT': RemoteScripts.uploadPasteImageScript,
     'STAT_FILE_GNU_SCRIPT': RemoteScripts.statFileGnuScript,
     'STAT_FILE_BSD_SCRIPT': RemoteScripts.statFileBsdScript,
     'POLL_MTIME_GNU_SCRIPT': RemoteScripts.pollMtimeGnuScript,
