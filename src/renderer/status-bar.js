@@ -37,6 +37,7 @@ export class StatusBar {
     this._api = api
     this._store = store
     this._getRootPath = null
+    this._getNodeVersion = null
     this._intervalId = null
     this._homeDir = null
     this._agentsById = new Map()
@@ -91,8 +92,9 @@ export class StatusBar {
     }
   }
 
-  start(getRootPath) {
+  start(getRootPath, getNodeVersion = null) {
     this._getRootPath = getRootPath
+    this._getNodeVersion = getNodeVersion
     this._polling = false
     this._poll()
     this._intervalId = setInterval(() => this._poll(), APP_CONFIG.STATUS_POLL_INTERVAL_MS)
@@ -411,19 +413,8 @@ export class StatusBar {
         }
       }
 
-      // Update Node version for current folder
-      if (this._nodeEl && rootPath) {
-        try {
-          const nv = await this._api.nodeVersionGetCurrent(rootPath)
-          if (nv) {
-            this.setNodeVersion(nv.version, nv.manager)
-          } else {
-            this.setNodeVersion(null, null)
-          }
-        } catch (e) {
-          this.setNodeVersion(null, null)
-        }
-      }
+      // Версия node активной вкладки приходит из шелла (OSC 6973, см. index.js) — здесь только отрисовка
+      if (this._nodeEl) this.setNodeVersion(this._getNodeVersion?.() || null, null)
     } finally {
       this._polling = false
     }

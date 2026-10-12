@@ -30,6 +30,8 @@ import { Icons } from './icons.js'
 import { TERMINAL_CONFIG } from './core/config/terminal-config.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 import { TerminalKeyboardHandler } from './features/terminal/terminal-keyboard-handler.js'
+import { TerminalImagePaste } from './features/terminal/terminal-image-paste.js'
+import { showToast } from './components/toast/toast.js'
 import { TerminalOscHandler } from './features/terminal/terminal-osc-handler.js'
 import { TerminalWheelHandler } from './features/terminal/terminal-wheel-handler.js'
 import { TerminalScrollButton } from './features/terminal/terminal-scroll-button.js'
@@ -355,6 +357,30 @@ async function init() {
     return `http_proxy=${proxyUrl} https_proxy=${proxyUrl} all_proxy=${proxyUrl} ${cmd}\n`
   }
 
+  /**
+   * Сопоставляет foreground-команду tmux-панели (`pane_current_command`) с id агента eTty.
+   * Нужно для восстановленных tmux-вкладок: OSC 133 при re-attach к живой сессии не
+   * переизлучается (шелл не перезапускается), поэтому наличие запущенного агента выводим
+   * из имени текущей команды панели.
+   * @param {string} command
+   * @returns {string|null}
+   */
+  const resolveAgentIdByCommand = (command) => {
+    const name = String(command || '').trim().split(/\s+/)[0].split('/').pop()
+    if (!name) return null
+    for (const agent of SUPPORTED_AGENTS) {
+      if (agent.id === name) return agent.id
+    }
+    for (const agent of config.agents?.custom || []) {
+      if (agent?.id === name) return agent.id
+    }
+    for (const [id, cmd] of agentCommands) {
+      const base = String(cmd).trim().split(/\s+/)[0].split('/').pop()
+      if (base && base === name) return id
+    }
+    return null
+  }
+
   const focusActiveTerminal = () => {
     const tab = tabBar.getActive()
     if (tab) tab.term.focus()
@@ -525,9 +551,7 @@ async function init() {
     updateNavButtons()
     syncStatusBarTerminalState()
     statusBar.updateNow()
-    // SSH-вкладки наследуют локальный rootPath только для spawn ssh — simple-git работает
-    // с локальной ФС и не должен опрашивать его как будто это репозиторий вкладки.
-    gitStatusService.setRootPath(tab.ssh ? null : (tab.rootPath || null))
+    retargetGit(tab)
     // Lazy connect: восстановленная SSH-вкладка подключается при первом переключении на неё.
     // Не срабатывает во время пакетного восстановления вкладок (isRestoringTabs) — иначе
     // каждая промежуточная addTab()→switchTo() открыла бы реальное SSH-соединение.
@@ -765,17 +789,45 @@ async function init() {
   const gitPanel = container.resolve('gitPanel')
 
   /**
-   * Открывает git-панель для данной вкладки. SSH-вкладки не имеют локального git —
-   * `simple-git` в main работает только с локальной ФС, поэтому вместо опроса
-   * унаследованного локального `tab.rootPath` показываем явное уведомление.
+   * Открывает git-панель для данной вкладки. SSH-вкладка работает с удалённым репозиторием
+   * через ssh-канал (git-runner), как только готова удалённая ФС; до этого — уведомление.
    */
   function openGitPanelForTab(tab) {
     if (!tab) return
     if (tab.ssh) {
-      gitPanel.showUnavailable('Git-панель доступна только для локальных вкладок')
+      if (tab._sshFsAvailable !== true) {
+        gitPanel.showUnavailable('Удалённая сессия ещё не готова — git станет доступен после подключения')
+        return
+      }
+      gitPanel.show(tab.rootPath, { kind: 'ssh', sessionId: tab.pid })
       return
     }
     gitPanel.show(tab.rootPath)
+  }
+
+  /**
+   * Направляет git-сервис (ветка, статусы дерева, gutter) на репозиторий активной вкладки:
+   * локальный путь либо удалённый (ssh-ctx). Вызывается при переключении вкладки и при каждой
+   * смене cwd/готовности удалённой ФС. Дебаунс — OSC 7 приходит на каждый промпт.
+   */
+  var _retargetGitTimer = null
+  function retargetGit(tab, { immediate = true } = {}) {
+    clearTimeout(_retargetGitTimer)
+    const apply = () => {
+      if (!tab || tabBar.getActive() !== tab) return
+      if (tab.ssh) {
+        if (tab._sshFsAvailable === true && tab.pid != null && tab.rootPath) {
+          gitStatusService.setRootPath(tab.rootPath, { kind: 'ssh', sessionId: tab.pid })
+        } else {
+          // Удалённая ФС ещё не готова: локальный rootPath SSH-вкладки — не её репозиторий
+          gitStatusService.setRootPath(null)
+        }
+        return
+      }
+      gitStatusService.setRootPath(tab.rootPath || null)
+    }
+    if (immediate) apply()
+    else _retargetGitTimer = setTimeout(apply, 300)
   }
 
   container.register('sshPanel', (r) => new SshPanel({
@@ -809,12 +861,31 @@ async function init() {
 
   container.register('nodeVersionDialog', (r) => new NodeVersionDialog({
     api: r('api'),
-    getActiveCwd: () => container.resolve('tabBar').getActive()?.rootPath || startCwd,
-    onClose: () => focusActiveTerminal(),
-    onVersionChanged: (version) => {
-      const statusBar = container.resolve('statusBar')
-      statusBar.setNodeVersion(version, null)
+    confirmDialog: r('confirmDialog'),
+    getContext: () => {
+      const tab = container.resolve('tabBar').getActive()
+      return {
+        cwd: tab?.rootPath || startCwd,
+        ctx: tab?.ssh ? { kind: 'ssh', sessionId: tab.pid } : { kind: 'local' },
+        isSsh: !!tab?.ssh,
+        currentVersion: tab?.nodeVersion || null,
+        shellCtx: tab ? tabShellCtx(tab) : undefined,
+      }
     },
+    // Переключение — командой в терминал вкладки: менять версию нужно в её шелле (PATH),
+    // а не в одноразовом процессе. Следующий промпт пришлёт новый путь к node (OSC 6973).
+    onUseVersion: (manager, version) => {
+      const tab = container.resolve('tabBar').getActive()
+      if (!tab || tab.pid == null) return { ok: false, reason: 'Нет активного терминала' }
+      if (tab.isBusy) return { ok: false, reason: 'Терминал занят — дождитесь завершения команды' }
+      if (!/^[\w.*/-]+$/.test(version) || version.startsWith('-')) return { ok: false, reason: 'Некорректная версия' }
+      const command = { nvm: `nvm use ${version}`, fnm: `fnm use ${version}`, asdf: `asdf shell nodejs ${version}` }[manager]
+      if (!command) return { ok: false, reason: 'Менеджер версий не определён' }
+      // \x15 (Ctrl+U) — очистить уже набранный в строке текст перед командой
+      api.ptyWrite(tab.pid, `\x15${command}\r`)
+      return { ok: true }
+    },
+    onClose: () => focusActiveTerminal(),
   }))
   const nodeVersionDialog = container.resolve('nodeVersionDialog')
 
@@ -921,7 +992,7 @@ async function init() {
   statusBar.setForceDisabled(config.agents?.forceDisabled || {})
   statusBar.setProxyConfig({ proxy: config.agents.proxy || '', enabled: config.agents.proxyEnabled })
 
-  statusBar.start(() => tabBar.getActive()?.rootPath)
+  statusBar.start(() => tabBar.getActive()?.rootPath, () => tabBar.getActive()?.nodeVersion)
 
   const gitStatusService = container.resolve('gitStatusService')
   gitStatusService.setRootPath(startCwd)
@@ -1281,7 +1352,10 @@ async function init() {
       tab.rootPath = tab.remoteCwd
       tabBar.syncStore()
     }
-    if (tabBar.getActive() === tab) syncActiveFsContext()
+    if (tabBar.getActive() === tab) {
+      syncActiveFsContext()
+      retargetGit(tab)
+    }
   })
 
   // Ресинк персистентной (tmux) сессии сразу после attach (Этап 2) — без него вкладка не знает
@@ -1300,17 +1374,32 @@ async function init() {
       tabBar._updateTabLabel(tab)
       if (tabBar.getActive() === tab) {
         syncActiveFsContext()
+        retargetGit(tab, { immediate: false })
         updateNavButtons()
       }
     }
 
     // Признак busy — эвристика: текущая команда панели не похожа на login-shell. Ручной сброс
     // (_busyOptimistic, см. StatusBar._createClearOptimisticBusyButton) остаётся доступен.
-    const looksLikeShell = !currentCommand || /^-?(zsh|bash|sh|fish|csh|tcsh|dash)$/.test(currentCommand)
-    if (!looksLikeShell) {
+    if (!currentCommand) {
+      // Команду панели получить не удалось — состояние оставляем как есть (не гадаем).
+    } else if (/^-?(zsh|bash|sh|fish|csh|tcsh|dash)$/.test(currentCommand)) {
+      // Шелл на переднем плане = панель свободна. Для восстановленной tmux-вкладки это ещё и
+      // доказательство, что запущенный ранее агент завершился — снимаем устаревшее состояние,
+      // восстановленное из tabs-state.json (applySavedAgentState).
+      tab.isBusy = false
+      tab._busyOptimistic = false
+      tab.activeAgentId = null
+      if (tabBar.getActive() === tab) syncStatusBarTerminalState()
+    } else {
       tab.isBusy = true
       tab._busyOptimistic = true
+      // Восстановление агента: если панель занята известным агентом eTty — назначаем его активным,
+      // чтобы вернуть панель быстрых команд (StatusBar) после рестарта.
+      const inferredAgentId = resolveAgentIdByCommand(currentCommand)
+      if (inferredAgentId) tab.activeAgentId = inferredAgentId
       tabBar._updateTabLabel(tab)
+      if (tabBar.getActive() === tab) syncStatusBarTerminalState()
     }
 
     // pane_path (tmux сам забрал его из нашего OSC 7) доказывает, что хуки исполнились —
@@ -1363,10 +1452,41 @@ async function init() {
     }
   }
 
+  /** ctx для main-процесса: удалённый шелл — через SSH-канал вкладки, локальный — без ctx. */
+  function tabShellCtx(tab) {
+    return tab.ssh ? { kind: 'ssh', sessionId: tab.pid } : undefined
+  }
+
+  /**
+   * Обновляет версию node вкладки по пути к бинарю, присланному хуком шелла (OSC 6973 на каждый
+   * промпт). Версия из пути (nvm/fnm/asdf) определяется без запуска процесса; для shim'ов и
+   * системных установок main спрашивает сам бинарь — не чаще раза в 3 с на вкладку.
+   */
+  async function updateTabNodeVersion(tab, nodePath) {
+    const changed = nodePath !== tab.nodePath
+    if (!changed && (tab.nodeVersionSource === 'path' || Date.now() - (tab._nodeResolvedAt || 0) < 3000)) return
+    tab.nodePath = nodePath
+    tab._nodeResolvedAt = Date.now()
+
+    let resolved = null
+    if (nodePath) {
+      try { resolved = await api.nodeVersionResolve(nodePath, tabShellCtx(tab)) } catch { /* не критично */ }
+    }
+    if (tab.nodePath !== nodePath) return // за время запроса путь сменился
+    tab.nodeVersion = resolved?.version || null
+    tab.nodeVersionSource = resolved?.source || null
+    if (tabBar.getActive() === tab) statusBar.setNodeVersion(tab.nodeVersion, null)
+  }
+
   function attachPidHandlers(tab) {
     // При переподключении освобождаем disposables предыдущего oscHandler (регистрируются
     // на term.parser и не заменяются сами — в отличие от attachCustomKeyEventHandler)
     tab._oscHandler?.detach()
+    tab._imagePaste?.detach()
+
+    const imagePaste = new TerminalImagePaste({ api, getTab: () => tab, notify: showToast })
+    imagePaste.attach(tab.term)
+    tab._imagePaste = imagePaste
 
     const keyboardHandler = new TerminalKeyboardHandler(
       { write: (pid, data) => api.ptyWrite(pid, data) },
@@ -1376,7 +1496,8 @@ async function init() {
         const defaultMode = config.terminal?.defaultKeyboardMode || 'kitty'
         if (!agentId) return defaultMode
         return config.agents?.keyboardModes?.[agentId] || ((agentId === 'qwen' || agentId === 'agento') ? 'ctrl-j' : defaultMode)
-      }
+      },
+      () => imagePaste.handleCtrlV()
     )
     keyboardHandler.attach(tab.term, tab.pid)
     tab._keyboardHandler = keyboardHandler
@@ -1401,6 +1522,7 @@ async function init() {
           tabBar._updateTabLabel(changedTab)
           if (tabBar.getActive() === changedTab) {
             syncActiveFsContext()
+            retargetGit(changedTab, { immediate: false })
             updateNavButtons()
           }
           return
@@ -1412,8 +1534,13 @@ async function init() {
             fileTree.setRoot(newPath, { kind: 'local' })
             api.fsSetRoot(newPath, { kind: 'local' })
           }
+          retargetGit(tabBar.tabs[index], { immediate: false })
           updateNavButtons()
         }
+      },
+      onNodeChange: (nodePath, pid) => {
+        const nodeTab = tabBar.tabs.find(t => t.pid === pid)
+        if (nodeTab) updateTabNodeVersion(nodeTab, nodePath)
       },
       onBusyChange: (isBusy, pid, wasBusy) => {
         const targetTab = tabBar.tabs.find(t => t.pid === pid)
@@ -1662,6 +1789,27 @@ async function init() {
     }
   })
 
+  /**
+   * Восстанавливает состояние ИИ-агента вкладки из tabs-state.json (activeAgentId/isBusy,
+   * см. tab-bar.js exportState). Применяется ТОЛЬКО для tmux-вкладок: лишь персистентная
+   * сессия сохраняет живой процесс агента между запусками eTty. Для локальных и обычных
+   * SSH-вкладок шелл при рестарте создаётся заново — состояние агента сбрасывается.
+   * Фактическое наличие агента позже подтверждает ресинк tmux (onSshSessionState).
+   */
+  const applySavedAgentState = (tab, saved) => {
+    const isTmux = saved?.ssh?.persistence === 'tmux'
+    if (!isTmux) {
+      tab.isBusy = false
+      tab.activeAgentId = null
+      return
+    }
+    tab.isBusy = !!saved.isBusy
+    tab.activeAgentId = saved.activeAgentId || null
+    // busy tmux-вкладки всегда оптимистичный (честного OSC 133 при re-attach не бывает) —
+    // даёт право на ручной сброс крестиком в панели быстрых команд.
+    tab._busyOptimistic = tab.isBusy
+  }
+
   // Restore tabs from saved state (used by menu trigger)
   async function restoreTabs(savedTabs) {
     // Create new tabs first
@@ -1680,8 +1828,7 @@ async function init() {
           continue
         }
         const tab = tabBar.addTab(tabData)
-        tab.isBusy = false
-        tab.activeAgentId = null
+        applySavedAgentState(tab, savedTabs[i])
         tab._savedEditorState = savedTabs[i].editorState || null
         tab.gitPanelVisible = savedTabs[i].gitPanelVisible || false
         setupTabHandlers(tab)
@@ -1754,8 +1901,7 @@ async function init() {
               continue
             }
             const tab = tabBar.addTab(tabData)
-            tab.isBusy = false
-            tab.activeAgentId = null
+            applySavedAgentState(tab, savedTabs[i])
             tab._savedEditorState = savedTabs[i].editorState || null
             tab.gitPanelVisible = savedTabs[i].gitPanelVisible || false
             setupTabHandlers(tab)

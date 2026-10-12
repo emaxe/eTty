@@ -174,6 +174,20 @@ export const WRITE_FILE_SCRIPT = [
   'cat > "$t" && mv -- "$t" "$1"'
 ].join('; ')
 
+/**
+ * `$1` — имя файла (генерируется в main, без `/`), содержимое — через stdin. Кладёт в
+ * `${TMPDIR:-/tmp}/etty-paste/` (права 700/600), чистит файлы старше суток и печатает итоговый путь.
+ */
+export const UPLOAD_PASTE_IMAGE_SCRIPT = [
+  'umask 077',
+  't="${TMPDIR:-/tmp}"',
+  'd="${t%/}/etty-paste"',
+  'mkdir -p -- "$d" || exit 1',
+  'find "$d" -type f -mmin +1440 -exec rm -f {} + 2>/dev/null',
+  'cat > "$d/$1" || exit 1',
+  'printf %s "$d/$1"'
+].join('; ')
+
 export const STAT_FILE_GNU_SCRIPT = 'stat -c "%Y %s" -- "$1"'
 export const STAT_FILE_BSD_SCRIPT = 'stat -f "%m %z" -- "$1"'
 

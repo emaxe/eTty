@@ -2,7 +2,8 @@ import { Icons } from './icons.js'
 
 /**
  * Dialog for managing Node.js versions via nvm/fnm/asdf.
- * Shows current version, allows switching, installing, and uninstalling versions.
+ * Shows the version running in the active tab's shell, switches it by sending the manager's
+ * command to that tab's terminal, installs/uninstalls versions (locally or on the SSH host).
  *
  * Architecture: DI via constructor, follows ProjectSearchDialog pattern.
  */
@@ -10,15 +11,19 @@ export class NodeVersionDialog {
   /**
    * @param {Object} deps
    * @param {import('./core/adapters/electron-api').ElectronApiAdapter} deps.api
-   * @param {Function} deps.getActiveCwd — returns current tab root path
+   * @param {Function} deps.getContext — () => { cwd, ctx, isSsh, currentVersion, shellCtx }:
+   *   cwd/ctx — корень и fs-контекст активной вкладки, shellCtx — контекст для node-version IPC
+   * @param {Function} deps.onUseVersion — (manager, version) => { ok: boolean, reason?: string }:
+   *   отправляет команду переключения в терминал активной вкладки
+   * @param {Object} deps.confirmDialog
    * @param {Function} [deps.onClose]
-   * @param {Function} [deps.onVersionChanged] — called when version is switched
    */
-  constructor({ api, getActiveCwd, onClose, onVersionChanged }) {
+  constructor({ api, getContext, onUseVersion, confirmDialog, onClose }) {
     this._api = api
-    this._getActiveCwd = getActiveCwd
+    this._getContext = getContext
+    this._onUseVersion = onUseVersion
+    this._confirmDialog = confirmDialog
     this._onClose = onClose
-    this._onVersionChanged = onVersionChanged
 
     this._overlay = null
     this._isVisible = false
@@ -28,6 +33,8 @@ export class NodeVersionDialog {
     this._remoteVersions = []
     this._manager = null
     this._currentVersion = null
+    this._required = null
+    this._isSsh = false
 
     this._buildDOM()
   }
@@ -45,6 +52,9 @@ export class NodeVersionDialog {
           <div class="node-version-info">
             <span class="node-version-current">Текущая: <span class="node-version-value">...</span></span>
             <span class="node-version-manager">Менеджер: <span class="node-version-value">...</span></span>
+          </div>
+          <div class="node-version-info node-version-required hidden">
+            <span>Проект требует: <span class="node-version-value"></span></span>
           </div>
           <div class="node-version-install-block hidden">
             <p class="node-version-install-text">Менеджер версий не найден. Установите nvm для управления версиями Node.js.</p>
@@ -72,6 +82,7 @@ export class NodeVersionDialog {
     this._overlay = overlay
     this._currentVersionEl = overlay.querySelector('.node-version-current .node-version-value')
     this._managerEl = overlay.querySelector('.node-version-manager .node-version-value')
+    this._requiredEl = overlay.querySelector('.node-version-required')
     this._installBlock = overlay.querySelector('.node-version-install-block')
     this._listEl = overlay.querySelector('.node-version-list')
     this._emptyEl = overlay.querySelector('.node-version-empty')
@@ -134,41 +145,91 @@ export class NodeVersionDialog {
   async _loadData() {
     this._setStatus('Загрузка...')
 
-    const cwd = this._getActiveCwd()
+    const { cwd, ctx, isSsh, currentVersion, shellCtx } = this._getContext()
+    this._isSsh = !!isSsh
 
-    // Detect manager and get current version in parallel
-    const [managerResult, currentResult] = await Promise.all([
-      this._api.nodeVersionDetectManager().catch(() => ({ manager: null })),
-      this._api.nodeVersionGetCurrent(cwd).catch(() => null),
+    const [managerResult, required] = await Promise.all([
+      this._api.nodeVersionDetectManager(shellCtx).catch(() => ({ manager: null })),
+      this._findRequiredVersion(cwd, ctx),
     ])
 
     this._manager = managerResult?.manager || null
-    this._currentVersion = currentResult?.version || null
+    this._currentVersion = currentVersion || null
+    this._required = required
 
-    this._currentVersionEl.textContent = this._currentVersion || 'N/A'
+    this._currentVersionEl.textContent = this._currentVersion ? `v${this._currentVersion}` : 'N/A'
     this._managerEl.textContent = this._manager || 'не найден'
+    this._renderRequired()
 
     if (!this._manager) {
-      this._installBlock.classList.remove('hidden')
+      // Автоустановка nvm — только для локальных вкладок
+      this._installBlock.classList.toggle('hidden', this._isSsh)
       this._listEl.innerHTML = ''
       this._emptyEl.classList.remove('hidden')
-      this._emptyEl.textContent = 'Установите менеджер версий для управления Node.js'
+      this._emptyEl.textContent = this._isSsh
+        ? 'На сервере не найден nvm/fnm/asdf'
+        : 'Установите менеджер версий для управления Node.js'
       this._setStatus('')
       return
     }
 
     this._installBlock.classList.add('hidden')
+    await this._reloadInstalled()
+    this._renderList()
+    this._setStatus('')
+  }
 
-    // Load installed versions
+  async _reloadInstalled() {
     try {
-      const installed = await this._api.nodeVersionListInstalled()
+      const installed = await this._api.nodeVersionListInstalled(this._getContext().shellCtx)
       this._installedVersions = installed?.versions || []
     } catch (e) {
       this._installedVersions = []
     }
+  }
 
-    this._renderList()
-    this._setStatus('')
+  /**
+   * Версия, которую требует проект: .nvmrc / .node-version / .tool-versions в cwd или выше
+   * (nvm, fnm и asdf ищут вверх по дереву). Читается через fs-провайдер — работает и по SSH.
+   * @returns {Promise<{version: string, file: string}|null>}
+   */
+  async _findRequiredVersion(cwd, ctx) {
+    if (!cwd) return null
+    let dir = cwd
+    for (let depth = 0; depth < 6; depth++) {
+      for (const name of ['.nvmrc', '.node-version', '.tool-versions']) {
+        const res = await this._api.fsReadFile(`${dir.replace(/\/$/, '')}/${name}`, ctx).catch(() => null)
+        if (!res?.success) continue
+        let version = res.content.trim().split('\n')[0].trim()
+        if (name === '.tool-versions') {
+          const m = res.content.match(/^nodejs\s+(\S+)/m)
+          if (!m) continue
+          version = m[1]
+        }
+        if (version) return { version: version.replace(/^v(?=\d)/, ''), file: `${dir === '/' ? '' : dir}/${name}` }
+      }
+      const idx = dir.lastIndexOf('/')
+      if (idx <= 0) {
+        if (dir === '/') break
+        dir = '/'
+      } else {
+        dir = dir.slice(0, idx)
+      }
+    }
+    return null
+  }
+
+  _renderRequired() {
+    if (!this._requiredEl) return
+    if (!this._required) {
+      this._requiredEl.classList.add('hidden')
+      return
+    }
+    this._requiredEl.classList.remove('hidden')
+    const mismatch = this._currentVersion && !this._currentVersion.startsWith(this._required.version.replace(/^v/, ''))
+      && !/^(lts|node|stable|latest)/.test(this._required.version)
+    this._requiredEl.querySelector('.node-version-value').textContent =
+      `${this._required.version} (${this._required.file})${mismatch ? ' — отличается от текущей' : ''}`
   }
 
   _switchTab(tab) {
@@ -186,7 +247,7 @@ export class NodeVersionDialog {
   async _loadRemoteVersions() {
     this._setStatus('Загрузка доступных версий...')
     try {
-      const remote = await this._api.nodeVersionListRemote()
+      const remote = await this._api.nodeVersionListRemote(this._getContext().shellCtx)
       this._remoteVersions = remote?.versions || []
       this._renderList()
     } catch (e) {
@@ -225,8 +286,9 @@ export class NodeVersionDialog {
       let actions = ''
       if (this._currentTab === 'installed') {
         actions = `
-          <button class="node-version-row-btn" data-action="use" data-version="${v.version}">Использовать</button>
-          <button class="node-version-row-btn danger" data-action="uninstall" data-version="${v.version}">Удалить</button>
+          <button class="node-version-row-btn" data-action="use" data-version="${v.version}" title="Выполнить в терминале вкладки">Использовать</button>
+          ${this._manager === 'asdf' ? '' : `<button class="node-version-row-btn" data-action="pin" data-version="${v.version}" title="Записать версию в .nvmrc рабочей папки">В .nvmrc</button>`}
+          ${isCurrent ? '' : `<button class="node-version-row-btn danger" data-action="uninstall" data-version="${v.version}">Удалить</button>`}
         `
       } else if (!isInstalled) {
         actions = `
@@ -259,34 +321,32 @@ export class NodeVersionDialog {
   }
 
   async _handleAction(action, version) {
-    const cwd = this._getActiveCwd()
+    const { cwd, ctx, shellCtx } = this._getContext()
 
     switch (action) {
       case 'use': {
-        this._setStatus(`Переключение на v${version}...`)
-        try {
-          await this._api.nodeVersionUse(version, cwd)
-          this._currentVersion = version
-          this._currentVersionEl.textContent = version
-          this._setStatus(`Используется v${version}`)
-          this._onVersionChanged?.(version)
-          // Refresh installed list to update current markers
-          const installed = await this._api.nodeVersionListInstalled()
-          this._installedVersions = installed?.versions || []
-          this._renderList()
-        } catch (e) {
-          this._setStatus(`Ошибка: ${e.message}`)
+        const result = this._onUseVersion(this._manager, version)
+        if (result?.ok) {
+          this.hide()
+        } else {
+          this._setStatus(result?.reason || 'Не удалось отправить команду в терминал')
         }
+        break
+      }
+      case 'pin': {
+        const file = `${cwd.replace(/\/$/, '')}/.nvmrc`
+        this._setStatus(`Запись ${file}...`)
+        const res = await this._api.fsWriteFile(file, version + '\n', ctx).catch(e => ({ success: false, error: e.message }))
+        this._setStatus(res?.success ? `v${version} записана в ${file}` : `Ошибка записи: ${res?.error || 'неизвестная'}`)
+        if (res?.success) this._findRequiredVersion(cwd, ctx).then(r => { this._required = r; this._renderRequired() })
         break
       }
       case 'install': {
         this._setStatus(`Установка v${version}...`)
         try {
-          await this._api.nodeVersionInstall(version)
+          await this._api.nodeVersionInstall(version, shellCtx)
           this._setStatus(`v${version} установлена`)
-          // Refresh installed list
-          const installed = await this._api.nodeVersionListInstalled()
-          this._installedVersions = installed?.versions || []
+          await this._reloadInstalled()
           if (this._currentTab === 'installed') {
             this._renderList()
           } else {
@@ -299,10 +359,19 @@ export class NodeVersionDialog {
         break
       }
       case 'uninstall': {
-        if (!confirm(`Удалить Node.js v${version}?`)) return
+        if (version === this._currentVersion) {
+          this._setStatus('Нельзя удалить версию, активную в терминале')
+          return
+        }
+        const confirmed = await this._confirmDialog.open({
+          title: 'Удалить версию Node.js?',
+          message: `Удалить Node.js v${version}${this._isSsh ? ' на сервере' : ''}?`,
+          confirmText: 'Удалить',
+        })
+        if (!confirmed) return
         this._setStatus(`Удаление v${version}...`)
         try {
-          await this._api.nodeVersionUninstall(version)
+          await this._api.nodeVersionUninstall(version, shellCtx)
           this._setStatus(`v${version} удалена`)
           this._installedVersions = this._installedVersions.filter(v => v.version !== version)
           this._renderList()
@@ -317,7 +386,7 @@ export class NodeVersionDialog {
   async _installManager() {
     this._setStatus('Установка nvm...')
     try {
-      await this._api.nodeVersionInstallManager()
+      await this._api.nodeVersionInstallManager(this._getContext().shellCtx)
       this._setStatus('nvm установлен. Перезагрузка...')
       // Reload data after a short delay
       setTimeout(() => this._loadData(), 1000)
@@ -347,8 +416,9 @@ export class NodeVersionDialog {
       this._overlay = null
     }
     this._api = null
-    this._getActiveCwd = null
+    this._getContext = null
+    this._onUseVersion = null
+    this._confirmDialog = null
     this._onClose = null
-    this._onVersionChanged = null
   }
 }

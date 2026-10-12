@@ -295,7 +295,12 @@ export class TabBar {
         ssh: t.ssh ? { connectionId: t.ssh.connectionId, label: t.ssh.label, sessionName: t.ssh.sessionName, persistence: t.ssh.persistence } : undefined,
         // Последний известный удалённый cwd — при восстановлении пытаемся открыть именно его,
         // а не заново $HOME (см. index.js: restore + connectSshTab)
-        remoteCwd: t.ssh ? (t.remoteCwd || undefined) : undefined
+        remoteCwd: t.ssh ? (t.remoteCwd || undefined) : undefined,
+        // Состояние ИИ-агента. Переживает рестарт только у tmux-вкладок (процесс живёт в
+        // персистентной сессии); применяется при восстановлении лишь для persistence==='tmux'
+        // (см. applySavedAgentState в index.js), затем сверяется с реальной командой панели.
+        activeAgentId: t.activeAgentId || undefined,
+        isBusy: t.isBusy || undefined
       }))
   }
 

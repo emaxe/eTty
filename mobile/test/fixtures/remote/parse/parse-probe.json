@@ -1,0 +1,104 @@
+[
+  {
+    "name": "full_featured",
+    "inputBase64": "TGludXgKL2hvbWUvZGV2CmRldgovYmluL3pzaApnbnUKZmluZDAKaW5vdGlmeQpyZwp0bXV4IDMuM2EKYXB0Cg==",
+    "expected": {
+      "uname": "Linux",
+      "home": "/home/dev",
+      "user": "dev",
+      "shell": "/bin/zsh",
+      "statFlavor": "gnu",
+      "find0": true,
+      "inotify": true,
+      "rg": true,
+      "tmuxVersion": "tmux 3.3a",
+      "tmuxPassthrough": true,
+      "pkgManager": "apt"
+    }
+  },
+  {
+    "name": "minimal",
+    "inputBase64": "RGFyd2luCi9Vc2Vycy9kZXYKZGV2Cgpic2QKbm9maW5kMAotCi0KLQotCg==",
+    "expected": {
+      "uname": "Darwin",
+      "home": "/Users/dev",
+      "user": "dev",
+      "shell": "",
+      "statFlavor": "bsd",
+      "find0": false,
+      "inotify": false,
+      "rg": false,
+      "tmuxVersion": null,
+      "tmuxPassthrough": false,
+      "pkgManager": null
+    }
+  },
+  {
+    "name": "tmux_next_snapshot",
+    "inputBase64": "TGludXgKL2hvbWUvZGV2CmRldgovYmluL2Jhc2gKZ251CmZpbmQwCi0KLQp0bXV4IG5leHQtMy41CmRuZg==",
+    "expected": {
+      "uname": "Linux",
+      "home": "/home/dev",
+      "user": "dev",
+      "shell": "/bin/bash",
+      "statFlavor": "gnu",
+      "find0": true,
+      "inotify": false,
+      "rg": false,
+      "tmuxVersion": "tmux next-3.5",
+      "tmuxPassthrough": true,
+      "pkgManager": "dnf"
+    }
+  },
+  {
+    "name": "tmux_below_passthrough_threshold",
+    "inputBase64": "TGludXgKL2hvbWUvZGV2CmRldgovYmluL2Jhc2gKZ251CmZpbmQwCi0KLQp0bXV4IDIuOQp5dW0=",
+    "expected": {
+      "uname": "Linux",
+      "home": "/home/dev",
+      "user": "dev",
+      "shell": "/bin/bash",
+      "statFlavor": "gnu",
+      "find0": true,
+      "inotify": false,
+      "rg": false,
+      "tmuxVersion": "tmux 2.9",
+      "tmuxPassthrough": false,
+      "pkgManager": "yum"
+    }
+  },
+  {
+    "name": "tmux_exactly_at_threshold",
+    "inputBase64": "TGludXgKL2hvbWUvZGV2CmRldgovYmluL2Jhc2gKZ251CmZpbmQwCi0KLQp0bXV4IDMuMwot",
+    "expected": {
+      "uname": "Linux",
+      "home": "/home/dev",
+      "user": "dev",
+      "shell": "/bin/bash",
+      "statFlavor": "gnu",
+      "find0": true,
+      "inotify": false,
+      "rg": false,
+      "tmuxVersion": "tmux 3.3",
+      "tmuxPassthrough": true,
+      "pkgManager": null
+    }
+  },
+  {
+    "name": "tmux_numeric_not_lexicographic",
+    "inputBase64": "TGludXgKL2hvbWUvZGV2CmRldgovYmluL2Jhc2gKZ251CmZpbmQwCi0KLQp0bXV4IDMuMTAKLQ==",
+    "expected": {
+      "uname": "Linux",
+      "home": "/home/dev",
+      "user": "dev",
+      "shell": "/bin/bash",
+      "statFlavor": "gnu",
+      "find0": true,
+      "inotify": false,
+      "rg": false,
+      "tmuxVersion": "tmux 3.10",
+      "tmuxPassthrough": true,
+      "pkgManager": null
+    }
+  }
+]

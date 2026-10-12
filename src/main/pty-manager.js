@@ -89,10 +89,14 @@ export class PtyManager {
         `_etty_cwd() { printf '\\033]7;file://%s\\007' "$PWD"; }`,
         `_etty_preexec() { printf '\\033]133;C\\007' }`,
         `_etty_precmd_state() { printf '\\033]133;A\\007' }`,
+        // OSC 6973: путь к node текущего шелла (по нему renderer определяет версию без поллинга)
+        `_etty_node() { printf '\\033]6973;node=%s\\007' "\${commands[node]}" }`,
         `add-zsh-hook precmd _etty_cwd`,
         `add-zsh-hook preexec _etty_preexec`,
         `add-zsh-hook precmd _etty_precmd_state`,
+        `add-zsh-hook precmd _etty_node`,
         `_etty_cwd`,
+        `_etty_node`,
         ...(PROMPT_MAP[promptStyle] ? [`PROMPT='${PROMPT_MAP[promptStyle]}'`] : [])
       ].join('\n') + '\n'
     )

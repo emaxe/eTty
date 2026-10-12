@@ -1,0 +1,68 @@
+[
+  {
+    "name": "all_success",
+    "srcPaths": [
+      "/src/a",
+      "/src/b"
+    ],
+    "inputBase64": "TwAvZHN0L2EATwAvZHN0L2IA",
+    "expected": [
+      {
+        "path": "/src/a",
+        "success": true,
+        "newPath": "/dst/a"
+      },
+      {
+        "path": "/src/b",
+        "success": true,
+        "newPath": "/dst/b"
+      }
+    ]
+  },
+  {
+    "name": "mixed",
+    "srcPaths": [
+      "/src/a",
+      "/src/self-move-into-target"
+    ],
+    "inputBase64": "TwAvZHN0L2EARQAvc3JjL3NlbGYtbW92ZS1pbnRvLXRhcmdldAA=",
+    "expected": [
+      {
+        "path": "/src/a",
+        "success": true,
+        "newPath": "/dst/a"
+      },
+      {
+        "path": "/src/self-move-into-target",
+        "success": false,
+        "error": "Operation failed"
+      }
+    ]
+  },
+  {
+    "name": "all_error",
+    "srcPaths": [
+      "/src/a",
+      "/src/b"
+    ],
+    "inputBase64": "RQAvc3JjL2EARQAvc3JjL2IA",
+    "expected": [
+      {
+        "path": "/src/a",
+        "success": false,
+        "error": "Operation failed"
+      },
+      {
+        "path": "/src/b",
+        "success": false,
+        "error": "Operation failed"
+      }
+    ]
+  },
+  {
+    "name": "empty",
+    "srcPaths": [],
+    "inputBase64": "",
+    "expected": []
+  }
+]

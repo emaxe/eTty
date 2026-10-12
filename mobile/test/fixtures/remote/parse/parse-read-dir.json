@@ -1,0 +1,96 @@
+[
+  {
+    "name": "mixed_dirs_and_files",
+    "dirPath": "/home/dev/project",
+    "inputBase64": "Li9zdWIgZGlyAC4vLmhpZGRlbi1kaXIAAC4vbm9ybWFsLnR4dAAuLy5oaWRkZW4tZmlsZQAuL2Vtb2pp8J+YgC50eHQALi9uYW1lJ3dpdGgicXVvdGVzAA==",
+    "expected": [
+      {
+        "name": "sub dir",
+        "path": "/home/dev/project/sub dir",
+        "isDirectory": true
+      },
+      {
+        "name": ".hidden-dir",
+        "path": "/home/dev/project/.hidden-dir",
+        "isDirectory": true
+      },
+      {
+        "name": "normal.txt",
+        "path": "/home/dev/project/normal.txt",
+        "isDirectory": false
+      },
+      {
+        "name": ".hidden-file",
+        "path": "/home/dev/project/.hidden-file",
+        "isDirectory": false
+      },
+      {
+        "name": "emoji😀.txt",
+        "path": "/home/dev/project/emoji😀.txt",
+        "isDirectory": false
+      },
+      {
+        "name": "name'with\"quotes",
+        "path": "/home/dev/project/name'with\"quotes",
+        "isDirectory": false
+      }
+    ]
+  },
+  {
+    "name": "empty_directory",
+    "dirPath": "/home/dev/project",
+    "inputBase64": "AA==",
+    "expected": []
+  },
+  {
+    "name": "only_dirs",
+    "dirPath": "/home/dev/project",
+    "inputBase64": "Li9hAC4vYgAuL2MAAA==",
+    "expected": [
+      {
+        "name": "a",
+        "path": "/home/dev/project/a",
+        "isDirectory": true
+      },
+      {
+        "name": "b",
+        "path": "/home/dev/project/b",
+        "isDirectory": true
+      },
+      {
+        "name": "c",
+        "path": "/home/dev/project/c",
+        "isDirectory": true
+      }
+    ]
+  },
+  {
+    "name": "only_files",
+    "dirPath": "/home/dev/project",
+    "inputBase64": "AC4vYS50eHQALi9iLnR4dAA=",
+    "expected": [
+      {
+        "name": "a.txt",
+        "path": "/home/dev/project/a.txt",
+        "isDirectory": false
+      },
+      {
+        "name": "b.txt",
+        "path": "/home/dev/project/b.txt",
+        "isDirectory": false
+      }
+    ]
+  },
+  {
+    "name": "name_with_embedded_newline",
+    "dirPath": "/home/dev/project",
+    "inputBase64": "AC4vd2VpcmQKbmFtZS50eHQA",
+    "expected": [
+      {
+        "name": "weird\nname.txt",
+        "path": "/home/dev/project/weird\nname.txt",
+        "isDirectory": false
+      }
+    ]
+  }
+]

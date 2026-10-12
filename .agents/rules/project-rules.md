@@ -18,7 +18,7 @@ src/
     index.js                 — bootstrap: сервисы, IPC handlers, запуск AppService
     services/
       app-service.js         — жизненный цикл: окно, меню, автообновление, сохранение состояния
-      node-version-manager.js — nvm/fnm/asdf: детект менеджера, list/switch/install/uninstall версий Node
+      node-version-manager.js — nvm/fnm/asdf: детект менеджера, list/install/uninstall, версия по пути node (локально и по SSH); node-version-parse.js — парсеры/валидация
     ipc-handlers/            — регистрация IPC-обработчиков по доменам
       index.js               — barrel export всех register*Handlers
       pty-handlers.js        — PTY create/write/resize/kill
@@ -31,7 +31,7 @@ src/
       history-handlers.js    — история: cleanup
       git-handlers.js        — Git операции: status/diff/branches/commit/push/stage/discard
       search-handlers.js     — поиск по проекту: query/cancel
-      node-version-handlers.js — менеджер версий Node: list/switch/install/uninstall
+      node-version-handlers.js — менеджер версий Node: list/install/uninstall/resolve (ctx для SSH)
       ssh-handlers.js         — SSH-подключения: list/save/delete/reorder, ssh:fs-retry
     pty-manager.js            — управление PTY-сессиями (node-pty + shell); для SSH дополнительно
                                  поднимает SshControlChannel через sshSessionRegistry
@@ -142,6 +142,11 @@ out/                         — артефакты electron-vite build (НЕ р
 dist/                        — артефакты electron-builder (НЕ коммитить)
 build/                       — ресурсы для сборки (иконки, entitlements)
 docs/                        — спецификации, планы, чеклисты по фичам
+mobile/                      — Flutter-приложение (iOS/Android): SSH/tmux-клиент, мобильный аналог
+                               десктопа. `lib/remote/` и `lib/core/config/` — ЧИСТЫЙ DART (без
+                               `package:flutter`), порт `src/main/ssh/*`/`shared/*.js`; побайтовая
+                               сверка — `scripts/gen-remote-fixtures.mjs` + golden-тесты. Полная
+                               спецификация и план — `docs/plans/mob/`
 ```
 
 `src/renderer/components/base/context-menu/context-menu.js` — единственная реализация контекстного меню в проекте; отдельного legacy `context-menu.js` в корне `renderer/` больше нет.
@@ -313,6 +318,23 @@ docs/                        — спецификации, планы, чекл�
 - Минимальные размеры 400x300
 - Перетаскивание окна за titlebar даже когда табы занимают всю ширину
 
+### Мобильное приложение (`mobile/`, Flutter — iOS/Android)
+- Мобильный аналог десктопа: SSH/tmux-клиент на `dartssh2` + `xterm` (см. `mobile/README.md`,
+  спецификация — `docs/plans/mob/plan.md`). State management / DI — `flutter_riverpod`
+  (аналог DI Container + StateStore десктопа)
+- **Персистентные tmux-сессии** — тот же сокет/конфиг/hooks, что на десктопе (REQ-2), поэтому одна
+  сессия шарится между десктопом и телефоном; `lib/remote/` — побайтовый порт
+  `remote-scripts`/`remote-parse`/`remote-shell-hooks`, сверяется golden-тестами
+- **Единый «протокол eTty»**: `lib/remote/` и `lib/core/config/` не импортируют `package:flutter`
+  (чистый Dart, тестируется и переносится независимо от UI). Golden-фикстуры
+  (`mobile/test/fixtures/remote/`) генерируются из JS десктопа скриптом
+  `scripts/gen-remote-fixtures.mjs` и коммитятся; CI сверяет их (`--check`)
+- Удалённая ФС (`SshFsProvider`), редактор (`re_editor`), панель tmux-сессий сервера,
+  биометрическая блокировка (`local_auth`), импорт профилей `.ettyx` (общий с десктопом
+  PBKDF2 + AES-256-GCM формат)
+- Иконка/splash генерируются из desktop-иконки (`build/icon.png`) через `flutter_launcher_icons` /
+  `flutter_native_splash` (`mobile/assets/icon/`, конфиг — в `mobile/pubspec.yaml`)
+
 ## IPC-каналы
 
 Полный список констант — `src/shared/ipc-channels.js` (единственный источник истины, не дублировать строковыми литералами).
@@ -329,7 +351,8 @@ docs/                        — спецификации, планы, чекл�
 | `window:*` | get-position, move, fullscreen-change, minimize, maximize, close, is-maximized, maximized-change | Окно |
 | `app:*` | homedir, open-external | Системные |
 | `search:*` | query, cancel | Поиск по проекту |
-| `node-version:*` | get-current, list-installed, list-remote, install, use, uninstall, detect-manager, install-manager | Менеджер версий Node.js |
+| `node-version:*` | resolve, list-installed, list-remote, install, uninstall, detect-manager, install-manager (все с `ctx`) | Менеджер версий Node.js |
+| `clipboard:upload-image` | upload-image | Загрузка изображения из буфера на SSH-хост (вставка картинок в SSH-вкладках) |
 | `ssh:*` | list, save, delete, reorder, fs-ready (push), fs-retry, session-state (push), tmux-missing (push), master-acquire, master-release, sessions-list, session-kill, session-rename | SSH-подключения + готовность удалённой ФС + ресинк tmux-сессии + панель tmux-сессий (SshConnectionMaster) |
 
 ## Команды
@@ -341,6 +364,19 @@ docs/                        — спецификации, планы, чекл�
 | `npm run dist` | Собрать macOS .dmg → `dist/` (требует предварительного `build`) |
 | `npm run dist:win` | Собрать Windows NSIS (только на Windows) |
 | `npm run dist:linux` | Собрать Linux AppImage/deb (только на Linux) |
+
+### Мобильное приложение (`mobile/`)
+
+| Команда | Что делает |
+|---------|-----------|
+| `cd mobile && flutter pub get` | Установить зависимости |
+| `cd mobile && flutter analyze` | Статический анализ |
+| `cd mobile && flutter test` | Unit + golden тесты |
+| `cd mobile && flutter run` | Запустить на устройстве/симуляторе |
+| `node scripts/gen-remote-fixtures.mjs` | Перегенерировать golden-фикстуры из JS десктопа |
+| `node scripts/gen-remote-fixtures.mjs --check` | Проверить, что фикстуры не разошлись (CI) |
+| `cd mobile && dart run flutter_launcher_icons` | Перегенерировать иконки приложения |
+| `cd mobile && dart run flutter_native_splash:create` | Перегенерировать splash |
 
 ## Горячие клавиши
 
@@ -475,6 +511,7 @@ electron-builder делает это автоматически через `"npm
 | Config | Константы (числа, интервалы) — в `core/config/` | `core/config/*.js` |
 | Cleanup | Каждый компонент с подписками имеет `destroy()` | — |
 | Адаптер | Нет прямых `window.electronAPI` — через `core/adapters/electron-api.js` | `core/adapters/` |
+| Golden-паритет | `mobile/lib/remote/*` и `mobile/lib/core/config/*` побайтово совпадают с `src/main/ssh/*`/`shared/*.js` | `scripts/gen-remote-fixtures.mjs` |
 
 ## Чеклисты
 

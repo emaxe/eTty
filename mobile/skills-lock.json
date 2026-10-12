@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "skills": {
+    "dart-add-unit-test": {
+      "source": "dart-lang/skills",
+      "sourceType": "github",
+      "skillPath": "skills/dart-add-unit-test/SKILL.md",
+      "computedHash": "55dabb37175bc8091a02b7d78d405f7e33173698c48a649ea29748f1186ac9c0"
+    },
+    "dart-fix-runtime-errors": {
+      "source": "dart-lang/skills",
+      "sourceType": "github",
+      "skillPath": "skills/dart-fix-runtime-errors/SKILL.md",
+      "computedHash": "7b13cb0df76693d8c798432a1f86325b093a35e9687f231a012763fcad54fb2c"
+    },
+    "dart-generate-test-mocks": {
+      "source": "dart-lang/skills",
+      "sourceType": "github",
+      "skillPath": "skills/dart-generate-test-mocks/SKILL.md",
+      "computedHash": "7bf12a98d63e96ed51ba077a24426be1b11a9fc508f7dfca60fc6e118c3fc923"
+    },
+    "dart-resolve-package-conflicts": {
+      "source": "dart-lang/skills",
+      "sourceType": "github",
+      "skillPath": "skills/dart-resolve-package-conflicts/SKILL.md",
+      "computedHash": "e25c789387152d9d0c437610caa5746e337a789bcb8e9c9887b0425b94b734ef"
+    },
+    "dart-run-static-analysis": {
+      "source": "dart-lang/skills",
+      "sourceType": "github",
+      "skillPath": "skills/dart-run-static-analysis/SKILL.md",
+      "computedHash": "e64ea092e216ecdc9b4a8b49b06d0b9a0b49f680c1116ada1d247b2de3fa6fe1"
+    },
+    "flutter-add-integration-test": {
+      "source": "flutter/agent-plugins",
+      "sourceType": "github",
+      "skillPath": "skills/flutter-add-integration-test/SKILL.md",
+      "computedHash": "9ead37fef54371fed6ad07a9ba3de7a908135a0867b05baf74c28b7095343999"
+    },
+    "flutter-add-widget-test": {
+      "source": "flutter/agent-plugins",
+      "sourceType": "github",
+      "skillPath": "skills/flutter-add-widget-test/SKILL.md",
+      "computedHash": "c4f263c59cfe331ef42dba2aa81e25142aa4f7284518907c6b847e04502676b0"
+    },
+    "flutter-apply-architecture-best-practices": {
+      "source": "flutter/agent-plugins",
+      "sourceType": "github",
+      "skillPath": "skills/flutter-apply-architecture-best-practices/SKILL.md",
+      "computedHash": "2b1b63214d6b153c50aacd4bbcb76ce91dece449de9e06f477f8aad3163d667f"
+    },
+    "flutter-build-responsive-layout": {
+      "source": "flutter/agent-plugins",
+      "sourceType": "github",
+      "skillPath": "skills/flutter-build-responsive-layout/SKILL.md",
+      "computedHash": "f762ea2ee83d4f1f35d9093b41d2520dd024ab80c9539d4860b9ae7f2a4dc6a0"
+    },
+    "flutter-fix-layout-issues": {
+      "source": "flutter/agent-plugins",
+      "sourceType": "github",
+      "skillPath": "skills/flutter-fix-layout-issues/SKILL.md",
+      "computedHash": "1aaba922c951159118f9b141788f7bb7b8167bdc0bd5c6f0738ebb90c29b9532"
+    },
+    "flutter-riverpod-expert": {
+      "source": "juparave/dotfiles",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/flutter-riverpod-expert/SKILL.md",
+      "computedHash": "1c6906245c711286fbf76d3723979a5621bb8905087c8708f23c0ca6b99a1f2b"
+    },
+    "riverpod-getting-started": {
+      "source": "serverpod/skills-registry",
+      "sourceType": "github",
+      "skillPath": "skills/riverpod/riverpod-getting-started/SKILL.md",
+      "computedHash": "b2c768c908962cc98a07059e594910032b71e7f2e5aae23ffd13f54fd46ff5cb"
+    },
+    "riverpod-providers": {
+      "source": "serverpod/skills-registry",
+      "sourceType": "github",
+      "skillPath": "skills/riverpod/riverpod-providers/SKILL.md",
+      "computedHash": "a2789d2825224f5b7c8d3ab0b628d48abcd708879b6cc08b944a84e6560ebd79"
+    },
+    "riverpod-testing": {
+      "source": "serverpod/skills-registry",
+      "sourceType": "github",
+      "skillPath": "skills/riverpod/riverpod-testing/SKILL.md",
+      "computedHash": "df46cd7256c607ddb5c1f446b67469dfcec9e4a00d0450d4d72257a73099d5d0"
+    },
+    "run-goldens-rebaseline": {
+      "source": "zakariaf/flutter-skills",
+      "sourceType": "github",
+      "skillPath": "skills/run-goldens-rebaseline/SKILL.md",
+      "computedHash": "a04892c34ff0da66b3a07b62a2f5db0d7666cbf7547dd8399d5c0cfa150842d0"
+    },
+    "seeded-determinism-and-golden-vectors": {
+      "source": "zakariaf/flutter-skills",
+      "sourceType": "github",
+      "skillPath": "skills/seeded-determinism-and-golden-vectors/SKILL.md",
+      "computedHash": "7ea047e6daecab0b09b3b076fb71bf54325aa12c2dc0039240e45ea9eb81e4d5"
+    },
+    "widget-golden-and-a11y-testing": {
+      "source": "zakariaf/flutter-skills",
+      "sourceType": "github",
+      "skillPath": "skills/widget-golden-and-a11y-testing/SKILL.md",
+      "computedHash": "9d467f8883c828509ce85bcb29087270d6c7d6248df19098295c13b597002a40"
+    }
+  }
+}

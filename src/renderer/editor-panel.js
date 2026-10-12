@@ -1439,7 +1439,7 @@ export class EditorPanel {
       if (relPath.startsWith('/')) relPath = relPath.slice(1)
     }
 
-    const diffStr = await this._api.gitGetDiff(rootPath, relPath, { compareTo: 'head' })
+    const diffStr = await this._api.gitGetDiff(rootPath, relPath, { compareTo: 'head' }, this._store?.get('git.ctx') || null)
 
     // Проверить, что файл всё ещё актуален после async операции
     if (this._activeFilePath !== filePath || !this._tabs.has(filePath)) return

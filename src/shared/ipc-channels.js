@@ -86,12 +86,14 @@ export const IPC_CHANNELS = Object.freeze({
   SEARCH_QUERY: 'search:query',
   SEARCH_CANCEL: 'search:cancel',
 
+  // Clipboard
+  CLIPBOARD_UPLOAD_IMAGE: 'clipboard:upload-image',
+
   // Node version management
-  NODE_VERSION_GET_CURRENT: 'node-version:get-current',
+  NODE_VERSION_RESOLVE: 'node-version:resolve',
   NODE_VERSION_LIST_INSTALLED: 'node-version:list-installed',
   NODE_VERSION_LIST_REMOTE: 'node-version:list-remote',
   NODE_VERSION_INSTALL: 'node-version:install',
-  NODE_VERSION_USE: 'node-version:use',
   NODE_VERSION_UNINSTALL: 'node-version:uninstall',
   NODE_VERSION_DETECT_MANAGER: 'node-version:detect-manager',
   NODE_VERSION_INSTALL_MANAGER: 'node-version:install-manager',
@@ -101,6 +103,13 @@ export const IPC_CHANNELS = Object.freeze({
   SSH_SAVE: 'ssh:save',
   SSH_DELETE: 'ssh:delete',
   SSH_REORDER: 'ssh:reorder',
+
+  // Перенос профилей (задача #31, *.ettyx — REQ-22/23 в docs/plans/mob/plan.md).
+  // Диалог сохранения/открытия файла и парольная фраза — на стороне main (ssh-store.js/
+  // ettyx-format.js), renderer только собирает флаги (includePrivateKeys) и показывает результат.
+  SSH_EXPORT_CONNECTIONS: 'ssh:export-connections',
+  SSH_IMPORT_PICK_FILE: 'ssh:import-pick-file',
+  SSH_IMPORT_CONNECTIONS: 'ssh:import-connections',
 
   // SSH remote FS — готовность ControlMaster-канала для конкретного pid (Этап 3/4)
   SSH_FS_READY: 'ssh:fs-ready',

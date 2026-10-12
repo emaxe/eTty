@@ -131,14 +131,17 @@ function zshRcLines({ withCleanup }) {
     '_etty_cwd() { _etty_emit "$(printf "]7;file://%s\\007" "$PWD")"; }',
     '_etty_pre() { _etty_emit "$(printf "]133;C\\007")"; }',
     '_etty_post() { _etty_emit "$(printf "]133;A\\007")"; }',
+    // OSC 6973: путь к node текущего шелла (renderer определяет по нему версию)
+    '_etty_node() { _etty_emit "$(printf "]6973;node=%s\\007" "${commands[node]}")"; }',
     'add-zsh-hook precmd _etty_cwd',
     'add-zsh-hook preexec _etty_pre',
-    'add-zsh-hook precmd _etty_post'
+    'add-zsh-hook precmd _etty_post',
+    'add-zsh-hook precmd _etty_node'
   ]
   if (withCleanup) {
     lines.push(`zshexit() { rm -rf "\$${ETTY_TMPDIR_VAR}"; }`)
   }
-  lines.push('_etty_cwd')
+  lines.push('_etty_cwd', '_etty_node')
   return lines
 }
 
@@ -152,7 +155,7 @@ function bashRcLines({ withCleanup }) {
   const lines = [
     'if [ -f "$HOME/.bash_profile" ]; then . "$HOME/.bash_profile"; elif [ -f "$HOME/.bashrc" ]; then . "$HOME/.bashrc"; fi',
     EMIT_FN,
-    '_etty_cwd() { _etty_emit "$(printf "]7;file://%s\\007" "$PWD")"; _etty_emit "$(printf "]133;A\\007")"; }',
+    '_etty_cwd() { _etty_emit "$(printf "]7;file://%s\\007" "$PWD")"; _etty_emit "$(printf "]6973;node=%s\\007" "$(type -P node)")"; _etty_emit "$(printf "]133;A\\007")"; }',
     '_etty_pre() { case "$BASH_COMMAND" in _etty_cwd*) return ;; esac; _etty_emit "$(printf "]133;C\\007")"; }',
     'PROMPT_COMMAND=_etty_cwd',
     'trap _etty_pre DEBUG'

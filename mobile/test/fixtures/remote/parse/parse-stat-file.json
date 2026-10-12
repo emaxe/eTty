@@ -1,0 +1,28 @@
+[
+  {
+    "name": "well_formed",
+    "inputBase64": "MTcwMDAwMDAwMCA0MDk2",
+    "expected": {
+      "mtimeMs": 1700000000000,
+      "size": 4096
+    }
+  },
+  {
+    "name": "trailing_newline",
+    "inputBase64": "MTcwMDAwMDAwMCA0MDk2Cg==",
+    "expected": {
+      "mtimeMs": 1700000000000,
+      "size": 4096
+    }
+  },
+  {
+    "name": "malformed",
+    "inputBase64": "bm90IGEgc3RhdCBsaW5l",
+    "expected": null
+  },
+  {
+    "name": "empty",
+    "inputBase64": "",
+    "expected": null
+  }
+]

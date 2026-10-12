@@ -17,6 +17,7 @@ import { NodeVersionManager } from './services/node-version-manager.js'
 import { SshSessionRegistry } from './ssh/ssh-session-registry.js'
 import { SshConnectionMasterRegistry } from './ssh/ssh-connection-master-registry.js'
 import { FsProviderRegistry } from './fs/fs-provider-registry.js'
+import { GitRunnerRegistry } from './git/git-runner-registry.js'
 import {
   saveTabState, loadTabState, deleteTabState, hasTabState, validatePath
 } from './tab-state'
@@ -36,6 +37,7 @@ import {
   registerSearchHandlers,
   registerNodeVersionHandlers,
   registerSshHandlers,
+  registerClipboardHandlers,
 } from './ipc-handlers/index.js'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
@@ -46,9 +48,10 @@ const sshConnectionMasters = new SshConnectionMasterRegistry({ sshSessionRegistr
 const ptyManager = new PtyManager({ shellPathResolver, sshSessionRegistry })
 const fileManager = new FileManager()
 const fsProviderRegistry = new FsProviderRegistry({ fileManager, sshSessionRegistry })
+const gitRunnerRegistry = new GitRunnerRegistry({ sshSessionRegistry })
 const historyManager = new HistoryManager()
 const agentService = new AgentService({ shellPathResolver })
-const nodeVersionManager = new NodeVersionManager({ shellPathResolver })
+const nodeVersionManager = new NodeVersionManager({ shellPathResolver, sshSessionRegistry })
 
 const appService = new AppService({
   ptyManager,
@@ -109,10 +112,11 @@ app.whenReady().then(async () => {
   registerHistoryHandlers(ipcMain, { historyManager })
   registerSettingsHandlers(ipcMain, { loadSettings, saveSettings })
   registerAgentsHandlers(ipcMain, { agentService })
-  registerGitHandlers(ipcMain)
+  registerGitHandlers(ipcMain, { gitRunnerRegistry })
   registerSearchHandlers(ipcMain, { fileManager })
   registerNodeVersionHandlers(ipcMain, { nodeVersionManager })
   registerSshHandlers(ipcMain, { sshStore, sshSessionRegistry, sshConnectionMasters })
+  registerClipboardHandlers(ipcMain, { sshSessionRegistry })
 
   ipcMain.on(IPC_CHANNELS.TABS_STATE_CHANGED, () => appService.rebuildMenu())
 

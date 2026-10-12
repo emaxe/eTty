@@ -12,6 +12,8 @@ export class GitStatusService {
     this._store = store       // StateStore
 
     this._rootPath = null
+    this._ctxKey = 'local'
+    this._ctx = null          // {kind:'ssh', sessionId} для удалённого репозитория, иначе null
     this._pollTimer = null
     this._isPolling = false
     this._unsubFileSaved = null  // для отписки от editor.file-saved
@@ -25,11 +27,16 @@ export class GitStatusService {
    * Устанавливает rootPath и запускает/останавливает polling.
    * Вызывается при переключении вкладки терминала.
    */
-  async setRootPath(rootPath) {
-    if (rootPath === this._rootPath) return
+  async setRootPath(rootPath, ctx = null) {
+    const ctxKey = ctx?.kind === 'ssh' ? `ssh:${ctx.sessionId}` : 'local'
+    if (rootPath === this._rootPath && ctxKey === this._ctxKey) return
 
     this._rootPath = rootPath
+    this._ctx = ctx?.kind === 'ssh' ? ctx : null
+    this._ctxKey = ctxKey
     this._stopPolling()
+    // Новый корень/контекст — прежние результаты (в т.ч. в полёте) больше не актуальны
+    this._store.set('git.ctx', this._ctx)
 
     if (rootPath === null) {
       this._store.batch([
@@ -45,8 +52,8 @@ export class GitStatusService {
       return
     }
 
-    const repoRoot = await this._api.gitGetRoot(rootPath)
-    if (this._rootPath !== rootPath) return // switched while awaiting
+    const repoRoot = await this._api.gitGetRoot(rootPath, this._ctx)
+    if (this._rootPath !== rootPath || this._ctxKey !== ctxKey) return // switched while awaiting
 
     const isRepo = Boolean(repoRoot && repoRoot.length > 0)
     if (!isRepo) {
@@ -79,14 +86,15 @@ export class GitStatusService {
     if (!this._rootPath || !this._store.get('git.isRepo') || this._isPolling) return
 
     const pollPath = this._rootPath
+    const pollCtxKey = this._ctxKey
     const repoRoot = this._store.get('git.rootPath')
     this._isPolling = true
 
     try {
-      const result = await this._api.gitGetStatus(repoRoot || this._rootPath)
+      const result = await this._api.gitGetStatus(repoRoot || this._rootPath, this._ctx)
 
       // Guard: discard stale result if rootPath changed while awaiting
-      if (this._rootPath !== pollPath) return
+      if (this._rootPath !== pollPath || this._ctxKey !== pollCtxKey) return
 
       if (result.error || result.notARepo) {
         this._store.batch([
@@ -157,5 +165,6 @@ export class GitStatusService {
       this._unsubFileSaved = null
     }
     this._rootPath = null
+    this._ctx = null
   }
 }

@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-11
+
+### Added
+
+- **eTty Mobile (iOS / Android)** — Flutter-приложение `mobile/`, мобильный аналог десктопного eTty:
+  SSH-терминал на `dartssh2` с персистентными tmux-сессиями, удалённой файловой системой,
+  редактором файлов, панелью tmux-сессий сервера, биометрической блокировкой и импортом
+  профилей `.ettyx` с десктопа (общий крипто-формат). Протокол (`lib/remote/`, `lib/core/config/`) —
+  чистый Dart, сверяется golden-тестами с десктопным (`scripts/gen-remote-fixtures.mjs`).
+  Спецификация и план — `docs/plans/mob/`.
+
+## [0.4.0] - 2026-10-05
+
+### Added
+
+- **Git in SSH tabs** — branch, file statuses, editor gutter and the Git panel now work for remote repositories (git runs on the server over the tab's SSH channel)
+- **Image paste in SSH tabs** — Cmd+V / Ctrl+V with an image in the clipboard uploads it to the server (`/tmp/etty-paste/`) and pastes the remote path, so claude/opencode/agy attach it
+- **Node version of the tab's shell** — the status bar shows the version actually running in the active tab (local or SSH), reported by the shell hook instead of polling
+- **SSH profile export/import (`.ettyx`)** — buttons in the SSH panel header save connections to an encrypted file (PBKDF2-SHA256 + AES-256-GCM, passphrase-protected; private keys are included only on explicit opt-in) and load them back; the format is shared with the mobile app
+
+### Fixed
+
+- Git branch/status no longer stays on the old repository after `cd` in a tab
+- Node version dialog: "Use" now runs `nvm use` / `fnm use` / `asdf shell` in the tab's terminal; `.nvmrc` is written by a separate "В .nvmrc" button; fixed `nvm ls` parsing (alias rows), shell-escape garbage in output, version validation, and repeated shell spawns every 5 s
+- Restored SSH/tmux tabs bring back a running CLI agent (e.g. claude) and its quick-reply panel: the agent state is saved with the tab and, on re-attach, verified against the tmux pane's current command
+
 ## [0.3.1] - 2026-09-22
 
 ### Added

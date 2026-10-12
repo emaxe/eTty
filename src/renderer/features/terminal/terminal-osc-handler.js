@@ -3,20 +3,24 @@
  * - OSC 7: directory change synchronization
  * - OSC 52: clipboard copy/sync
  * - OSC 133: busy state tracking (shell integration)
+ * - OSC 6973: путь к node текущего шелла (`node=/abs/path`, пусто — node не в PATH)
  */
 export class TerminalOscHandler {
   /**
    * @param {Object} callbacks
    * @param {Function} callbacks.onCwdChange — (newPath, pid) => void
    * @param {Function} callbacks.onBusyChange — (isBusy, pid, wasBusy) => void
+   * @param {Function} [callbacks.onNodeChange] — (nodePath|null, pid) => void
    */
-  constructor({ onCwdChange, onBusyChange }) {
+  constructor({ onCwdChange, onBusyChange, onNodeChange }) {
     this._onCwdChange = onCwdChange
     this._onBusyChange = onBusyChange
+    this._onNodeChange = onNodeChange
     this._wasBusy = false
     this._cwdDisposable = null
     this._busyDisposable = null
     this._clipboardDisposable = null
+    this._nodeDisposable = null
   }
 
   /**
@@ -28,17 +32,21 @@ export class TerminalOscHandler {
     this._cwdDisposable = term.parser.registerOscHandler(7, (data) => this._handleCwd(data, pid))
     this._busyDisposable = term.parser.registerOscHandler(133, (data) => this._handleBusy(data, pid))
     this._clipboardDisposable = term.parser.registerOscHandler(52, (data) => this._handleClipboard(data))
+    this._nodeDisposable = term.parser.registerOscHandler(6973, (data) => this._handleNode(data, pid))
   }
 
   detach() {
     this._cwdDisposable?.dispose()
     this._busyDisposable?.dispose()
     this._clipboardDisposable?.dispose()
+    this._nodeDisposable?.dispose()
+    this._nodeDisposable = null
     this._cwdDisposable = null
     this._busyDisposable = null
     this._clipboardDisposable = null
     this._onCwdChange = null
     this._onBusyChange = null
+    this._onNodeChange = null
   }
 
   _handleCwd(data, pid) {
@@ -48,6 +56,12 @@ export class TerminalOscHandler {
       this._onCwdChange?.(newPath, pid)
     }
     return false
+  }
+
+  _handleNode(data, pid) {
+    const match = data.match(/^node=(.*)$/)
+    if (match) this._onNodeChange?.(match[1] || null, pid)
+    return true
   }
 
   _handleBusy(data, pid) {

@@ -1,3 +1,6 @@
+import { BrowserWindow, dialog } from 'electron'
+import { readFile, writeFile } from 'fs/promises'
+import log from 'electron-log'
 import { IPC_CHANNELS } from '../../shared/ipc-channels.js'
 import { SSH_SESSION_CONFIG } from '../../shared/ssh-session-config.js'
 import { TMUX_LIST_SESSIONS_SCRIPT, TMUX_KILL_SESSION_SCRIPT, TMUX_RENAME_SESSION_SCRIPT } from '../ssh/remote-scripts.js'
@@ -43,6 +46,51 @@ export function registerSshHandlers(ipcMain, { sshStore, sshSessionRegistry, ssh
   ipcMain.handle(IPC_CHANNELS.SSH_DELETE, (_, id) => sshStore.deleteConnection(id))
 
   ipcMain.handle(IPC_CHANNELS.SSH_REORDER, (_, ids) => sshStore.reorderConnections(ids))
+
+  // Перенос профилей (задача #31, REQ-22/23) — диалог файла и запись/чтение на диске делает
+  // main (renderer не имеет доступа к fs), пароль/чекбокс приходят от renderer уже собранными
+  // (EttyxDialog в ssh-panel.js).
+  ipcMain.handle(IPC_CHANNELS.SSH_EXPORT_CONNECTIONS, async (event, { ids, passphrase, includePrivateKeys } = {}) => {
+    const result = await sshStore.exportConnectionsPayload({ ids, passphrase, includePrivateKeys })
+    if (!result.success) return result
+
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Экспорт подключений eTty',
+      defaultPath: 'connections.ettyx',
+      filters: [{ name: 'eTty export', extensions: ['ettyx'] }]
+    })
+    if (canceled || !filePath) return { success: false, canceled: true }
+
+    try {
+      await writeFile(filePath, result.fileContents, 'utf-8')
+      return { success: true, path: filePath, count: result.count }
+    } catch (e) {
+      log.error('ssh-handlers: failed to write .ettyx file', e.message)
+      return { success: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SSH_IMPORT_PICK_FILE, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Импорт подключений eTty',
+      properties: ['openFile'],
+      filters: [{ name: 'eTty export', extensions: ['ettyx'] }]
+    })
+    if (canceled || !filePaths.length) return { canceled: true }
+    return { canceled: false, path: filePaths[0] }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SSH_IMPORT_CONNECTIONS, async (_, { path, passphrase } = {}) => {
+    let fileContents
+    try {
+      fileContents = await readFile(path, 'utf-8')
+    } catch (e) {
+      return { success: false, error: `Не удалось прочитать файл: ${e.message}` }
+    }
+    return sshStore.importConnectionsFromPayload({ fileContents, passphrase })
+  })
 
   // «Повторить» на плашке удалённого дерева. Если провайдер уже поднят — просто перепроверяем
   // мастер (быстро). Если нет (первая попытка сорвалась — таймаут/probe) — гоняем establishSshFs

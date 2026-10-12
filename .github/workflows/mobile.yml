@@ -1,0 +1,90 @@
+name: Mobile CI
+
+# Единственный CI, реально гоняющий тесты в проекте (release.yml — только релизная сборка).
+# Держит побайтовую совместимость протокола SSH/tmux между десктопом и мобилкой (REQ-4,
+# docs/plans/mob/plan.md): правка src/main/ssh/remote-*.js или src/shared/ssh-*-config.js без
+# синхронной правки mobile/lib/remote/* и перегенерации фикстур валит сборку.
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - 'scripts/gen-remote-fixtures.mjs'
+      - 'src/main/ssh/**'
+      - 'src/shared/ssh-*.js'
+      - 'src/shared/path-utils.js'
+      - 'src/main/fs/ssh-fs-provider.js'
+      - 'src/main/__tests__/**'
+      - '.github/workflows/mobile.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - 'scripts/gen-remote-fixtures.mjs'
+      - 'src/main/ssh/**'
+      - 'src/shared/ssh-*.js'
+      - 'src/shared/path-utils.js'
+      - 'src/main/fs/ssh-fs-provider.js'
+      - 'src/main/__tests__/**'
+      - '.github/workflows/mobile.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  protocol-consistency:
+    name: Protocol consistency (desktop JS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.17.0'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # Существующие ad-hoc тесты десктопной SSH/tmux-логики (src/main/__tests__/*.test.mjs) —
+      # в проекте нет `npm test`/раннера, гоняем каждый файл явно, как это уже делает разработчик
+      # локально (см. .agents/rules/project-rules.md).
+      - name: Run desktop SSH/tmux tests
+        run: |
+          set -e
+          for f in src/main/__tests__/*.test.mjs; do
+            echo "::group::node $f"
+            node "$f"
+            echo "::endgroup::"
+          done
+
+      # Побайтовая сверка: перегенерировать фикстуры из ТЕКУЩЕГО состояния JS-кода и убедиться,
+      # что на диске (и, значит, в Dart-порте, который эти фикстуры проверяет) ничего не разошлось.
+      - name: Check golden fixtures are up to date
+        run: node scripts/gen-remote-fixtures.mjs --check
+
+  flutter:
+    name: Flutter analyze + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: 'stable'
+          cache: true
+
+      - name: flutter pub get
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: flutter analyze
+        working-directory: mobile
+        run: flutter analyze
+
+      - name: flutter test
+        working-directory: mobile
+        run: flutter test

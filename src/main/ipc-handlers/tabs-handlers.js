@@ -42,7 +42,11 @@ export function registerTabsHandlers(ipcMain, { saveTabState, loadTabState, dele
         editorState: tab.editorState || null,
         ssh: tab.ssh || null,
         remoteCwd: tab.remoteCwd || null,
-        gitPanelVisible: tab.gitPanelVisible || false
+        gitPanelVisible: tab.gitPanelVisible || false,
+        // Состояние ИИ-агента (см. tab-bar.js exportState) — используется при восстановлении
+        // только для tmux-вкладок (applySavedAgentState в index.js).
+        activeAgentId: tab.activeAgentId || null,
+        isBusy: !!tab.isBusy
       })
     }
     return validated
