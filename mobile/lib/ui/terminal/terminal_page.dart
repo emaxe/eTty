@@ -22,7 +22,7 @@ import 'package:mobile/ui/connections/tmux_sessions_sheet.dart';
 import 'package:mobile/ui/files/remote_file_tree_screen.dart';
 import 'package:mobile/ui/terminal/input_handler.dart';
 import 'package:mobile/ui/terminal/key_bar.dart';
-import 'package:mobile/ui/terminal/scroll_bridge.dart';
+import 'package:mobile/ui/terminal/terminal_gestures.dart';
 import 'package:mobile/ui/terminal/tab_strip.dart';
 
 /// Полный clear экрана/scrollback локального `xterm.Terminal` — CSI `\x1b[H\x1b[2J\x1b[3J`
@@ -63,6 +63,10 @@ class _TerminalTab implements LifecycleTab {
   final xterm.Terminal terminal;
   final StickyModifierController sticky = StickyModifierController();
   final ScrollController scrollController = ScrollController();
+  final xterm.TerminalController terminalController =
+      xterm.TerminalController();
+  final GlobalKey<xterm.TerminalViewState> viewKey =
+      GlobalKey<xterm.TerminalViewState>();
   final ValueNotifier<domain.TabConnectionStatus> statusNotifier =
       ValueNotifier(domain.TabConnectionStatus.connecting);
 
@@ -72,7 +76,7 @@ class _TerminalTab implements LifecycleTab {
   String get title => controller.sessionName ?? 'ssh';
 
   /// REQ-14: мост скролла в `WHEEL_SCROLL_*_SEQ` активен только в tmux-режиме — в обычном SSH
-  /// scrollback живёт локально в `xterm.Terminal`, нативный скролл `TerminalView` работает как есть.
+  /// scrollback живёт локально в `xterm.Terminal` и листается [TerminalGestureLayer]-ом.
   @override
   bool get isTmux => controller.persistence == 'tmux';
 
@@ -106,6 +110,7 @@ class _TerminalTab implements LifecycleTab {
     statusNotifier.dispose();
     sticky.dispose();
     scrollController.dispose();
+    terminalController.dispose();
   }
 }
 
@@ -340,6 +345,17 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
     });
   }
 
+  /// Кнопка нужна, потому что в TUI с мышью тап по терминалу клавиатуру не открывает.
+  void _toggleKeyboard() {
+    final view = _tabs[_activeIndex].viewKey.currentState;
+    if (view == null) return;
+    if (view.hasInputConnection) {
+      view.closeKeyboard();
+    } else {
+      view.requestKeyboard();
+    }
+  }
+
   void _handleBack() {
     widget.onBack();
   }
@@ -406,6 +422,13 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
               icon: const Icon(Icons.view_list_outlined),
               tooltip: 'Сессии',
               onPressed: _openSessions,
+            ),
+          if (_tabs.isNotEmpty)
+            IconButton(
+              key: const Key('toggle-keyboard'),
+              icon: const Icon(Icons.keyboard_outlined),
+              tooltip: 'Клавиатура',
+              onPressed: _toggleKeyboard,
             ),
           IconButton(
             icon: const Icon(Icons.folder_outlined),
@@ -489,17 +512,29 @@ class _TerminalTabView extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         Positioned.fill(
-          child: ScrollBridge(
-            enabled: tab.isTmux,
-            write: tab.sendRaw,
+          child: xterm.TerminalView(
+            tab.terminal,
+            key: tab.viewKey,
+            controller: tab.terminalController,
+            theme: theme,
+            autofocus: true,
+            // `visiblePassword`: Gboard не держит слово в composing — символы уходят на сервер сразу,
+            // курсор двигается при наборе (как в Termux/ConnectBot).
+            keyboardType: TextInputType.visiblePassword,
+            deleteDetection: true,
+            keyboardAppearance: brightness,
             scrollController: tab.scrollController,
-            child: xterm.TerminalView(
-              tab.terminal,
-              theme: theme,
-              autofocus: true,
-              keyboardAppearance: brightness,
-              scrollController: tab.scrollController,
-            ),
+          ),
+        ),
+        // Все касания принимает наш слой: встроенные жесты TerminalView конфликтуют друг с другом.
+        Positioned.fill(
+          child: TerminalGestureLayer(
+            terminal: tab.terminal,
+            viewKey: tab.viewKey,
+            controller: tab.terminalController,
+            scrollController: tab.scrollController,
+            isTmux: tab.isTmux,
+            write: tab.sendRaw,
           ),
         ),
         ValueListenableBuilder<domain.TabConnectionStatus>(
