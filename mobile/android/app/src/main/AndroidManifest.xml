@@ -8,6 +8,7 @@
          поведение) — рантайм-запрос разрешения не реализован (нет permission-плагина в зависимостях
          проекта, см. `docs/plans/mob/plan.md`), поэтому на новых версиях Android пользователь не
          увидит нотификацию, хотя защита от kill сработает. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>

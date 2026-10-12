@@ -16,6 +16,7 @@ RESET=$'\033[0m'
 
 # ─── Helpers ──────────────────────────────────────────────────────
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MOBILE_DIR="$PROJECT_ROOT/mobile"
 COLS=$(tput cols 2>/dev/null || echo 60)
 
 hr() {
@@ -53,6 +54,8 @@ print_menu() {
   printf "  ${CYAN}${BOLD}[5]${RESET}  ${YELLOW}clean${RESET}      ${DIM}─${RESET}  Remove build artifacts\n"
   printf "  ${CYAN}${BOLD}[6]${RESET}  ${YELLOW}rebuild${RESET}    ${DIM}─${RESET}  Clean + install + build\n"
   printf "  ${CYAN}${BOLD}[7]${RESET}  ${BLUE}install${RESET}    ${DIM}─${RESET}  Install dependencies\n"
+  printf "  ${CYAN}${BOLD}[8]${RESET}  ${GREEN}mobile:apk${RESET} ${DIM}─${RESET}  Build Android APK (release)\n"
+  printf "  ${CYAN}${BOLD}[9]${RESET}  ${GREEN}mobile:run${RESET} ${DIM}─${RESET}  Run mobile app on device/emulator\n"
   echo ""
   printf "  ${DIM}[q]  Quit${RESET}\n"
   echo ""
@@ -77,6 +80,18 @@ run_cmd() {
   hr
   echo ""
   (cd "$PROJECT_ROOT" && "$@")
+}
+
+run_mobile() {
+  local label="$1"
+  shift
+  echo ""
+  hr
+  printf "  ${CYAN}${BOLD}▸${RESET} ${BOLD}${label}${RESET}\n"
+  printf "  ${DIM}\$ (cd mobile && %s)${RESET}\n" "$*"
+  hr
+  echo ""
+  (cd "$MOBILE_DIR" && "$@")
 }
 
 success() {
@@ -176,6 +191,61 @@ do_install() {
   success
 }
 
+# ─── Mobile (Flutter) ─────────────────────────────────────────────
+# Gradle требует JDK. Flutter берёт его из JAVA_HOME, иначе пробует JBR из Android Studio;
+# на чистой машине java может быть вообще не в PATH (см. README: brew install openjdk@21).
+_resolve_java_home() {
+  if [[ -n "${JAVA_HOME:-}" && -x "${JAVA_HOME}/bin/java" ]]; then
+    printf "  ${DIM}JAVA_HOME=%s${RESET}\n" "$JAVA_HOME"
+    return
+  fi
+  local c
+  for c in \
+    "$(/usr/libexec/java_home 2>/dev/null || true)" \
+    "/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+    "$(brew --prefix openjdk@21 2>/dev/null || true)/libexec/openjdk.jdk/Contents/Home" \
+    "$(brew --prefix openjdk 2>/dev/null || true)/libexec/openjdk.jdk/Contents/Home"; do
+    if [[ -n "$c" && -x "$c/bin/java" ]]; then
+      export JAVA_HOME="$c"
+      printf "  ${DIM}JAVA_HOME=%s${RESET}\n" "$JAVA_HOME"
+      return
+    fi
+  done
+  printf "  ${YELLOW}▸ JDK не найден — Gradle-сборка упадёт. Установи: ${BOLD}brew install openjdk@21${RESET}\n"
+  printf "  ${DIM}  или задай JAVA_HOME вручную.${RESET}\n\n"
+}
+
+_missing_flutter() {
+  command -v flutter >/dev/null 2>&1 && return 1
+  printf "  ${RED}▸ flutter не найден в PATH.${RESET}\n"
+  printf "  ${DIM}  Установи Flutter SDK: https://docs.flutter.dev/get-started/install${RESET}\n"
+  return 0
+}
+
+do_mobile_apk() {
+  _missing_flutter && return 1
+  printf "  ${CYAN}${BOLD}▸${RESET} ${BOLD}Building Android APK (release)...${RESET}\n"
+  _resolve_java_home
+  run_mobile "Building Android APK (release)..." \
+    flutter build apk --release || { fail "$?"; return 1; }
+  echo ""
+  printf "  ${DIM}Artifacts:${RESET}\n"
+  ls -lh "$MOBILE_DIR/build/app/outputs/flutter-apk/"*.apk 2>/dev/null | while read -r line; do
+    printf "  ${GREEN}  %s${RESET}\n" "$line"
+  done
+  success
+}
+
+do_mobile_run() {
+  _missing_flutter && return 1
+  _resolve_java_home
+  echo ""
+  printf "  ${DIM}Devices:${RESET}\n"
+  (cd "$MOBILE_DIR" && flutter devices) 2>/dev/null | sed 's/^/  /' || true
+  run_mobile "Running mobile app (flutter run)..." flutter run || { fail "$?"; return 1; }
+  success
+}
+
 # Signing env hint (shown before dist:mac)
 _check_signing_env() {
   local missing=()
@@ -200,9 +270,11 @@ if [[ $# -gt 0 ]]; then
     clean)    do_clean    ;;
     rebuild)  do_rebuild  ;;
     install)  do_install  ;;
+    mobile:apk) do_mobile_apk ;;
+    mobile:run) do_mobile_run ;;
     *)
       printf "${RED}Unknown mode: %s${RESET}\n" "$1"
-      echo "Usage: $0 [dev|build|preview|dist:mac|clean|rebuild|install]"
+      echo "Usage: $0 [dev|build|preview|dist:mac|clean|rebuild|install|mobile:apk|mobile:run]"
       exit 1
       ;;
   esac
@@ -224,6 +296,8 @@ while true; do
     5) do_clean    ; pause ;;
     6) do_rebuild  ; pause ;;
     7) do_install  ; pause ;;
+    8) do_mobile_apk ; pause ;;
+    9) do_mobile_run ; pause ;;
     q|Q) printf "\n  ${DIM}Bye!${RESET}\n\n" ; exit 0 ;;
     *)
       printf "\n  ${RED}Invalid choice.${RESET}\n"
