@@ -173,6 +173,18 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **macOS, Windows, Linux** — native window controls and shell resolution per platform
 - **Shell auto-detection** — resolves the login shell and its `PATH` correctly even when launched from a GUI (Dock/Start Menu), not just from a terminal
 
+## Mobile app (iOS / Android)
+
+**eTty Mobile** (`mobile/`, Flutter) is the phone-sized sibling of the desktop app — an SSH terminal with persistent tmux sessions.
+
+- **SSH + tmux** — pure-Dart client (`dartssh2`), several tabs per connection, sessions survive app restarts and are shared with the desktop app (same protocol and tmux socket)
+- **Session picker** — list and open the server's tmux sessions, or start a new one in a folder chosen in the file tree
+- **Remote file tree and editor** — browse (including hidden files), edit and share files over SFTP
+- **Touch gestures in the terminal** — one-finger scroll (tmux history, mouse wheel for TUI apps, local scrollback), two-finger swipe sends an arrow key, tap clicks in mouse-aware TUIs (htop, mc, vim), long-press selects text
+- **Security** — biometric lock; secrets in the OS secure storage; import of desktop connections via `.ettyx`
+
+Build and run instructions: [mobile/README.md](mobile/README.md).
+
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
