@@ -10,6 +10,11 @@ abstract class AppSettingsStore {
   /// Показывать ли скрытые файлы (имя с точки) в дереве файлов; общее для всех подключений.
   Future<bool> getShowHiddenFiles();
   Future<void> setShowHiddenFiles(bool enabled);
+
+  /// Пользовательские команды второго колеса терминала (JSON, см. `domain/quick_commands.dart`);
+  /// `null` — не настраивались, берутся умолчания.
+  Future<String?> getQuickCommandsJson();
+  Future<void> setQuickCommandsJson(String json);
 }
 
 /// [AppSettingsStore] поверх [SecureKeyValueStore] — тот же backing store, что секреты профилей
@@ -23,6 +28,7 @@ class SecureAppSettingsStore implements AppSettingsStore {
 
   static const String _biometricLockKey = 'etty.settings.biometricLockEnabled';
   static const String _showHiddenFilesKey = 'etty.settings.showHiddenFiles';
+  static const String _quickCommandsKey = 'etty.settings.quickCommands';
 
   final SecureKeyValueStore _storage;
 
@@ -41,4 +47,11 @@ class SecureAppSettingsStore implements AppSettingsStore {
   @override
   Future<void> setShowHiddenFiles(bool enabled) =>
       _storage.write(_showHiddenFilesKey, enabled.toString());
+
+  @override
+  Future<String?> getQuickCommandsJson() => _storage.read(_quickCommandsKey);
+
+  @override
+  Future<void> setQuickCommandsJson(String json) =>
+      _storage.write(_quickCommandsKey, json);
 }

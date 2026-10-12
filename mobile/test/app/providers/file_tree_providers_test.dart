@@ -21,6 +21,12 @@ class _FakeSettingsStore implements AppSettingsStore {
 
   @override
   Future<void> setShowHiddenFiles(bool enabled) async => showHidden = enabled;
+
+  @override
+  Future<String?> getQuickCommandsJson() async => null;
+
+  @override
+  Future<void> setQuickCommandsJson(String json) async {}
 }
 
 void main() {
