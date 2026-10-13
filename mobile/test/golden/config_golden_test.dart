@@ -23,10 +23,7 @@ void main() {
       expect(SshSessionConfig.defaultSocket, expected['DEFAULT_SOCKET']);
       expect(SshSessionConfig.hookDir, expected['HOOK_DIR']);
       expect(SshSessionConfig.tmuxMinVersion, expected['TMUX_MIN_VERSION']);
-      expect(
-        SshSessionConfig.tmuxPassthroughMinVersion,
-        expected['TMUX_PASSTHROUGH_MIN_VERSION'],
-      );
+      expect(SshSessionConfig.tmuxPassthroughMinVersion, expected['TMUX_PASSTHROUGH_MIN_VERSION']);
       expect(SshSessionConfig.statePollMs, expected['STATE_POLL_MS']);
       expect(SshSessionConfig.sessionsPollMs, expected['SESSIONS_POLL_MS']);
       expect(SshSessionConfig.sessionsRefreshDelayMs, expected['SESSIONS_REFRESH_DELAY_MS']);

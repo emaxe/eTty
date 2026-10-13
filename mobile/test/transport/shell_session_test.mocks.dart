@@ -36,8 +36,7 @@ import 'package:mockito/src/dummies.dart' as _i11;
 // ignore_for_file: invalid_use_of_internal_member
 
 class _FakeSSHSocket_0 extends _i1.SmartFake implements _i2.SSHSocket {
-  _FakeSSHSocket_0(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
+  _FakeSSHSocket_0(Object parent, Invocation parentInvocation) : super(parent, parentInvocation);
 }
 
 class _FakeSSHAlgorithms_1 extends _i1.SmartFake implements _i3.SSHAlgorithms {
@@ -45,26 +44,22 @@ class _FakeSSHAlgorithms_1 extends _i1.SmartFake implements _i3.SSHAlgorithms {
     : super(parent, parentInvocation);
 }
 
-class _FakeSSHForwardChannel_2 extends _i1.SmartFake
-    implements _i4.SSHForwardChannel {
+class _FakeSSHForwardChannel_2 extends _i1.SmartFake implements _i4.SSHForwardChannel {
   _FakeSSHForwardChannel_2(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeSSHDynamicForward_3 extends _i1.SmartFake
-    implements _i4.SSHDynamicForward {
+class _FakeSSHDynamicForward_3 extends _i1.SmartFake implements _i4.SSHDynamicForward {
   _FakeSSHDynamicForward_3(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
 class _FakeSSHSession_4 extends _i1.SmartFake implements _i5.SSHSession {
-  _FakeSSHSession_4(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
+  _FakeSSHSession_4(Object parent, Invocation parentInvocation) : super(parent, parentInvocation);
 }
 
 class _FakeSftpClient_5 extends _i1.SmartFake implements _i6.SftpClient {
-  _FakeSftpClient_5(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
+  _FakeSftpClient_5(Object parent, Invocation parentInvocation) : super(parent, parentInvocation);
 }
 
 class _FakeSSHHttpClient_6 extends _i1.SmartFake implements _i7.SSHHttpClient {
@@ -73,18 +68,15 @@ class _FakeSSHHttpClient_6 extends _i1.SmartFake implements _i7.SSHHttpClient {
 }
 
 class _FakeSSHRunResult_7 extends _i1.SmartFake implements _i8.SSHRunResult {
-  _FakeSSHRunResult_7(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
+  _FakeSSHRunResult_7(Object parent, Invocation parentInvocation) : super(parent, parentInvocation);
 }
 
 class _FakeStreamSink_8<S> extends _i1.SmartFake implements _i9.StreamSink<S> {
-  _FakeStreamSink_8(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
+  _FakeStreamSink_8(Object parent, Invocation parentInvocation) : super(parent, parentInvocation);
 }
 
 class _FakeSSHChannel_9 extends _i1.SmartFake implements _i10.SSHChannel {
-  _FakeSSHChannel_9(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
+  _FakeSSHChannel_9(Object parent, Invocation parentInvocation) : super(parent, parentInvocation);
 }
 
 /// A class which mocks [SSHClient].
@@ -95,30 +87,21 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
   _i2.SSHSocket get socket => (super.noSuchMethod(
     Invocation.getter(#socket),
     returnValue: _FakeSSHSocket_0(this, Invocation.getter(#socket)),
-    returnValueForMissingStub: _FakeSSHSocket_0(
-      this,
-      Invocation.getter(#socket),
-    ),
+    returnValueForMissingStub: _FakeSSHSocket_0(this, Invocation.getter(#socket)),
   ) as _i2.SSHSocket);
 
   @override
   String get username => (super.noSuchMethod(
     Invocation.getter(#username),
     returnValue: _i11.dummyValue<String>(this, Invocation.getter(#username)),
-    returnValueForMissingStub: _i11.dummyValue<String>(
-      this,
-      Invocation.getter(#username),
-    ),
+    returnValueForMissingStub: _i11.dummyValue<String>(this, Invocation.getter(#username)),
   ) as String);
 
   @override
   _i3.SSHAlgorithms get algorithms => (super.noSuchMethod(
     Invocation.getter(#algorithms),
     returnValue: _FakeSSHAlgorithms_1(this, Invocation.getter(#algorithms)),
-    returnValueForMissingStub: _FakeSSHAlgorithms_1(
-      this,
-      Invocation.getter(#algorithms),
-    ),
+    returnValueForMissingStub: _FakeSSHAlgorithms_1(this, Invocation.getter(#algorithms)),
   ) as _i3.SSHAlgorithms);
 
   @override
@@ -139,10 +122,7 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
   String get ident => (super.noSuchMethod(
     Invocation.getter(#ident),
     returnValue: _i11.dummyValue<String>(this, Invocation.getter(#ident)),
-    returnValueForMissingStub: _i11.dummyValue<String>(
-      this,
-      Invocation.getter(#ident),
-    ),
+    returnValueForMissingStub: _i11.dummyValue<String>(this, Invocation.getter(#ident)),
   ) as String);
 
   @override
@@ -174,10 +154,8 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
   ) as bool);
 
   @override
-  set sessionId(_i12.Uint8List? value) => super.noSuchMethod(
-    Invocation.setter(#sessionId, value),
-    returnValueForMissingStub: null,
-  );
+  set sessionId(_i12.Uint8List? value) =>
+      super.noSuchMethod(Invocation.setter(#sessionId, value), returnValueForMissingStub: null);
 
   @override
   _i9.Future<_i8.SSHRemoteForward?> forwardRemote({
@@ -185,22 +163,17 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
     int? port,
     _i8.SSHRemoteConnectionFilter? filter,
   }) => (super.noSuchMethod(
-    Invocation.method(#forwardRemote, [], {
-      #host: host,
-      #port: port,
-      #filter: filter,
-    }),
+    Invocation.method(#forwardRemote, [], {#host: host, #port: port, #filter: filter}),
     returnValue: _i9.Future<_i8.SSHRemoteForward?>.value(),
     returnValueForMissingStub: _i9.Future<_i8.SSHRemoteForward?>.value(),
   ) as _i9.Future<_i8.SSHRemoteForward?>);
 
   @override
-  _i9.Future<bool> cancelForwardRemote(_i8.SSHRemoteForward? forward) =>
-      (super.noSuchMethod(
-        Invocation.method(#cancelForwardRemote, [forward]),
-        returnValue: _i9.Future<bool>.value(false),
-        returnValueForMissingStub: _i9.Future<bool>.value(false),
-      ) as _i9.Future<bool>);
+  _i9.Future<bool> cancelForwardRemote(_i8.SSHRemoteForward? forward) => (super.noSuchMethod(
+    Invocation.method(#cancelForwardRemote, [forward]),
+    returnValue: _i9.Future<bool>.value(false),
+    returnValueForMissingStub: _i9.Future<bool>.value(false),
+  ) as _i9.Future<bool>);
 
   @override
   _i9.Future<_i4.SSHForwardChannel> forwardLocal(
@@ -240,8 +213,7 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
   _i9.Future<_i4.SSHDynamicForward> forwardDynamic({
     String? bindHost = '127.0.0.1',
     int? bindPort,
-    _i4.SSHDynamicForwardOptions? options =
-        const _i4.SSHDynamicForwardOptions(),
+    _i4.SSHDynamicForwardOptions? options = const _i4.SSHDynamicForwardOptions(),
     _i4.SSHDynamicConnectionFilter? filter,
   }) => (super.noSuchMethod(
     Invocation.method(#forwardDynamic, [], {
@@ -275,23 +247,16 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
   ) as _i9.Future<_i4.SSHDynamicForward>);
 
   @override
-  _i9.Future<_i4.SSHForwardChannel> forwardLocalUnix(
-    String? remoteSocketPath,
-  ) => (super.noSuchMethod(
-    Invocation.method(#forwardLocalUnix, [remoteSocketPath]),
-    returnValue: _i9.Future<_i4.SSHForwardChannel>.value(
-      _FakeSSHForwardChannel_2(
-        this,
+  _i9.Future<_i4.SSHForwardChannel> forwardLocalUnix(String? remoteSocketPath) =>
+      (super.noSuchMethod(
         Invocation.method(#forwardLocalUnix, [remoteSocketPath]),
-      ),
-    ),
-    returnValueForMissingStub: _i9.Future<_i4.SSHForwardChannel>.value(
-      _FakeSSHForwardChannel_2(
-        this,
-        Invocation.method(#forwardLocalUnix, [remoteSocketPath]),
-      ),
-    ),
-  ) as _i9.Future<_i4.SSHForwardChannel>);
+        returnValue: _i9.Future<_i4.SSHForwardChannel>.value(
+          _FakeSSHForwardChannel_2(this, Invocation.method(#forwardLocalUnix, [remoteSocketPath])),
+        ),
+        returnValueForMissingStub: _i9.Future<_i4.SSHForwardChannel>.value(
+          _FakeSSHForwardChannel_2(this, Invocation.method(#forwardLocalUnix, [remoteSocketPath])),
+        ),
+      ) as _i9.Future<_i4.SSHForwardChannel>);
 
   @override
   _i9.Future<_i5.SSHSession> execute(
@@ -300,29 +265,17 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
     _i8.SSHX11Config? x11,
     Map<String, String>? environment,
   }) => (super.noSuchMethod(
-    Invocation.method(
-      #execute,
-      [command],
-      {#pty: pty, #x11: x11, #environment: environment},
-    ),
+    Invocation.method(#execute, [command], {#pty: pty, #x11: x11, #environment: environment}),
     returnValue: _i9.Future<_i5.SSHSession>.value(
       _FakeSSHSession_4(
         this,
-        Invocation.method(
-          #execute,
-          [command],
-          {#pty: pty, #x11: x11, #environment: environment},
-        ),
+        Invocation.method(#execute, [command], {#pty: pty, #x11: x11, #environment: environment}),
       ),
     ),
     returnValueForMissingStub: _i9.Future<_i5.SSHSession>.value(
       _FakeSSHSession_4(
         this,
-        Invocation.method(
-          #execute,
-          [command],
-          {#pty: pty, #x11: x11, #environment: environment},
-        ),
+        Invocation.method(#execute, [command], {#pty: pty, #x11: x11, #environment: environment}),
       ),
     ),
   ) as _i9.Future<_i5.SSHSession>);
@@ -333,29 +286,17 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
     _i8.SSHX11Config? x11,
     Map<String, String>? environment,
   }) => (super.noSuchMethod(
-    Invocation.method(#shell, [], {
-      #pty: pty,
-      #x11: x11,
-      #environment: environment,
-    }),
+    Invocation.method(#shell, [], {#pty: pty, #x11: x11, #environment: environment}),
     returnValue: _i9.Future<_i5.SSHSession>.value(
       _FakeSSHSession_4(
         this,
-        Invocation.method(#shell, [], {
-          #pty: pty,
-          #x11: x11,
-          #environment: environment,
-        }),
+        Invocation.method(#shell, [], {#pty: pty, #x11: x11, #environment: environment}),
       ),
     ),
     returnValueForMissingStub: _i9.Future<_i5.SSHSession>.value(
       _FakeSSHSession_4(
         this,
-        Invocation.method(#shell, [], {
-          #pty: pty,
-          #x11: x11,
-          #environment: environment,
-        }),
+        Invocation.method(#shell, [], {#pty: pty, #x11: x11, #environment: environment}),
       ),
     ),
   ) as _i9.Future<_i5.SSHSession>);
@@ -382,10 +323,7 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
   _i7.SSHHttpClient httpClient() => (super.noSuchMethod(
     Invocation.method(#httpClient, []),
     returnValue: _FakeSSHHttpClient_6(this, Invocation.method(#httpClient, [])),
-    returnValueForMissingStub: _FakeSSHHttpClient_6(
-      this,
-      Invocation.method(#httpClient, []),
-    ),
+    returnValueForMissingStub: _FakeSSHHttpClient_6(this, Invocation.method(#httpClient, [])),
   ) as _i7.SSHHttpClient);
 
   @override
@@ -399,17 +337,10 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
     Invocation.method(
       #run,
       [command],
-      {
-        #runInPty: runInPty,
-        #stdout: stdout,
-        #stderr: stderr,
-        #environment: environment,
-      },
+      {#runInPty: runInPty, #stdout: stdout, #stderr: stderr, #environment: environment},
     ),
     returnValue: _i9.Future<_i12.Uint8List>.value(_i12.Uint8List(0)),
-    returnValueForMissingStub: _i9.Future<_i12.Uint8List>.value(
-      _i12.Uint8List(0),
-    ),
+    returnValueForMissingStub: _i9.Future<_i12.Uint8List>.value(_i12.Uint8List(0)),
   ) as _i9.Future<_i12.Uint8List>);
 
   @override
@@ -423,12 +354,7 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
     Invocation.method(
       #runWithResult,
       [command],
-      {
-        #runInPty: runInPty,
-        #stdout: stdout,
-        #stderr: stderr,
-        #environment: environment,
-      },
+      {#runInPty: runInPty, #stdout: stdout, #stderr: stderr, #environment: environment},
     ),
     returnValue: _i9.Future<_i8.SSHRunResult>.value(
       _FakeSSHRunResult_7(
@@ -436,12 +362,7 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
         Invocation.method(
           #runWithResult,
           [command],
-          {
-            #runInPty: runInPty,
-            #stdout: stdout,
-            #stderr: stderr,
-            #environment: environment,
-          },
+          {#runInPty: runInPty, #stdout: stdout, #stderr: stderr, #environment: environment},
         ),
       ),
     ),
@@ -451,12 +372,7 @@ class MockSSHClient extends _i1.Mock implements _i8.SSHClient {
         Invocation.method(
           #runWithResult,
           [command],
-          {
-            #runInPty: runInPty,
-            #stdout: stdout,
-            #stderr: stderr,
-            #environment: environment,
-          },
+          {#runInPty: runInPty, #stdout: stdout, #stderr: stderr, #environment: environment},
         ),
       ),
     ),
@@ -504,14 +420,8 @@ class MockSSHSession extends _i1.Mock implements _i5.SSHSession {
   @override
   _i9.StreamSink<_i12.Uint8List> get stdin => (super.noSuchMethod(
     Invocation.getter(#stdin),
-    returnValue: _FakeStreamSink_8<_i12.Uint8List>(
-      this,
-      Invocation.getter(#stdin),
-    ),
-    returnValueForMissingStub: _FakeStreamSink_8<_i12.Uint8List>(
-      this,
-      Invocation.getter(#stdin),
-    ),
+    returnValue: _FakeStreamSink_8<_i12.Uint8List>(this, Invocation.getter(#stdin)),
+    returnValueForMissingStub: _FakeStreamSink_8<_i12.Uint8List>(this, Invocation.getter(#stdin)),
   ) as _i9.StreamSink<_i12.Uint8List>);
 
   @override
@@ -539,17 +449,12 @@ class MockSSHSession extends _i1.Mock implements _i5.SSHSession {
   _i10.SSHChannel get channel => (super.noSuchMethod(
     Invocation.getter(#channel),
     returnValue: _FakeSSHChannel_9(this, Invocation.getter(#channel)),
-    returnValueForMissingStub: _FakeSSHChannel_9(
-      this,
-      Invocation.getter(#channel),
-    ),
+    returnValueForMissingStub: _FakeSSHChannel_9(this, Invocation.getter(#channel)),
   ) as _i10.SSHChannel);
 
   @override
-  void write(_i12.Uint8List? data) => super.noSuchMethod(
-    Invocation.method(#write, [data]),
-    returnValueForMissingStub: null,
-  );
+  void write(_i12.Uint8List? data) =>
+      super.noSuchMethod(Invocation.method(#write, [data]), returnValueForMissingStub: null);
 
   @override
   _i9.Future<void> flush() => (super.noSuchMethod(
@@ -559,26 +464,15 @@ class MockSSHSession extends _i1.Mock implements _i5.SSHSession {
   ) as _i9.Future<void>);
 
   @override
-  void resizeTerminal(
-    int? width,
-    int? height, [
-    int? pixelWidth = 0,
-    int? pixelHeight = 0,
-  ]) => super.noSuchMethod(
-    Invocation.method(#resizeTerminal, [
-      width,
-      height,
-      pixelWidth,
-      pixelHeight,
-    ]),
-    returnValueForMissingStub: null,
-  );
+  void resizeTerminal(int? width, int? height, [int? pixelWidth = 0, int? pixelHeight = 0]) =>
+      super.noSuchMethod(
+        Invocation.method(#resizeTerminal, [width, height, pixelWidth, pixelHeight]),
+        returnValueForMissingStub: null,
+      );
 
   @override
-  void close() => super.noSuchMethod(
-    Invocation.method(#close, []),
-    returnValueForMissingStub: null,
-  );
+  void close() =>
+      super.noSuchMethod(Invocation.method(#close, []), returnValueForMissingStub: null);
 
   @override
   _i9.Future<int?> waitForExit({Duration? timeout}) => (super.noSuchMethod(
@@ -588,8 +482,6 @@ class MockSSHSession extends _i1.Mock implements _i5.SSHSession {
   ) as _i9.Future<int?>);
 
   @override
-  void kill(_i13.SSHSignal? signal) => super.noSuchMethod(
-    Invocation.method(#kill, [signal]),
-    returnValueForMissingStub: null,
-  );
+  void kill(_i13.SSHSignal? signal) =>
+      super.noSuchMethod(Invocation.method(#kill, [signal]), returnValueForMissingStub: null);
 }

@@ -295,9 +295,9 @@ export function buildRemoteInitCommand({
       // транслирует прокрутку в эти два синтетических биндинга (CSI-u, не пересекаются с
       // реальными хоткеями): войти в copy-mode и прокрутить историю вверх/вниз. `-e` у
       // scroll-up — автовыход из copy-mode, когда докрутили обратно до низа. alternate_on —
-      // не мешать полноэкранным приложениям (они сами решают, что делать с этим сочетанием).
-      'bind-key -n C-M-S-Up if -F "#{alternate_on}" "" "copy-mode -e ; send-keys -X -N 3 scroll-up"',
-      'bind-key -n C-M-S-Down if -F "#{alternate_on}" "" "send-keys -X -N 3 scroll-down"',
+      // на alternate screen (TUI) истории tmux нет — отдать приложению PgUp/PgDn.
+      'bind-key -n C-M-S-Up if -F "#{alternate_on}" "send-keys PPage" "copy-mode -e ; send-keys -X -N 3 scroll-up"',
+      'bind-key -n C-M-S-Down if -F "#{alternate_on}" "send-keys NPage" "send-keys -X -N 3 scroll-down"',
       'set -g history-limit 10000',
       'set -g escape-time 10',
       'set -g focus-events on',

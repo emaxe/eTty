@@ -461,11 +461,12 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
       _tmuxScroll.addDelta(-deltaY);
     } else if (t.isUsingAltBuffer) {
       _mouseWheelPx += deltaY;
-      final lineHeight = view.renderTerminal.lineHeight;
-      while (_mouseWheelPx.abs() >= lineHeight) {
+      // PgUp/PgDn вместо стрелок: стрелки TUI трактует как историю ввода, а не прокрутку вывода.
+      final stepPx = view.renderTerminal.lineHeight * TerminalGestureConfig.altBufferPageLines;
+      while (_mouseWheelPx.abs() >= stepPx) {
         final up = _mouseWheelPx > 0;
-        t.keyInput(up ? xterm.TerminalKey.arrowUp : xterm.TerminalKey.arrowDown);
-        _mouseWheelPx -= up ? lineHeight : -lineHeight;
+        t.keyInput(up ? xterm.TerminalKey.pageUp : xterm.TerminalKey.pageDown);
+        _mouseWheelPx -= up ? stepPx : -stepPx;
       }
     } else if (widget.scrollController.hasClients) {
       final pos = widget.scrollController.position;

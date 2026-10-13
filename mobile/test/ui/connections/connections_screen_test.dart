@@ -60,13 +60,8 @@ void main() {
   late FileConnectionStore store;
 
   setUp(() async {
-    tempDir = await Directory.systemTemp.createTemp(
-      'etty_connections_screen_test_',
-    );
-    store = FileConnectionStore(
-      File('${tempDir.path}/connections.json'),
-      _InMemorySecureStore(),
-    );
+    tempDir = await Directory.systemTemp.createTemp('etty_connections_screen_test_');
+    store = FileConnectionStore(File('${tempDir.path}/connections.json'), _InMemorySecureStore());
   });
 
   tearDown(() async {
@@ -83,13 +78,9 @@ void main() {
   testWidgets('список отображает профили', (tester) async {
     await tester.runAsync(() async {
       await store.upsert(_profile(id: 'a', label: 'Server A'));
-      await store.upsert(
-        _profile(id: 'b', label: 'Server B', host: 'b.example.com'),
-      );
+      await store.upsert(_profile(id: 'b', label: 'Server B', host: 'b.example.com'));
 
-      await tester.pumpWidget(
-        _app(store: store, onOpen: (_, {sessionName}) {}),
-      );
+      await tester.pumpWidget(_app(store: store, onOpen: (_, {sessionName}) {}));
       await _settle(tester);
 
       expect(find.text('Server A'), findsOneWidget);
@@ -99,9 +90,7 @@ void main() {
 
   testWidgets('пустой список показывает empty-state', (tester) async {
     await tester.runAsync(() async {
-      await tester.pumpWidget(
-        _app(store: store, onOpen: (_, {sessionName}) {}),
-      );
+      await tester.pumpWidget(_app(store: store, onOpen: (_, {sessionName}) {}));
       await _settle(tester);
 
       expect(find.text('Пока нет ни одного подключения'), findsOneWidget);
@@ -109,30 +98,17 @@ void main() {
     });
   });
 
-  testWidgets('добавление профиля через форму появляется в списке', (
-    tester,
-  ) async {
+  testWidgets('добавление профиля через форму появляется в списке', (tester) async {
     await tester.runAsync(() async {
-      await tester.pumpWidget(
-        _app(store: store, onOpen: (_, {sessionName}) {}),
-      );
+      await tester.pumpWidget(_app(store: store, onOpen: (_, {sessionName}) {}));
       await _settle(tester);
 
       await tester.tap(find.byTooltip('Добавить подключение'));
       await _settle(tester);
 
-      await tester.enterText(
-        find.byKey(const Key('connection_form_label')),
-        'New Server',
-      );
-      await tester.enterText(
-        find.byKey(const Key('connection_form_host')),
-        'new.example.com',
-      );
-      await tester.enterText(
-        find.byKey(const Key('connection_form_username')),
-        'admin',
-      );
+      await tester.enterText(find.byKey(const Key('connection_form_label')), 'New Server');
+      await tester.enterText(find.byKey(const Key('connection_form_host')), 'new.example.com');
+      await tester.enterText(find.byKey(const Key('connection_form_username')), 'admin');
 
       await tester.tap(find.byTooltip('Сохранить'));
       await _settle(tester);
@@ -147,18 +123,12 @@ void main() {
     await tester.runAsync(() async {
       await store.upsert(_profile(id: 'a', label: 'Server A'));
 
-      await tester.pumpWidget(
-        _app(store: store, onOpen: (_, {sessionName}) {}),
-      );
+      await tester.pumpWidget(_app(store: store, onOpen: (_, {sessionName}) {}));
       await _settle(tester);
 
       expect(find.text('Server A'), findsOneWidget);
 
-      await tester.fling(
-        find.byKey(const ValueKey('a')),
-        const Offset(-400, 0),
-        1000,
-      );
+      await tester.fling(find.byKey(const ValueKey('a')), const Offset(-400, 0), 1000);
       await _settle(tester);
 
       expect(find.text('Удалить подключение?'), findsOneWidget);
@@ -171,9 +141,7 @@ void main() {
     });
   });
 
-  testWidgets('тап по профилю вызывает onOpen с правильным профилем', (
-    tester,
-  ) async {
+  testWidgets('тап по профилю вызывает onOpen с правильным профилем', (tester) async {
     await tester.runAsync(() async {
       await store.upsert(_profile(id: 'a', label: 'Server A'));
       ConnectionProfile? opened;

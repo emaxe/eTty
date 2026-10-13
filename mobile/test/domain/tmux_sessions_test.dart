@@ -8,22 +8,13 @@ import 'package:mobile/transport/exec_channel.dart';
 
 Uint8List _bytes(String s) => Uint8List.fromList(utf8.encode(s));
 
-ExecResult _ok({Uint8List? stdout}) => ExecResult(
-  exitCode: 0,
-  stdout: stdout ?? Uint8List(0),
-  stderr: Uint8List(0),
-  timedOut: false,
-);
+ExecResult _ok({Uint8List? stdout}) =>
+    ExecResult(exitCode: 0, stdout: stdout ?? Uint8List(0), stderr: Uint8List(0), timedOut: false);
 
-ExecResult _fail(int exitCode, {String stderr = ''}) => ExecResult(
-  exitCode: exitCode,
-  stdout: Uint8List(0),
-  stderr: _bytes(stderr),
-  timedOut: false,
-);
+ExecResult _fail(int exitCode, {String stderr = ''}) =>
+    ExecResult(exitCode: exitCode, stdout: Uint8List(0), stderr: _bytes(stderr), timedOut: false);
 
-ExecResult _timedOut() =>
-    ExecResult(stdout: Uint8List(0), stderr: Uint8List(0), timedOut: true);
+ExecResult _timedOut() => ExecResult(stdout: Uint8List(0), stderr: Uint8List(0), timedOut: true);
 
 /// Один сеанс без известной активной команды — секция панелей пустая (только разделитель).
 Uint8List _oneSessionStdout({
@@ -34,16 +25,13 @@ Uint8List _oneSessionStdout({
   int? activityAt,
 }) {
   final activity = activityAt?.toString() ?? '';
-  return _bytes(
-    '$windows\x00$attached\x00$createdAt\x00$activity\x00$name\n\n',
-  );
+  return _bytes('$windows\x00$attached\x00$createdAt\x00$activity\x00$name\n\n');
 }
 
 /// Записывает каждый вызов и отвечает результатом [responder] для `(script, args)`.
 class _FakeRemoteExec implements RemoteExec {
   final List<({String script, List<String> args})> calls = [];
-  ExecResult Function(String script, List<String> args) responder = (_, _) =>
-      _ok();
+  ExecResult Function(String script, List<String> args) responder = (_, _) => _ok();
 
   @override
   Future<ExecResult> exec(
@@ -62,8 +50,7 @@ void main() {
   group('TmuxSessionsService — list', () {
     test('передаёт socket позиционным аргументом и парсит вывод', () async {
       final fake = _FakeRemoteExec()
-        ..responder = (_, _) =>
-            _ok(stdout: _oneSessionStdout(name: 'etty-abc12345'));
+        ..responder = (_, _) => _ok(stdout: _oneSessionStdout(name: 'etty-abc12345'));
       final service = TmuxSessionsService(exec: fake, socket: 'etty');
 
       final sessions = await service.list();
@@ -81,11 +68,7 @@ void main() {
       await expectLater(
         service.list(),
         throwsA(
-          isA<TmuxSessionsException>().having(
-            (e) => e.code,
-            'code',
-            TmuxSessionsErrorCode.noTmux,
-          ),
+          isA<TmuxSessionsException>().having((e) => e.code, 'code', TmuxSessionsErrorCode.noTmux),
         ),
       );
     });
@@ -97,18 +80,13 @@ void main() {
       await expectLater(
         service.list(),
         throwsA(
-          isA<TmuxSessionsException>().having(
-            (e) => e.code,
-            'code',
-            TmuxSessionsErrorCode.timeout,
-          ),
+          isA<TmuxSessionsException>().having((e) => e.code, 'code', TmuxSessionsErrorCode.timeout),
         ),
       );
     });
 
     test('прочий ненулевой код -> io с текстом stderr', () async {
-      final fake = _FakeRemoteExec()
-        ..responder = (_, _) => _fail(1, stderr: 'connection lost');
+      final fake = _FakeRemoteExec()..responder = (_, _) => _fail(1, stderr: 'connection lost');
       final service = TmuxSessionsService(exec: fake);
 
       await expectLater(
@@ -126,51 +104,41 @@ void main() {
         ..responder = (_, _) => _ok(stdout: _oneSessionStdout(name: 'x'));
       final service = TmuxSessionsService(exec: fake);
 
-      final results = await Future.wait([
-        service.list(),
-        service.list(),
-        service.list(),
-      ]);
+      final results = await Future.wait([service.list(), service.list(), service.list()]);
 
       expect(fake.calls, hasLength(1));
       expect(results.every((r) => r.single.name == 'x'), isTrue);
     });
 
-    test(
-      'list() после завершения предыдущего делает новый exec-вызов',
-      () async {
-        final fake = _FakeRemoteExec()
-          ..responder = (_, _) => _ok(stdout: _oneSessionStdout(name: 'x'));
-        final service = TmuxSessionsService(exec: fake);
+    test('list() после завершения предыдущего делает новый exec-вызов', () async {
+      final fake = _FakeRemoteExec()
+        ..responder = (_, _) => _ok(stdout: _oneSessionStdout(name: 'x'));
+      final service = TmuxSessionsService(exec: fake);
 
-        await service.list();
-        await service.list();
+      await service.list();
+      await service.list();
 
-        expect(fake.calls, hasLength(2));
-      },
-    );
+      expect(fake.calls, hasLength(2));
+    });
   });
 
   group('TmuxSessionsService — kill', () {
-    test(
-      'передаёт socket и имя, невалидное имя отклоняется без exec-вызова',
-      () async {
-        final fake = _FakeRemoteExec();
-        final service = TmuxSessionsService(exec: fake, socket: 'etty');
+    test('передаёт socket и имя, невалидное имя отклоняется без exec-вызова', () async {
+      final fake = _FakeRemoteExec();
+      final service = TmuxSessionsService(exec: fake, socket: 'etty');
 
-        await expectLater(
-          service.kill('bad name!'),
-          throwsA(
-            isA<TmuxSessionsException>().having(
-              (e) => e.code,
-              'code',
-              TmuxSessionsErrorCode.invalidName,
-            ),
+      await expectLater(
+        service.kill('bad name!'),
+        throwsA(
+          isA<TmuxSessionsException>().having(
+            (e) => e.code,
+            'code',
+            TmuxSessionsErrorCode.invalidName,
           ),
-        );
-        expect(fake.calls, isEmpty);
-      },
-    );
+        ),
+      );
+      expect(fake.calls, isEmpty);
+    });
 
     test('успешный kill передаёт [socket, name]', () async {
       final fake = _FakeRemoteExec();
@@ -257,30 +225,25 @@ void main() {
   });
 
   group('TmuxSessionsService — автополлинг', () {
-    test(
-      'refreshSoon() публикует список в onSessionsChanged после debounce-паузы',
-      () async {
-        final fake = _FakeRemoteExec()
-          ..responder = (_, _) => _ok(stdout: _oneSessionStdout(name: 'x'));
-        final service = TmuxSessionsService(exec: fake);
-        final events = <List<String>>[];
-        service.onSessionsChanged.listen(
-          (sessions) => events.add(sessions.map((s) => s.name).toList()),
-        );
+    test('refreshSoon() публикует список в onSessionsChanged после debounce-паузы', () async {
+      final fake = _FakeRemoteExec()
+        ..responder = (_, _) => _ok(stdout: _oneSessionStdout(name: 'x'));
+      final service = TmuxSessionsService(exec: fake);
+      final events = <List<String>>[];
+      service.onSessionsChanged.listen(
+        (sessions) => events.add(sessions.map((s) => s.name).toList()),
+      );
 
-        service.refreshSoon();
-        await Future<void>.delayed(
-          const Duration(
-            milliseconds: 900,
-          ), // > SshSessionConfig.sessionsRefreshDelayMs (800)
-        );
+      service.refreshSoon();
+      await Future<void>.delayed(
+        const Duration(milliseconds: 900), // > SshSessionConfig.sessionsRefreshDelayMs (800)
+      );
 
-        expect(events, [
-          ['x'],
-        ]);
-        service.dispose();
-      },
-    );
+      expect(events, [
+        ['x'],
+      ]);
+      service.dispose();
+    });
 
     test('серия быстрых refreshSoon() даёт один exec-вызов (debounce, не троттлинг)', () async {
       final fake = _FakeRemoteExec()
@@ -308,10 +271,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 900));
 
       expect(errors, hasLength(1));
-      expect(
-        (errors.single as TmuxSessionsException).code,
-        TmuxSessionsErrorCode.noTmux,
-      );
+      expect((errors.single as TmuxSessionsException).code, TmuxSessionsErrorCode.noTmux);
       service.dispose();
     });
 

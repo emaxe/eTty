@@ -22,4 +22,7 @@ abstract final class TerminalGestureConfig {
 
   /// Максимальное расстояние (px) между центрами двух тапов двойного тапа.
   static const double doubleTapSlopPx = 60;
+
+  /// Сколько строк прокрутки пальцем (на alternate screen без mouse mode) даёт один PgUp/PgDn.
+  static const int altBufferPageLines = 8;
 }

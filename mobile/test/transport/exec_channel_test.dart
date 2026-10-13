@@ -49,9 +49,9 @@ void main() {
       final order = <int>[];
 
       Future<void> task(int id) => semaphore.run(() async {
-            order.add(id);
-            await Future<void>.delayed(const Duration(milliseconds: 5));
-          });
+        order.add(id);
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      });
 
       final futures = [for (var i = 0; i < 5; i++) task(i)];
       // Небольшая пауза, чтобы все вызовы run() успели встать в очередь ДО завершения первой
@@ -67,11 +67,11 @@ void main() {
       final blockers = <Completer<void>>[];
 
       Future<void> task(int id) => semaphore.run(() async {
-            started.add(id);
-            final c = Completer<void>();
-            blockers.add(c);
-            await c.future;
-          });
+        started.add(id);
+        final c = Completer<void>();
+        blockers.add(c);
+        await c.future;
+      });
 
       final f1 = task(0);
       await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -107,11 +107,7 @@ void main() {
     // воспроизводит и создаёт гонку с ещё не доставленными чанками — поэтому здесь `done`
     // явно завязан на исчерпание потоков (broadcast, чтобы у стрима было два слушателя: сам
     // ExecChannel и это ожидание).
-    void wireSession({
-      Stream<Uint8List>? stdout,
-      Stream<Uint8List>? stderr,
-      int? exitCode,
-    }) {
+    void wireSession({Stream<Uint8List>? stdout, Stream<Uint8List>? stderr, int? exitCode}) {
       final stdoutStream = (stdout ?? const Stream<Uint8List>.empty()).asBroadcastStream();
       final stderrStream = (stderr ?? const Stream<Uint8List>.empty()).asBroadcastStream();
       when(client.execute(any)).thenAnswer((_) async => session);
@@ -120,9 +116,8 @@ void main() {
       when(session.stdin).thenReturn(StreamController<Uint8List>().sink);
       when(session.exitCode).thenReturn(exitCode);
       when(session.exitSignal).thenReturn(null);
-      when(session.done).thenAnswer(
-        (_) => Future.wait([stdoutStream.drain<void>(), stderrStream.drain<void>()]),
-      );
+      when(session.done)
+          .thenAnswer((_) => Future.wait([stdoutStream.drain<void>(), stderrStream.drain<void>()]));
     }
 
     test('собирает stdout/stderr и возвращает exitCode', () async {
@@ -169,7 +164,11 @@ void main() {
 
       final result = await channel.exec('big-output', [], maxBufferBytes: 15);
 
-      expect(result.stdout.length, lessThanOrEqualTo(15 + 9), reason: 'может захватить один чанк целиком до проверки, но не больше одного лишнего чанка');
+      expect(
+        result.stdout.length,
+        lessThanOrEqualTo(15 + 9),
+        reason: 'может захватить один чанк целиком до проверки, но не больше одного лишнего чанка',
+      );
       expect(result.error, isNull);
     });
 
@@ -189,11 +188,7 @@ void main() {
         if (!closeCompleter.isCompleted) closeCompleter.complete();
       });
 
-      final result = await channel.exec(
-        'sleep 100',
-        [],
-        timeout: const Duration(milliseconds: 20),
-      );
+      final result = await channel.exec('sleep 100', [], timeout: const Duration(milliseconds: 20));
 
       expect(result.timedOut, isTrue);
       verify(session.close()).called(1);

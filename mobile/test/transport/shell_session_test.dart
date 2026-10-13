@@ -38,10 +38,7 @@ void main() {
         rows: 40,
       );
 
-      final captured = verify(client.execute(
-        captureAny,
-        pty: captureAnyNamed('pty'),
-      )).captured;
+      final captured = verify(client.execute(captureAny, pty: captureAnyNamed('pty'))).captured;
       expect(captured[0], 'exec /bin/sh -c \'...\'');
       final pty = captured[1] as SSHPtyConfig;
       expect(pty.width, 100);
@@ -78,10 +75,7 @@ void main() {
       when(client.execute(any, pty: anyNamed('pty'))).thenAnswer((_) async => session);
     });
 
-    Future<void> startWith({
-      Stream<Uint8List>? stdout,
-      Stream<Uint8List>? stderr,
-    }) async {
+    Future<void> startWith({Stream<Uint8List>? stdout, Stream<Uint8List>? stderr}) async {
       when(session.stdout).thenAnswer((_) => stdout ?? const Stream<Uint8List>.empty());
       when(session.stderr).thenAnswer((_) => stderr ?? const Stream<Uint8List>.empty());
       shell = await ShellSession.start(
