@@ -4,15 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/remote/remote_shell_hooks.dart';
 
-const _paths = <String>[
-  '/a b',
-  "/it's",
-  '/wow!',
-  r'/$HOME',
-  '/ёжик',
-  '/50%',
-  r'/back\slash',
-];
+const _paths = <String>['/a b', "/it's", '/wow!', r'/$HOME', '/ёжик', '/50%', r'/back\slash'];
 
 String _build({String? startDir, String socketName = 'etty', bool hooks = true}) =>
     RemoteShellHooks.buildRemoteInitCommand(
@@ -88,11 +80,10 @@ void main() {
         final m = RegExp(r'd=\$\(printf "([^"]*)"\)').firstMatch(inner);
         expect(m, isNotNull);
         expect(RegExp(r'^[\\0-7]+$').hasMatch(m!.group(1)!), isTrue);
-        final res = await Process.run(
-          'sh',
-          ['-c', 'd=\$(printf "${m.group(1)}"); printf "%s" "\$d"'],
-          stdoutEncoding: null,
-        );
+        final res = await Process.run('sh', [
+          '-c',
+          'd=\$(printf "${m.group(1)}"); printf "%s" "\$d"',
+        ], stdoutEncoding: null);
         expect(res.exitCode, 0);
         expect(res.stdout as List<int>, utf8.encode(path));
       });
@@ -114,10 +105,7 @@ void main() {
     });
 
     test('startDir при persistence off -> ArgumentError', () {
-      expect(
-        () => RemoteShellHooks.buildRemoteInitCommand(startDir: '/home'),
-        throwsArgumentError,
-      );
+      expect(() => RemoteShellHooks.buildRemoteInitCommand(startDir: '/home'), throwsArgumentError);
     });
   });
 
@@ -138,11 +126,7 @@ void main() {
       final res = await Process.run(
         'sh',
         ['-c', _build(startDir: path)],
-        environment: {
-          'HOME': home.path,
-          'SHELL': '/bin/sh',
-          'PATH': '${bin.path}:/usr/bin:/bin',
-        },
+        environment: {'HOME': home.path, 'SHELL': '/bin/sh', 'PATH': '${bin.path}:/usr/bin:/bin'},
         includeParentEnvironment: false,
       );
       expect(res.exitCode, 0, reason: '${res.stderr}');

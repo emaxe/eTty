@@ -38,6 +38,8 @@ class KeyBar extends StatelessWidget {
                   active: modifier == StickyModifier.alt,
                   onTap: sticky.toggleAlt,
                 ),
+                // Shift+Enter (kitty-протокол) — перенос строки в Claude Code и подобных TUI.
+                _KeyButton(label: '⇧⏎', onTap: () => onSend('\x1b[13;2u')),
                 _KeyButton(label: '↑', onTap: () => onSend('\x1b[A')),
                 _KeyButton(label: '↓', onTap: () => onSend('\x1b[B')),
                 _KeyButton(label: '←', onTap: () => onSend('\x1b[D')),

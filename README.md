@@ -180,7 +180,7 @@ Modern terminal emulator built with Electron. Lightweight, fast, and feature-ric
 - **SSH + tmux** — pure-Dart client (`dartssh2`), several tabs per connection, sessions survive app restarts and are shared with the desktop app (same protocol and tmux socket)
 - **Session picker** — list and open the server's tmux sessions, or start a new one in a folder chosen in the file tree
 - **Remote file tree and editor** — browse (including hidden files), edit and share files over SFTP
-- **Touch gestures in the terminal** — one-finger scroll (tmux history, mouse wheel for TUI apps, local scrollback), two-finger swipe sends an arrow key, tap clicks in mouse-aware TUIs (htop, mc, vim), long-press selects text
+- **Touch gestures in the terminal** — one-finger scroll (tmux history, mouse wheel for TUI apps, local scrollback), two-finger swipe sends an arrow key, tap clicks in mouse-aware TUIs (htop, mc, vim), long-press selects text, two-finger long-press opens a quick-action wheel (Ctrl+C, Esc, Shift+Tab, Ctrl+O, Ctrl+D, Ctrl+L, attach a photo/file), two-finger double-tap opens a two-level wheel of your own commands (Settings → Quick commands)
 - **Security** — biometric lock; secrets in the OS secure storage; import of desktop connections via `.ettyx`
 
 Build and run instructions: [mobile/README.md](mobile/README.md).

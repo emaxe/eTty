@@ -60,44 +60,52 @@ void main() {
       expect(pool.stateFor('c1'), SshConnectionState.ready);
     });
 
-    test('повторный acquire() для готового соединения переиспользует его без нового connect()',
-        () async {
-      final pool = SshConnectionPool();
-      final fake = _FakeConnection();
-      fake.connectGate.complete();
+    test(
+      'повторный acquire() для готового соединения переиспользует его без нового connect()',
+      () async {
+        final pool = SshConnectionPool();
+        final fake = _FakeConnection();
+        fake.connectGate.complete();
 
-      await pool.acquire('c1', () => fake);
-      final second = await pool.acquire('c1', () => fake);
+        await pool.acquire('c1', () => fake);
+        final second = await pool.acquire('c1', () => fake);
 
-      expect(second, same(fake));
-      expect(fake.connectCallCount, 1, reason: 'connect() не должен вызываться повторно');
-      expect(pool.refCountFor('c1'), 2);
-    });
+        expect(second, same(fake));
+        expect(fake.connectCallCount, 1, reason: 'connect() не должен вызываться повторно');
+        expect(pool.refCountFor('c1'), 2);
+      },
+    );
 
-    test('single-flight: конкурентные acquire() для одного connectionId делят один connect()',
-        () async {
-      final pool = SshConnectionPool();
-      var factoryCallCount = 0;
-      final fake = _FakeConnection();
+    test(
+      'single-flight: конкурентные acquire() для одного connectionId делят один connect()',
+      () async {
+        final pool = SshConnectionPool();
+        var factoryCallCount = 0;
+        final fake = _FakeConnection();
 
-      final f1 = pool.acquire('c1', () {
-        factoryCallCount++;
-        return fake;
-      });
-      final f2 = pool.acquire('c1', () {
-        factoryCallCount++;
-        return fake;
-      });
+        final f1 = pool.acquire('c1', () {
+          factoryCallCount++;
+          return fake;
+        });
+        final f2 = pool.acquire('c1', () {
+          factoryCallCount++;
+          return fake;
+        });
 
-      fake.connectGate.complete();
-      final results = await Future.wait([f1, f2]);
+        fake.connectGate.complete();
+        final results = await Future.wait([f1, f2]);
 
-      expect(factoryCallCount, 1, reason: 'фабрика должна вызываться один раз на всех конкурентов');
-      expect(fake.connectCallCount, 1);
-      expect(results[0], same(fake));
-      expect(results[1], same(fake));
-      expect(pool.refCountFor('c1'), 2, reason: 'оба acquire() должны увеличить refcount');
-    });
+        expect(
+          factoryCallCount,
+          1,
+          reason: 'фабрика должна вызываться один раз на всех конкурентов',
+        );
+        expect(fake.connectCallCount, 1);
+        expect(results[0], same(fake));
+        expect(results[1], same(fake));
+        expect(pool.refCountFor('c1'), 2, reason: 'оба acquire() должны увеличить refcount');
+      },
+    );
 
     test('неудачный connect() НЕ увеличивает refcount', () async {
       final pool = SshConnectionPool();
@@ -168,8 +176,7 @@ void main() {
   });
 
   group('SshConnectionPool.release()', () {
-    test('release() до нуля запускает idle-dispose, соединение закрывается по таймеру',
-        () async {
+    test('release() до нуля запускает idle-dispose, соединение закрывается по таймеру', () async {
       final pool = SshConnectionPool(idleDisposeDuration: const Duration(milliseconds: 30));
       final fake = _FakeConnection();
       fake.connectGate.complete();
@@ -182,22 +189,28 @@ void main() {
       expect(fake.closeCallCount, 1);
     });
 
-    test('acquire() до истечения idle-таймера отменяет dispose и переиспользует соединение',
-        () async {
-      final pool = SshConnectionPool(idleDisposeDuration: const Duration(milliseconds: 50));
-      final fake = _FakeConnection();
-      fake.connectGate.complete();
+    test(
+      'acquire() до истечения idle-таймера отменяет dispose и переиспользует соединение',
+      () async {
+        final pool = SshConnectionPool(idleDisposeDuration: const Duration(milliseconds: 50));
+        final fake = _FakeConnection();
+        fake.connectGate.complete();
 
-      await pool.acquire('c1', () => fake);
-      pool.release('c1');
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-      final reused = await pool.acquire('c1', () => fake);
+        await pool.acquire('c1', () => fake);
+        pool.release('c1');
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        final reused = await pool.acquire('c1', () => fake);
 
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+        await Future<void>.delayed(const Duration(milliseconds: 60));
 
-      expect(reused, same(fake));
-      expect(fake.closeCallCount, 0, reason: 'idle-таймер должен был отмениться повторным acquire()');
-    });
+        expect(reused, same(fake));
+        expect(
+          fake.closeCallCount,
+          0,
+          reason: 'idle-таймер должен был отмениться повторным acquire()',
+        );
+      },
+    );
 
     test('release() без предшествующего acquire() безопасен (нет записи)', () {
       final pool = SshConnectionPool();

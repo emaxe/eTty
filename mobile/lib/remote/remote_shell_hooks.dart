@@ -291,8 +291,9 @@ class RemoteShellHooks {
         'bind-key -n S-Enter send-keys Escape "[13;2u"',
         // Колесо мыши больше не ловится tmux (mouse off) — клиент транслирует прокрутку в эти
         // два синтетических биндинга (CSI-u), не пересекающихся с реальными хоткеями.
-        'bind-key -n C-M-S-Up if -F "#{alternate_on}" "" "copy-mode -e ; send-keys -X -N 3 scroll-up"',
-        'bind-key -n C-M-S-Down if -F "#{alternate_on}" "" "send-keys -X -N 3 scroll-down"',
+        // На alternate screen (TUI вроде Claude Code) истории tmux нет — отдаём приложению PgUp/PgDn.
+        'bind-key -n C-M-S-Up if -F "#{alternate_on}" "send-keys PPage" "copy-mode -e ; send-keys -X -N 3 scroll-up"',
+        'bind-key -n C-M-S-Down if -F "#{alternate_on}" "send-keys NPage" "send-keys -X -N 3 scroll-down"',
         'set -g history-limit 10000',
         'set -g escape-time 10',
         'set -g focus-events on',

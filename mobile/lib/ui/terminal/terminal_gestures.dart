@@ -2,14 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:xterm/xterm.dart' as xterm;
 
+import 'package:mobile/core/config/quick_actions_config.dart';
 import 'package:mobile/core/config/terminal_gesture_config.dart';
+import 'package:mobile/domain/quick_commands.dart';
+import 'package:mobile/ui/terminal/quick_action_wheel.dart';
 import 'package:mobile/ui/terminal/scroll_bridge.dart';
 
 typedef GestureTimerFactory = Timer Function(Duration d, void Function() cb);
 
-enum _Phase { idle, pending, scrolling, longPress, twoFinger, ignored }
+enum _Phase { idle, pending, scrolling, longPress, twoFinger, wheel, ignored }
 
 /// Чистая логика разбора касаний терминала (без виджетов) — отделяет тап, скролл одним пальцем,
 /// long-press и свайп двумя пальцами. Встроенные жесты `xterm.TerminalView` (Scrollable,
@@ -18,6 +22,10 @@ enum _Phase { idle, pending, scrolling, longPress, twoFinger, ignored }
 ///
 /// Свайп двумя пальцами — один на жест: после первого срабатывания остальное движение до отпускания
 /// всех пальцев игнорируется ("один свайп = одна стрелка").
+///
+/// Удержание двух пальцев без движения открывает колесо быстрых действий: [onWheelStart], затем
+/// [onWheelMove] с центром пальцев, и [onWheelEnd] при отпускании первого пальца (с последним
+/// центром до отрыва). Третий палец или cancel — [onWheelCancel].
 class TerminalGestureInterpreter {
   TerminalGestureInterpreter({
     this.onTap,
@@ -26,8 +34,15 @@ class TerminalGestureInterpreter {
     this.onLongPressMove,
     this.onLongPressEnd,
     this.onSwipe,
+    this.onWheelStart,
+    this.onWheelMove,
+    this.onWheelEnd,
+    this.onWheelCancel,
+    this.onTwoFingerDoubleTap,
     GestureTimerFactory? timerFactory,
-  }) : _timerFactory = timerFactory ?? Timer.new;
+    Duration Function()? clock,
+  }) : _timerFactory = timerFactory ?? Timer.new,
+       _clock = clock ?? _stopwatchClock();
 
   final void Function(Offset position)? onTap;
 
@@ -40,7 +55,21 @@ class TerminalGestureInterpreter {
   /// Направление движения пальцев.
   final void Function(AxisDirection direction)? onSwipe;
 
+  final void Function(Offset centroid)? onWheelStart;
+  final void Function(Offset centroid)? onWheelMove;
+  final void Function(Offset centroid)? onWheelEnd;
+  final void Function()? onWheelCancel;
+
+  /// Два быстрых тапа двумя пальцами подряд (в одном месте) — центр второго тапа.
+  final void Function(Offset centroid)? onTwoFingerDoubleTap;
+
   final GestureTimerFactory _timerFactory;
+  final Duration Function() _clock;
+
+  static Duration Function() _stopwatchClock() {
+    final sw = Stopwatch()..start();
+    return () => sw.elapsed;
+  }
 
   final Map<int, Offset> _pointers = {};
   _Phase _phase = _Phase.idle;
@@ -48,6 +77,11 @@ class TerminalGestureInterpreter {
   Offset _lastPos = Offset.zero;
   Offset _swipeStartCentroid = Offset.zero;
   bool _swipeFired = false;
+  Offset _wheelLast = Offset.zero;
+  Duration _twoDownAt = Duration.zero;
+  bool _twoFingerMoved = false;
+  Duration? _lastTapAt;
+  Offset _lastTapPos = Offset.zero;
   Timer? _longPressTimer;
 
   void pointerDown(int id, Offset position) {
@@ -68,8 +102,15 @@ class TerminalGestureInterpreter {
         _phase = _Phase.twoFinger;
         _swipeFired = false;
         _swipeStartCentroid = _centroid();
+        _twoDownAt = _clock();
+        _twoFingerMoved = false;
+        _longPressTimer = _timerFactory(
+          const Duration(milliseconds: TerminalGestureConfig.twoFingerLongPressMs),
+          _onTwoFingerTimer,
+        );
       default:
         _cancelTimer();
+        if (_phase == _Phase.wheel) onWheelCancel?.call();
         _phase = _Phase.ignored;
     }
   }
@@ -95,6 +136,10 @@ class TerminalGestureInterpreter {
       case _Phase.twoFinger:
         if (_swipeFired) return;
         final delta = _centroid() - _swipeStartCentroid;
+        if (delta.distance > TerminalGestureConfig.tapSlopPx) {
+          _cancelTimer();
+          _twoFingerMoved = true;
+        }
         if (delta.distance < TerminalGestureConfig.swipeThresholdPx) return;
         _swipeFired = true;
         if (delta.dx.abs() >= delta.dy.abs()) {
@@ -102,6 +147,9 @@ class TerminalGestureInterpreter {
         } else {
           onSwipe?.call(delta.dy < 0 ? AxisDirection.up : AxisDirection.down);
         }
+      case _Phase.wheel:
+        _wheelLast = _centroid();
+        onWheelMove?.call(_wheelLast);
       case _Phase.idle:
       case _Phase.ignored:
         break;
@@ -116,13 +164,20 @@ class TerminalGestureInterpreter {
       onTap?.call(position);
     } else if (_phase == _Phase.longPress) {
       onLongPressEnd?.call(position);
+    } else if (_phase == _Phase.twoFinger && _pointers.length == 2) {
+      _maybeTwoFingerTap();
+    } else if (_phase == _Phase.wheel) {
+      // Центр после отрыва пальца прыгает — берём последний центр двух пальцев.
+      onWheelEnd?.call(_wheelLast);
     }
+    _cancelTimer();
     _release(id);
   }
 
   void pointerCancel(int id) {
     if (!_pointers.containsKey(id)) return;
     if (_phase == _Phase.longPress) onLongPressEnd?.call(_lastPos);
+    if (_phase == _Phase.wheel) onWheelCancel?.call();
     _cancelTimer();
     _release(id);
   }
@@ -147,6 +202,36 @@ class TerminalGestureInterpreter {
     onLongPressStart?.call(_startPos);
   }
 
+  /// Короткий двухпальцевый тап без движения; два таких подряд рядом друг с другом — двойной тап.
+  void _maybeTwoFingerTap() {
+    final now = _clock();
+    if (_swipeFired ||
+        _twoFingerMoved ||
+        (now - _twoDownAt).inMilliseconds > TerminalGestureConfig.twoFingerTapMaxMs) {
+      _lastTapAt = null;
+      return;
+    }
+    final pos = _centroid();
+    final prev = _lastTapAt;
+    if (prev != null &&
+        (now - prev).inMilliseconds <= TerminalGestureConfig.doubleTapWindowMs &&
+        (pos - _lastTapPos).distance <= TerminalGestureConfig.doubleTapSlopPx) {
+      _lastTapAt = null;
+      onTwoFingerDoubleTap?.call(pos);
+    } else {
+      _lastTapAt = now;
+      _lastTapPos = pos;
+    }
+  }
+
+  void _onTwoFingerTimer() {
+    _longPressTimer = null;
+    if (_phase != _Phase.twoFinger || _swipeFired || _pointers.length != 2) return;
+    _phase = _Phase.wheel;
+    _wheelLast = _centroid();
+    onWheelStart?.call(_wheelLast);
+  }
+
   void _cancelTimer() {
     _longPressTimer?.cancel();
     _longPressTimer = null;
@@ -163,7 +248,8 @@ class TerminalGestureInterpreter {
 
 /// Слой поверх `xterm.TerminalView`, перехватывающий все касания и маршрутизирующий их:
 /// мышь TUI-приложения (если оно включило mouse mode) → колесо/клик; tmux → мост
-/// [ScrollDeltaAccumulator]; иначе локальный scrollback. Свайп двумя пальцами всегда шлёт стрелку.
+/// [ScrollDeltaAccumulator]; иначе локальный scrollback. Свайп двумя пальцами всегда шлёт стрелку,
+/// удержание двух пальцев открывает колесо быстрых действий ([QuickActionWheel]).
 class TerminalGestureLayer extends StatefulWidget {
   const TerminalGestureLayer({
     super.key,
@@ -173,6 +259,9 @@ class TerminalGestureLayer extends StatefulWidget {
     required this.scrollController,
     required this.isTmux,
     required this.write,
+    this.quickActions = QuickActionsConfig.defaultActions,
+    this.commandGroups = const [],
+    this.onAttach,
   });
 
   final xterm.Terminal terminal;
@@ -186,6 +275,15 @@ class TerminalGestureLayer extends StatefulWidget {
   /// Прямая запись в SSH-канал (tmux-мост колеса).
   final void Function(String data) write;
 
+  /// Действия колеса быстрых действий (долгий тап двумя пальцами), по часовой с 12 часов.
+  final List<QuickAction> quickActions;
+
+  /// Группы пользовательских команд второго колеса (двойной тап двумя пальцами).
+  final List<QuickCommandGroup> commandGroups;
+
+  /// Действие «📎 Файл» колеса: выбрать файл на телефоне и загрузить на сервер.
+  final Future<void> Function()? onAttach;
+
   @override
   State<TerminalGestureLayer> createState() => _TerminalGestureLayerState();
 }
@@ -196,9 +294,26 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
   double _mouseWheelPx = 0;
   Offset _longPressOrigin = Offset.zero;
 
+  /// Long-press идёт в mouse mode: вместо выделения xterm пальцы эмулируют мышь для TUI.
+  bool _mouseLongPress = false;
+  xterm.CellOffset? _lastDragCell;
+
   /// Последняя сработавшая стрелка свайпа и счётчик — для визуальной подсказки (вспышка в центре).
   AxisDirection? _flashDirection;
   int _flashSeq = 0;
+
+  /// Центр открытого колеса в координатах слоя (уже сдвинутый внутрь границ) и подсвеченный сектор.
+  Offset? _wheelCenter;
+  int? _wheelHighlight;
+
+  /// Колесо осталось открытым после отпускания в центре: ждёт тапа по сектору или закрытия.
+  bool _wheelPinned = false;
+
+  /// Открыто колесо пользовательских команд (двойной тап), а не быстрых действий.
+  bool _commandsWheel = false;
+
+  /// Открытая группа в колесе команд; `null` — показан уровень групп.
+  int? _commandGroup;
 
   xterm.TerminalViewState? get _view => widget.viewKey.currentState;
 
@@ -209,13 +324,15 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
     _interpreter = TerminalGestureInterpreter(
       onTap: _onTap,
       onScroll: _onScroll,
-      onLongPressStart: (p) {
-        _longPressOrigin = p;
-        _view?.renderTerminal.selectWord(_local(p));
-      },
-      onLongPressMove: (p) =>
-          _view?.renderTerminal.selectWord(_local(_longPressOrigin), _local(p)),
+      onLongPressStart: _onLongPressStart,
+      onLongPressMove: _onLongPressMove,
+      onLongPressEnd: _onLongPressEnd,
       onSwipe: _onSwipe,
+      onWheelStart: _onWheelStart,
+      onWheelMove: _onWheelMove,
+      onWheelEnd: _onWheelEnd,
+      onWheelCancel: _closeWheel,
+      onTwoFingerDoubleTap: _onTwoFingerDoubleTap,
     );
   }
 
@@ -269,6 +386,56 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
     _view?.requestKeyboard();
   }
 
+  /// В mouse mode (Claude Code и т.п.) выделение рисует само приложение по двойному клику и
+  /// протяжке, а локальное выделение xterm TUI перекрывает/сбрасывает. Поэтому long-press = двойной
+  /// клик (слово), дальше движение пальца — протяжка с зажатой кнопкой, отпускание — mouse up.
+  void _onLongPressStart(Offset p) {
+    _longPressOrigin = p;
+    if (_view != null && _mouseMode) {
+      final cell = _viewportCell(p);
+      final t = widget.terminal;
+      const left = xterm.TerminalMouseButton.left;
+      if (t.mouseInput(left, xterm.TerminalMouseButtonState.down, cell)) {
+        t.mouseInput(left, xterm.TerminalMouseButtonState.up, cell);
+        t.mouseInput(left, xterm.TerminalMouseButtonState.down, cell);
+        _mouseLongPress = true;
+        _lastDragCell = cell;
+        HapticFeedback.selectionClick();
+        return;
+      }
+    }
+    _view?.renderTerminal.selectWord(_local(p));
+  }
+
+  void _onLongPressMove(Offset p) {
+    if (!_mouseLongPress) {
+      _view?.renderTerminal.selectWord(_local(_longPressOrigin), _local(p));
+      return;
+    }
+    final t = widget.terminal;
+    // Движение с зажатой кнопкой есть только в режимах 1002/1003 и SGR-кодировке.
+    final dragReported = t.mouseMode == xterm.MouseMode.upDownScrollDrag ||
+        t.mouseMode == xterm.MouseMode.upDownScrollMove;
+    if (!dragReported || t.mouseReportMode != xterm.MouseReportMode.sgr) return;
+    final cell = _viewportCell(p);
+    if (cell == _lastDragCell) return;
+    _lastDragCell = cell;
+    // 32 = флаг движения, 0 = левая кнопка.
+    widget.write('\x1b[<32;${cell.x + 1};${cell.y + 1}M');
+  }
+
+  void _onLongPressEnd(Offset p) {
+    if (!_mouseLongPress) return;
+    _mouseLongPress = false;
+    _lastDragCell = null;
+    if (_view == null) return;
+    widget.terminal.mouseInput(
+      xterm.TerminalMouseButton.left,
+      xterm.TerminalMouseButtonState.up,
+      _viewportCell(p),
+    );
+  }
+
   /// [deltaY] > 0 — контент тянут вниз (к старому выводу).
   void _onScroll(double deltaY, Offset position) {
     final view = _view;
@@ -294,11 +461,12 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
       _tmuxScroll.addDelta(-deltaY);
     } else if (t.isUsingAltBuffer) {
       _mouseWheelPx += deltaY;
-      final lineHeight = view.renderTerminal.lineHeight;
-      while (_mouseWheelPx.abs() >= lineHeight) {
+      // PgUp/PgDn вместо стрелок: стрелки TUI трактует как историю ввода, а не прокрутку вывода.
+      final stepPx = view.renderTerminal.lineHeight * TerminalGestureConfig.altBufferPageLines;
+      while (_mouseWheelPx.abs() >= stepPx) {
         final up = _mouseWheelPx > 0;
-        t.keyInput(up ? xterm.TerminalKey.arrowUp : xterm.TerminalKey.arrowDown);
-        _mouseWheelPx -= up ? lineHeight : -lineHeight;
+        t.keyInput(up ? xterm.TerminalKey.pageUp : xterm.TerminalKey.pageDown);
+        _mouseWheelPx -= up ? stepPx : -stepPx;
       }
     } else if (widget.scrollController.hasClients) {
       final pos = widget.scrollController.position;
@@ -321,6 +489,162 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
     });
   }
 
+  Offset _clampWheelCenter(Offset p) {
+    const m = QuickActionsConfig.radiusPx + QuickActionsConfig.edgeMarginPx;
+    final size = (context.findRenderObject() as RenderBox?)?.size;
+    if (size == null) return p;
+    double clamp(double v, double max) => max < 2 * m ? max / 2 : v.clamp(m, max - m);
+    return Offset(clamp(p.dx, size.width), clamp(p.dy, size.height));
+  }
+
+  /// Подписи секторов открытого колеса (быстрые действия / группы / команды группы).
+  List<String> get _wheelLabels {
+    if (!_commandsWheel) {
+      return [for (final a in widget.quickActions) a.label];
+    }
+    final group = _commandGroup;
+    if (group == null) {
+      return [for (final g in widget.commandGroups) g.label];
+    }
+    return [for (final c in widget.commandGroups[group].commands) c.label];
+  }
+
+  int? _sectorAt(Offset p, {double? radius}) {
+    final d = p - _wheelCenter!;
+    final count = _wheelLabels.length;
+    if (count == 0) return null;
+    return quickActionSectorAt(
+      d.dx,
+      d.dy,
+      count: count,
+      deadZone: QuickActionsConfig.deadZonePx,
+      radius: radius,
+    );
+  }
+
+  void _onWheelStart(Offset p) {
+    if (widget.quickActions.isEmpty) {
+      _snack('Нет быстрых действий — добавьте их в настройках');
+      return;
+    }
+    if (widget.controller.selection != null) widget.controller.clearSelection();
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _wheelCenter = _clampWheelCenter(p);
+      _wheelHighlight = null;
+      _wheelPinned = false;
+      _commandsWheel = false;
+      _commandGroup = null;
+    });
+  }
+
+  void _onWheelMove(Offset p) {
+    if (_wheelCenter == null) return;
+    final sector = _sectorAt(p);
+    if (sector == _wheelHighlight) return;
+    HapticFeedback.selectionClick();
+    setState(() => _wheelHighlight = sector);
+  }
+
+  void _onWheelEnd(Offset p) {
+    if (_wheelCenter == null) return;
+    final sector = _sectorAt(p);
+    if (sector == null) {
+      // Отпустили в центре — оставляем колесо открытым для тапа по сектору.
+      setState(() {
+        _wheelHighlight = null;
+        _wheelPinned = true;
+      });
+      return;
+    }
+    _runQuickAction(sector);
+    _closeWheel();
+  }
+
+  void _onPinnedWheelTap(Offset p) {
+    final sector = _sectorAt(p, radius: QuickActionsConfig.radiusPx);
+    if (_commandsWheel) {
+      _onCommandsWheelTap(p, sector);
+      return;
+    }
+    _closeWheel();
+    if (sector != null) _runQuickAction(sector);
+  }
+
+  void _onCommandsWheelTap(Offset p, int? sector) {
+    if (sector == null) {
+      final inCenter = (p - _wheelCenter!).distance < QuickActionsConfig.deadZonePx;
+      if (inCenter && _commandGroup != null && widget.commandGroups.length > 1) {
+        HapticFeedback.selectionClick();
+        setState(() => _commandGroup = null);
+      } else {
+        _closeWheel();
+      }
+      return;
+    }
+    final group = _commandGroup;
+    if (group == null) {
+      _enterGroup(sector);
+      return;
+    }
+    HapticFeedback.lightImpact();
+    final text = widget.commandGroups[group].commands[sector].text;
+    _closeWheel();
+    widget.terminal.paste(text);
+  }
+
+  void _enterGroup(int index) {
+    if (widget.commandGroups[index].commands.isEmpty) {
+      _snack('Группа «${widget.commandGroups[index].label}» пуста — добавьте команды в настройках');
+      return;
+    }
+    HapticFeedback.selectionClick();
+    setState(() => _commandGroup = index);
+  }
+
+  void _onTwoFingerDoubleTap(Offset p) {
+    final groups = widget.commandGroups.where((g) => g.commands.isNotEmpty).toList();
+    if (groups.isEmpty) {
+      _snack('Нет быстрых команд — добавьте их в настройках');
+      return;
+    }
+    if (widget.controller.selection != null) widget.controller.clearSelection();
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _wheelCenter = _clampWheelCenter(p);
+      _wheelHighlight = null;
+      _wheelPinned = true;
+      _commandsWheel = true;
+      // Одна группа — сразу её команды, без лишнего шага.
+      _commandGroup = widget.commandGroups.length == 1 ? 0 : null;
+    });
+  }
+
+  void _snack(String text) =>
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(text)));
+
+  void _runQuickAction(int index) {
+    final action = widget.quickActions[index];
+    HapticFeedback.lightImpact();
+    switch (action.kind) {
+      case QuickActionKind.send:
+        widget.write(action.data);
+      case QuickActionKind.attach:
+        widget.onAttach?.call();
+    }
+  }
+
+  void _closeWheel() {
+    if (!mounted) return;
+    setState(() {
+      _wheelCenter = null;
+      _wheelHighlight = null;
+      _wheelPinned = false;
+      _commandsWheel = false;
+      _commandGroup = null;
+    });
+  }
+
   void _onSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
     // Колесо: dy > 0 — вниз (новый вывод), у пальца знак обратный.
@@ -331,7 +655,9 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
   Widget build(BuildContext context) {
     return Listener(
       behavior: HitTestBehavior.opaque,
-      onPointerDown: (e) => _interpreter.pointerDown(e.pointer, e.localPosition),
+      onPointerDown: (e) {
+        if (!_wheelPinned) _interpreter.pointerDown(e.pointer, e.localPosition);
+      },
       onPointerMove: (e) => _interpreter.pointerMove(e.pointer, e.localPosition),
       onPointerUp: (e) => _interpreter.pointerUp(e.pointer, e.localPosition),
       onPointerCancel: (e) => _interpreter.pointerCancel(e.pointer),
@@ -344,6 +670,22 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
               child: _SwipeArrowFlash(
                 key: ValueKey(_flashSeq),
                 direction: _flashDirection!,
+              ),
+            ),
+          if (_wheelCenter != null)
+            QuickActionWheel(
+              center: _wheelCenter!,
+              labels: _wheelLabels,
+              centerLabel: _commandsWheel && _commandGroup != null && widget.commandGroups.length > 1
+                  ? '←'
+                  : '✕',
+              highlighted: _wheelHighlight,
+            ),
+          if (_wheelPinned)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (d) => _onPinnedWheelTap(d.localPosition),
               ),
             ),
         ],

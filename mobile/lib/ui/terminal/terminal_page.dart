@@ -2,17 +2,23 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart' as xterm;
 
 import 'package:mobile/app/providers/connection_providers.dart';
 import 'package:mobile/app/providers/host_keys_provider.dart';
+import 'package:mobile/app/providers/quick_actions_providers.dart';
+import 'package:mobile/app/providers/quick_commands_providers.dart';
 import 'package:mobile/app/ssh_connector.dart';
 import 'package:mobile/app/theme/etty_colors.dart';
 import 'package:mobile/app/theme/etty_theme.dart';
 import 'package:mobile/data/connection_store.dart';
+import 'package:mobile/core/config/quick_actions_config.dart';
+import 'package:mobile/domain/attachment_upload.dart';
 import 'package:mobile/domain/lifecycle_controller.dart';
+import 'package:mobile/domain/quick_commands.dart';
 import 'package:mobile/domain/tab_controller.dart' as domain;
 import 'package:mobile/platform/foreground_service.dart';
 import 'package:mobile/domain/tmux_sessions.dart';
@@ -314,6 +320,56 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
     _addTab(startDir: path, serverSessionNames: serverNames);
   }
 
+  /// «📎 Файл» из колеса быстрых действий: выбрать фото/файл → залить на сервер в
+  /// `$TMPDIR/etty-paste/` → вставить путь в активный терминал (как вставка картинки на десктопе).
+  Future<void> _attachFile() async {
+    final connection = _connection;
+    if (connection == null || _tabs.isEmpty) return;
+    final tab = _tabs[_activeIndex];
+    final messenger = ScaffoldMessenger.of(context);
+    final kind = await showModalBottomSheet<FileType>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('Фото'),
+              onTap: () => Navigator.pop(context, FileType.image),
+            ),
+            ListTile(
+              leading: const Icon(Icons.insert_drive_file_outlined),
+              title: const Text('Файл'),
+              onTap: () => Navigator.pop(context, FileType.any),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (kind == null || !mounted) return;
+    try {
+      final file = await FilePicker.pickFile(type: kind);
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      messenger.showSnackBar(const SnackBar(content: Text('Загрузка файла…')));
+      final path = await uploadAttachment(
+        ExecChannel(clientSource: connection),
+        file.name,
+        bytes,
+      );
+      messenger.hideCurrentSnackBar();
+      // `paste` сам оборачивает в bracketed paste, если приложение это включило.
+      tab.terminal.paste(path);
+    } on AttachmentUploadException catch (e) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(content: Text('Не удалось загрузить файл: $e')));
+    }
+  }
+
   Future<List<String>> _serverSessionNames() async {
     final connection = _connection;
     if (connection == null) return const [];
@@ -410,6 +466,8 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
         ? EttyPalette.dark
         : EttyPalette.light;
     final terminalTheme = EttyTheme.terminalTheme(palette);
+    final quickActions = ref.watch(quickActionsProvider).value ?? QuickActionsConfig.defaultActions;
+    final commandGroups = ref.watch(quickCommandsProvider).value ?? QuickCommandsDefaults.groups;
 
     return Scaffold(
       appBar: AppBar(
@@ -468,6 +526,9 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
                           tab: tab,
                           theme: terminalTheme,
                           brightness: brightness,
+                          quickActions: quickActions,
+                          commandGroups: commandGroups,
+                          onAttach: _attachFile,
                         ),
                     ],
                   ),
@@ -485,11 +546,17 @@ class _TerminalTabView extends StatelessWidget {
     required this.tab,
     required this.theme,
     required this.brightness,
+    required this.quickActions,
+    required this.commandGroups,
+    required this.onAttach,
   });
 
   final _TerminalTab tab;
   final xterm.TerminalTheme theme;
   final Brightness brightness;
+  final List<QuickAction> quickActions;
+  final List<QuickCommandGroup> commandGroups;
+  final Future<void> Function() onAttach;
 
   @override
   Widget build(BuildContext context) {
@@ -535,6 +602,9 @@ class _TerminalTabView extends StatelessWidget {
             scrollController: tab.scrollController,
             isTmux: tab.isTmux,
             write: tab.sendRaw,
+            quickActions: quickActions,
+            commandGroups: commandGroups,
+            onAttach: onAttach,
           ),
         ),
         ValueListenableBuilder<domain.TabConnectionStatus>(

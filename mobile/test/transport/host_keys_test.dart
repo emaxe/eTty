@@ -84,10 +84,16 @@ void main() {
 
     test('совпавший ключ: true без вызова onNewHostKey, обновляется lastSeenAt', () async {
       final addedAt = DateTime.utc(2026, 1, 1);
-      await store.upsert(KnownHostEntry(
-        host: 'example.com', port: 22, keyType: 'ssh-ed25519',
-        fingerprint: 'SHA256:abc', addedAt: addedAt, lastSeenAt: addedAt,
-      ));
+      await store.upsert(
+        KnownHostEntry(
+          host: 'example.com',
+          port: 22,
+          keyType: 'ssh-ed25519',
+          fingerprint: 'SHA256:abc',
+          addedAt: addedAt,
+          lastSeenAt: addedAt,
+        ),
+      );
 
       var promptCalled = false;
       final verifier = HostKeyVerifier(
@@ -111,10 +117,16 @@ void main() {
 
     test('изменившийся ключ: false БЕЗ вызова onNewHostKey — жёсткая блокировка', () async {
       final now = DateTime.now();
-      await store.upsert(KnownHostEntry(
-        host: 'example.com', port: 22, keyType: 'ssh-ed25519',
-        fingerprint: 'SHA256:old', addedAt: now, lastSeenAt: now,
-      ));
+      await store.upsert(
+        KnownHostEntry(
+          host: 'example.com',
+          port: 22,
+          keyType: 'ssh-ed25519',
+          fingerprint: 'SHA256:old',
+          addedAt: now,
+          lastSeenAt: now,
+        ),
+      );
 
       var promptCalled = false;
       final verifier = HostKeyVerifier(
@@ -138,10 +150,16 @@ void main() {
 
     test('другой host/port с тем же verifier не путается с известной записью', () async {
       final now = DateTime.now();
-      await store.upsert(KnownHostEntry(
-        host: 'example.com', port: 22, keyType: 'ssh-ed25519',
-        fingerprint: 'SHA256:abc', addedAt: now, lastSeenAt: now,
-      ));
+      await store.upsert(
+        KnownHostEntry(
+          host: 'example.com',
+          port: 22,
+          keyType: 'ssh-ed25519',
+          fingerprint: 'SHA256:abc',
+          addedAt: now,
+          lastSeenAt: now,
+        ),
+      );
 
       // Тот же host, другой порт — для верификатора это НОВЫЙ хост.
       final verifier = HostKeyVerifier(
@@ -160,13 +178,21 @@ void main() {
 
     test('разные keyType для одного host:port — независимые проверки', () async {
       final now = DateTime.now();
-      await store.upsert(KnownHostEntry(
-        host: 'h', port: 22, keyType: 'ssh-ed25519',
-        fingerprint: 'SHA256:ed', addedAt: now, lastSeenAt: now,
-      ));
+      await store.upsert(
+        KnownHostEntry(
+          host: 'h',
+          port: 22,
+          keyType: 'ssh-ed25519',
+          fingerprint: 'SHA256:ed',
+          addedAt: now,
+          lastSeenAt: now,
+        ),
+      );
 
       final verifier = HostKeyVerifier(
-        store: store, host: 'h', port: 22,
+        store: store,
+        host: 'h',
+        port: 22,
         onNewHostKey: (result) async => true,
       );
 

@@ -68,5 +68,7 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Выбор фото для загрузки на сервер и вставки в терминал</string>
 	</dict>
 </plist>

@@ -128,7 +128,8 @@ void main() {
 
     test('можно сконструировать с ключом и passphrase', () {
       const creds = SshCredentials(
-        privateKeyPem: '-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----',
+        privateKeyPem:
+            '-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----',
         privateKeyPassphrase: 'secret',
       );
       expect(creds.privateKeyPem, isNotNull);
