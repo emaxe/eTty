@@ -108,4 +108,15 @@ void main() {
       expect(await store.getQuickCommandsJson(), '[]');
     });
   });
+
+  group('SecureAppSettingsStore — быстрые действия', () {
+    test('нет записи -> null, запись читается обратно, ключ отдельный', () async {
+      final store = SecureAppSettingsStore(_InMemorySecureStore());
+
+      expect(await store.getQuickActionsJson(), isNull);
+      await store.setQuickActionsJson('[]');
+      expect(await store.getQuickActionsJson(), '[]');
+      expect(await store.getQuickCommandsJson(), isNull);
+    });
+  });
 }

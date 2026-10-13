@@ -259,6 +259,7 @@ class TerminalGestureLayer extends StatefulWidget {
     required this.scrollController,
     required this.isTmux,
     required this.write,
+    this.quickActions = QuickActionsConfig.defaultActions,
     this.commandGroups = const [],
     this.onAttach,
   });
@@ -273,6 +274,9 @@ class TerminalGestureLayer extends StatefulWidget {
 
   /// Прямая запись в SSH-канал (tmux-мост колеса).
   final void Function(String data) write;
+
+  /// Действия колеса быстрых действий (долгий тап двумя пальцами), по часовой с 12 часов.
+  final List<QuickAction> quickActions;
 
   /// Группы пользовательских команд второго колеса (двойной тап двумя пальцами).
   final List<QuickCommandGroup> commandGroups;
@@ -495,7 +499,7 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
   /// Подписи секторов открытого колеса (быстрые действия / группы / команды группы).
   List<String> get _wheelLabels {
     if (!_commandsWheel) {
-      return [for (final a in QuickActionsConfig.actions) a.label];
+      return [for (final a in widget.quickActions) a.label];
     }
     final group = _commandGroup;
     if (group == null) {
@@ -518,6 +522,10 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
   }
 
   void _onWheelStart(Offset p) {
+    if (widget.quickActions.isEmpty) {
+      _snack('Нет быстрых действий — добавьте их в настройках');
+      return;
+    }
     if (widget.controller.selection != null) widget.controller.clearSelection();
     HapticFeedback.mediumImpact();
     setState(() {
@@ -615,7 +623,7 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(text)));
 
   void _runQuickAction(int index) {
-    final action = QuickActionsConfig.actions[index];
+    final action = widget.quickActions[index];
     HapticFeedback.lightImpact();
     switch (action.kind) {
       case QuickActionKind.send:

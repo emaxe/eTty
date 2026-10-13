@@ -9,11 +9,13 @@ import 'package:xterm/xterm.dart' as xterm;
 
 import 'package:mobile/app/providers/connection_providers.dart';
 import 'package:mobile/app/providers/host_keys_provider.dart';
+import 'package:mobile/app/providers/quick_actions_providers.dart';
 import 'package:mobile/app/providers/quick_commands_providers.dart';
 import 'package:mobile/app/ssh_connector.dart';
 import 'package:mobile/app/theme/etty_colors.dart';
 import 'package:mobile/app/theme/etty_theme.dart';
 import 'package:mobile/data/connection_store.dart';
+import 'package:mobile/core/config/quick_actions_config.dart';
 import 'package:mobile/domain/attachment_upload.dart';
 import 'package:mobile/domain/lifecycle_controller.dart';
 import 'package:mobile/domain/quick_commands.dart';
@@ -464,8 +466,8 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
         ? EttyPalette.dark
         : EttyPalette.light;
     final terminalTheme = EttyTheme.terminalTheme(palette);
-    final commandGroups =
-        ref.watch(quickCommandsProvider).value ?? QuickCommandsDefaults.groups;
+    final quickActions = ref.watch(quickActionsProvider).value ?? QuickActionsConfig.defaultActions;
+    final commandGroups = ref.watch(quickCommandsProvider).value ?? QuickCommandsDefaults.groups;
 
     return Scaffold(
       appBar: AppBar(
@@ -524,6 +526,7 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
                           tab: tab,
                           theme: terminalTheme,
                           brightness: brightness,
+                          quickActions: quickActions,
                           commandGroups: commandGroups,
                           onAttach: _attachFile,
                         ),
@@ -543,6 +546,7 @@ class _TerminalTabView extends StatelessWidget {
     required this.tab,
     required this.theme,
     required this.brightness,
+    required this.quickActions,
     required this.commandGroups,
     required this.onAttach,
   });
@@ -550,6 +554,7 @@ class _TerminalTabView extends StatelessWidget {
   final _TerminalTab tab;
   final xterm.TerminalTheme theme;
   final Brightness brightness;
+  final List<QuickAction> quickActions;
   final List<QuickCommandGroup> commandGroups;
   final Future<void> Function() onAttach;
 
@@ -597,6 +602,7 @@ class _TerminalTabView extends StatelessWidget {
             scrollController: tab.scrollController,
             isTmux: tab.isTmux,
             write: tab.sendRaw,
+            quickActions: quickActions,
             commandGroups: commandGroups,
             onAttach: onAttach,
           ),

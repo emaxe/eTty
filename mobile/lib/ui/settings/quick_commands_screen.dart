@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/app/providers/quick_commands_providers.dart';
 import 'package:mobile/core/config/quick_actions_config.dart';
 import 'package:mobile/domain/quick_commands.dart';
+import 'package:mobile/ui/settings/settings_dialogs.dart';
 
 String _newId(String prefix) => '$prefix-${DateTime.now().microsecondsSinceEpoch}';
 
@@ -23,7 +24,7 @@ class QuickCommandsScreen extends ConsumerWidget {
         actions: [
           PopupMenuButton<String>(
             onSelected: (_) async {
-              final ok = await _confirm(
+              final ok = await confirmDialog(
                 context,
                 'Сбросить к стандартным?',
                 'Все свои группы и команды будут заменены примерами.',
@@ -43,7 +44,7 @@ class QuickCommandsScreen extends ConsumerWidget {
               icon: const Icon(Icons.add),
               label: const Text('Группа'),
               onPressed: () async {
-                final label = await _promptText(context, 'Новая группа', 'Название');
+                final label = await promptTextDialog(context, 'Новая группа', 'Название');
                 if (label == null) return;
                 await notifier.save([
                   ...groups,
@@ -77,7 +78,7 @@ class QuickCommandsScreen extends ConsumerWidget {
                         icon: const Icon(Icons.edit_outlined),
                         tooltip: 'Переименовать',
                         onPressed: () async {
-                          final label = await _promptText(
+                          final label = await promptTextDialog(
                             context,
                             'Переименовать группу',
                             'Название',
@@ -93,7 +94,7 @@ class QuickCommandsScreen extends ConsumerWidget {
                         icon: const Icon(Icons.delete_outline),
                         tooltip: 'Удалить',
                         onPressed: () async {
-                          final ok = await _confirm(
+                          final ok = await confirmDialog(
                             context,
                             'Удалить группу «${group.label}»?',
                             'Вместе с её командами.',
@@ -194,51 +195,6 @@ class QuickCommandGroupScreen extends ConsumerWidget {
             ),
     );
   }
-}
-
-Future<bool> _confirm(BuildContext context, String title, String body) async {
-  final result = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: Text(body),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Да')),
-      ],
-    ),
-  );
-  return result ?? false;
-}
-
-Future<String?> _promptText(
-  BuildContext context,
-  String title,
-  String hint, {
-  String initial = '',
-}) {
-  final controller = TextEditingController(text: initial);
-  return showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        decoration: InputDecoration(labelText: hint),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
-        FilledButton(
-          onPressed: () {
-            final value = controller.text.trim();
-            Navigator.pop(context, value.isEmpty ? null : value);
-          },
-          child: const Text('Сохранить'),
-        ),
-      ],
-    ),
-  );
 }
 
 /// (подпись, текст) или `null` при отмене/пустых полях.

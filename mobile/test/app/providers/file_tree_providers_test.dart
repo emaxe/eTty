@@ -27,6 +27,12 @@ class _FakeSettingsStore implements AppSettingsStore {
 
   @override
   Future<void> setQuickCommandsJson(String json) async {}
+
+  @override
+  Future<String?> getQuickActionsJson() async => null;
+
+  @override
+  Future<void> setQuickActionsJson(String json) async {}
 }
 
 void main() {

@@ -16,6 +16,12 @@ class _FakeStore implements AppSettingsStore {
   Future<void> setQuickCommandsJson(String value) async => json = value;
 
   @override
+  Future<String?> getQuickActionsJson() async => null;
+
+  @override
+  Future<void> setQuickActionsJson(String json) async {}
+
+  @override
   Future<bool> getBiometricLockEnabled() async => false;
 
   @override

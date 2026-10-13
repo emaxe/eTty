@@ -39,19 +39,27 @@ void main() {
     });
 
     test('у каждого действия есть данные, слэш-команды без Enter', () {
-      for (final a in QuickActionsConfig.actions) {
+      for (final a in QuickActionsConfig.defaultActions) {
         if (a.kind == QuickActionKind.send) expect(a.data, isNotEmpty);
         if (a.data.startsWith('/')) expect(a.data.contains('\r'), isFalse);
       }
     });
 
     test('в колесе есть Esc и вложение файла', () {
-      final byId = {for (final a in QuickActionsConfig.actions) a.id: a};
+      final byId = {for (final a in QuickActionsConfig.defaultActions) a.id: a};
       expect(byId['esc']!.data, '\x1b');
       expect(byId['ctrl-o']!.data, '\x0f');
       expect(byId['ctrl-d']!.data, '\x04');
       expect(byId['ctrl-l']!.data, '\x0c');
       expect(byId['attach']!.kind, QuickActionKind.attach);
+    });
+
+    test('каталог: уникальные id, содержит набор по умолчанию', () {
+      final ids = [for (final a in QuickActionsConfig.catalog) a.id];
+      expect(ids.toSet().length, ids.length);
+      for (final a in QuickActionsConfig.defaultActions) {
+        expect(ids, contains(a.id));
+      }
     });
   });
 }
