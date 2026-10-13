@@ -332,6 +332,18 @@ mobile/                      — Flutter-приложение (iOS/Android): SSH
 - Удалённая ФС (`SshFsProvider`), редактор (`re_editor`), панель tmux-сессий сервера,
   биометрическая блокировка (`local_auth`), импорт профилей `.ettyx` (общий с десктопом
   PBKDF2 + AES-256-GCM формат)
+- **Жесты терминала** (`ui/terminal/terminal_gestures.dart`) — скролл, свайп двумя пальцами
+  (стрелки), тап (клик мышью в TUI), long-press (выделение). На alternate screen истории tmux нет,
+  поэтому прокрутка транслируется в `PgUp`/`PgDn` (шаг — `TerminalGestureConfig.altBufferPageLines`)
+- **Колесо быстрых действий** и **колесо своих команд** — круговые меню по долгому тапу и двойному
+  тапу двумя пальцами (`ui/terminal/quick_action_wheel.dart`); состав/порядок редактируются в
+  Настройки → «Быстрые действия» / «Быстрые команды» (`ui/settings/quick_actions_screen.dart`,
+  `quick_commands_screen.dart`), конфиг — `core/config/quick_actions_config.dart`,
+  домены — `domain/quick_actions.dart` / `domain/quick_commands.dart`
+- **Вложение фото/файла** — `domain/attachment_upload.dart` грузит выбранный файл на сервер
+  в `$TMPDIR/etty-paste/` и вставляет путь в терминал
+- **Панель клавиш** (`ui/terminal/key_bar.dart`) — Esc/Tab/стрелки/модификаторы + Shift+Enter
+  (kitty-последовательность `\x1b[13;2u`)
 - Иконка/splash генерируются из desktop-иконки (`build/icon.png`) через `flutter_launcher_icons` /
   `flutter_native_splash` (`mobile/assets/icon/`, конфиг — в `mobile/pubspec.yaml`)
 

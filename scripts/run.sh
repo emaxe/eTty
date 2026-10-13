@@ -38,7 +38,7 @@ print_header() {
                   |___/
 ART
   printf "${RESET}"
-  printf "  ${DIM}v$(node -p "require('$PROJECT_ROOT/package.json').version" 2>/dev/null || echo '0.1.0')${RESET}  ${DIM}·${RESET}  ${DIM}Terminal wrapper application${RESET}\n"
+  printf "  ${DIM}v$(node -p "require('$PROJECT_ROOT/package.json').version" 2>/dev/null || echo '0.1.0')${RESET}  ${DIM}·${RESET}  ${DIM}Modern Electron terminal emulator${RESET}\n"
   echo ""
   hr
   echo ""
