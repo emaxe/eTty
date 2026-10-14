@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Mobile: биометрическая блокировка на Android** — `MainActivity` теперь `FlutterFragmentActivity`
+  (требование `local_auth`); раньше диалог отпечатка не открывался и войти в приложение было нельзя.
+
 ## [0.6.0] - 2026-10-13
 
 ### Added

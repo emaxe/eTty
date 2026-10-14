@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:local_auth/local_auth.dart';
 
 /// Узкий контракт над биометрической аутентификацией ОС (REQ-18) — швом для тестов, та же идея,
@@ -27,7 +28,8 @@ class LocalAuthBiometricGate implements BiometricGate {
       final supported = await _auth.isDeviceSupported();
       final canCheck = await _auth.canCheckBiometrics;
       return supported && canCheck;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('BiometricGate.isAvailable: $e');
       return false;
     }
   }
@@ -42,7 +44,8 @@ class LocalAuthBiometricGate implements BiometricGate {
         // без этого authenticate() падает с ошибкой вместо повторной попытки на возврате.
         persistAcrossBackgrounding: true,
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('BiometricGate.authenticate: $e');
       return false;
     }
   }
