@@ -63,7 +63,7 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 - **Taken over from elsewhere** — if another client attaches to the session, the tab shows a "detached" overlay rather than a generic error
 - **tmux not installed?** — eTty detects the server's package manager and offers to type the install command into the tab's own terminal; nothing runs without your confirmation, and any `sudo` password is entered by you
 - **Configurable socket** — per-connection tmux socket (`-L`, default `etty`; empty uses the server's default)
-- **Running agent restored** — a restored tmux tab whose session still has a CLI agent running (claude, opencode, …) brings back that agent's quick-reply panel; if the agent has since exited, the panel stays hidden
+- **Running agent restored** — a restored tmux tab whose session still has a CLI agent running (claude, opencode, …) brings back that agent's quick-reply panel by inspecting the full process command line (recognizing versioned native binaries like Claude Code); tab switching resyncs active agent detection
 
 ### Command History
 
@@ -137,7 +137,7 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 - **Proxy support** — configure HTTP proxy for all agent commands
 - **Customizable quick replies** — define agent-specific quick commands (e.g., `/clear`, `Ok`, `Продолжай`) via Settings; drag-and-drop to reorder
 - **Quick reply groups** — bundle related replies under a named group; the group collapses into a single status-bar button that opens a dropdown menu with the matching replies
-- **Double-click to select active agent** — when the terminal is busy but the active agent wasn't auto-detected (e.g., launched manually or via another app), double-click any agent button in the status bar to manually assign it as active. This enables that agent's quick-reply buttons.
+- **Double-click or right-click to select active agent** — when the terminal is busy but the active agent wasn't auto-detected (e.g., launched manually or via another app), double-click any agent button in the status bar to manually assign it as active. Right-clicking an agent button opens a context menu to launch the agent or select it as already running (especially useful in remote/SSH tabs where busy state may not be reported).
 - **Per-agent Shift+Enter mode** — configure how Shift+Enter behaves for each AI agent (Kitty protocol, newline, or Ctrl+J). Qwen and Agento default to Ctrl+J mode; others fall back to the default mode below.
 
 ### Settings
@@ -181,7 +181,7 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 - **Session picker** — list and open the server's tmux sessions, or start a new one in a folder chosen in the file tree
 - **Remote file tree and editor** — browse (including hidden files), edit and share files over SFTP
 - **Touch gestures in the terminal** — one-finger scroll (tmux history, mouse wheel for TUI apps — Page Up/Down on full-screen TUIs, local scrollback), two-finger swipe sends an arrow key, tap clicks in mouse-aware TUIs (htop, mc, vim), long-press selects text, two-finger long-press opens a quick-action wheel (Ctrl+C, Esc, Shift+Tab, Ctrl+O, Ctrl+D, Ctrl+L, attach a photo/file), two-finger double-tap opens a two-level wheel of your own commands (Settings → Quick commands); a key row above the keyboard has Esc, Tab, arrows, modifiers and Shift+Enter
-- **Security** — biometric lock; secrets in the OS secure storage; import of desktop connections via `.ettyx`
+- **Security** — biometric lock (Android `FlutterFragmentActivity` / iOS Face ID/Touch ID); secrets in the OS secure storage; import of desktop connections via `.ettyx`
 
 Build and run instructions: [mobile/README.md](mobile/README.md).
 

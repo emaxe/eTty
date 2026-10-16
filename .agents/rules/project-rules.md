@@ -138,6 +138,8 @@ src/
                                  до ответа pty:create)
     ssh-session-name.js      — buildSessionNameBase()/pickFreeSessionName() — имена tmux-сессий,
                                  общие для панели (ssh-panel.js) и наследования вкладки по "+"
+    agent-command-match.js   — resolveAgentIdByProcess(): сопоставление процесса (команда + argv)
+                                 с ИИ-агентом eTty (распознавание нативного Claude Code, node-обёрток)
 out/                         — артефакты electron-vite build (НЕ редактировать вручную)
 dist/                        — артефакты electron-builder (НЕ коммитить)
 build/                       — ресурсы для сборки (иконки, entitlements)
@@ -273,7 +275,7 @@ mobile/                      — Flutter-приложение (iOS/Android): SSH
 - Кастомные агенты (label, launchCommand, опциональный checkCommand) — доступны наравне со встроенными
 - Запуск агента в активный терминал одним кликом
 - Подсветка активного агента и блокировка кнопок при busy
-- Double-click — ручное назначение активного агента, когда busy без авто-детекта
+- Double-click — ручное назначение активного агента, когда busy без авто-детекта; ПКМ — контекстное меню («Запустить» / «уже запущен — быстрые команды», актуально для SSH-вкладок)
 - Force-disable агентов в настройках
 - Прокси URL для ИИ-агентов (с toggle в статус-баре)
 - Quick replies — настраиваемые быстрые команды per-agent, drag-and-drop reorder, группировка (дерево с DnD в настройках, группа — кнопка с выпадающим меню в статус-баре, видимость наследуется от ответов)
@@ -365,7 +367,7 @@ mobile/                      — Flutter-приложение (iOS/Android): SSH
 | `search:*` | query, cancel | Поиск по проекту |
 | `node-version:*` | resolve, list-installed, list-remote, install, uninstall, detect-manager, install-manager (все с `ctx`) | Менеджер версий Node.js |
 | `clipboard:upload-image` | upload-image | Загрузка изображения из буфера на SSH-хост (вставка картинок в SSH-вкладках) |
-| `ssh:*` | list, save, delete, reorder, fs-ready (push), fs-retry, session-state (push), tmux-missing (push), master-acquire, master-release, sessions-list, session-kill, session-rename | SSH-подключения + готовность удалённой ФС + ресинк tmux-сессии + панель tmux-сессий (SshConnectionMaster) |
+| `ssh:*` | list, save, delete, reorder, fs-ready (push), fs-retry, session-state (push), session-resync, tmux-missing (push), master-acquire, master-release, sessions-list, session-kill, session-rename | SSH-подключения + готовность удалённой ФС + ресинк tmux-сессии + панель tmux-сессий (SshConnectionMaster) |
 
 ## Команды
 
