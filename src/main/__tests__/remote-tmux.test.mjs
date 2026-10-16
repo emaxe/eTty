@@ -143,6 +143,16 @@ check('parseTmuxSessionState — разбирает cwd/pane_path/command', () =
   assert(state.currentCommand === 'vim', 'currentCommand не совпал')
 })
 
+check('parseTmuxSessionState — 4-е поле: argv foreground-процесса (в т.ч. с "|")', () => {
+  const state = parseTmuxSessionState('/p|/p|2.1.19|/home/u/.local/share/claude/versions/2.1.19 --resume | cat\n')
+  assert(state.currentCommand === '2.1.19', 'currentCommand не совпал')
+  assert(state.currentArgs === '/home/u/.local/share/claude/versions/2.1.19 --resume | cat', 'currentArgs не совпал')
+})
+
+check('parseTmuxSessionState — старый 3-польный вывод: currentArgs пустой', () => {
+  assert(parseTmuxSessionState('/p|/p|vim\n').currentArgs === '', 'currentArgs должен быть пустым')
+})
+
 check('parseTmuxSessionState — пустой вывод (нет сокета/сессии) — null', () => {
   assert(parseTmuxSessionState('') === null, 'пустой вывод должен давать null')
 })

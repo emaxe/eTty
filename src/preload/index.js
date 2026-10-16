@@ -99,6 +99,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sshImportConnections: (opts) => ipcRenderer.invoke(IPC_CHANNELS.SSH_IMPORT_CONNECTIONS, opts),
   onSshFsReady: (cb) => onIPC(IPC_CHANNELS.SSH_FS_READY, (_, info) => cb(info)),
   sshFsRetry: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.SSH_FS_RETRY, sessionId),
+  sshSessionResync: (pid) => ipcRenderer.invoke(IPC_CHANNELS.SSH_SESSION_RESYNC, pid),
   onSshSessionState: (cb) => onIPC(IPC_CHANNELS.SSH_SESSION_STATE, (_, info) => cb(info)),
   onSshTmuxMissing: (cb) => onIPC(IPC_CHANNELS.SSH_TMUX_MISSING, (_, info) => cb(info)),
   sshMasterAcquire: (connectionId) => ipcRenderer.invoke(IPC_CHANNELS.SSH_MASTER_ACQUIRE, connectionId),

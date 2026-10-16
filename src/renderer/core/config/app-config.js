@@ -32,6 +32,8 @@ export const APP_CONFIG = Object.freeze({
   // Сколько ждать первого OSC 7/133 от инжектированных remote-хуков, прежде чем считать
   // их не сработавшими и включить оптимистичный busy (см. connectSshTab в index.js)
   SSH_HOOK_DETECT_TIMEOUT_MS: 8000,
+  // Не чаще одного повторного ресинка состояния tmux-панели на вкладку (переключение вкладок)
+  SSH_SESSION_RESYNC_MIN_INTERVAL_MS: 15000,
   // Порог «быстрого падения» PTY сразу после подключения — признак конфликта remote-команды
   // с RemoteCommand/ForceCommand на сервере, требующий реконнекта без инжекта хуков
   SSH_HOOK_FAIL_FAST_MS: 3000,

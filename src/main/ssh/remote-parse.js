@@ -52,15 +52,19 @@ function tmuxSupportsPassthrough(tmuxVersionLine) {
 const SSH_SESSION_MIN_PASSTHROUGH = [3, 3]
 
 /**
- * @param {string} stdout — вывод TMUX_SESSION_STATE_SCRIPT: `<pane_current_path>|<pane_path>|<pane_current_command>`
- * @returns {{ currentPath: string, pathFromOsc: string, currentCommand: string } | null}
+ * @param {string} stdout — вывод TMUX_SESSION_STATE_SCRIPT:
+ *   `<pane_current_path>|<pane_path>|<pane_current_command>|<foreground args>`
+ *   (старый 3-польный формат без args тоже разбирается)
+ * @returns {{ currentPath: string, pathFromOsc: string, currentCommand: string, currentArgs: string } | null}
  */
 export function parseTmuxSessionState(stdout) {
   const line = stdout.split('\n')[0]
   if (!line) return null
-  const [currentPath = '', pathFromOsc = '', currentCommand = ''] = line.split('|')
+  const [currentPath = '', pathFromOsc = '', currentCommand = '', ...argsParts] = line.split('|')
+  // args может содержать `|` — склеиваем остаток обратно
+  const currentArgs = argsParts.join('|').trim()
   if (!currentPath && !pathFromOsc && !currentCommand) return null
-  return { currentPath, pathFromOsc, currentCommand }
+  return { currentPath, pathFromOsc, currentCommand, currentArgs }
 }
 
 /**

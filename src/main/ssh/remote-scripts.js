@@ -197,14 +197,23 @@ export const POLL_MTIME_BSD_SCRIPT = 'for d in "$@"; do stat -f %m -- "$d" 2>/de
 
 /**
  * Персистентные сессии (tmux, Этап 2): `$1` — сокет (`-L`, пусто = сокет по умолчанию),
- * `$2` — имя сессии. Печатает одну строку `<pane_current_path>|<pane_path>|<pane_current_command>`
- * либо ничего, если сокета/сессии нет (не ошибка — обрабатывается по коду возврата на стороне
- * вызывающего). `pane_path` — то, что tmux сам забрал из НАШЕГО OSC 7 (см. remote-shell-hooks.js) —
- * рабочий фолбэк для ресинка cwd даже без DCS-passthrough/на tmux < 3.3.
+ * `$2` — имя сессии. Печатает одну строку
+ * `<pane_current_path>|<pane_path>|<pane_current_command>|<foreground args>` либо ничего, если
+ * сокета/сессии нет (не ошибка — обрабатывается по коду возврата на стороне вызывающего).
+ * `pane_path` — то, что tmux сам забрал из НАШЕГО OSC 7 (см. remote-shell-hooks.js) — рабочий
+ * фолбэк для ресинка cwd даже без DCS-passthrough/на tmux < 3.3.
+ * `pane_current_command` — лишь имя процесса (у нативного Claude Code это номер версии, у
+ * npm-установки — `node`), поэтому дополнительно берём полный argv foreground-процесса tty панели
+ * (`pid == tpgid` в `ps -t`, работает на Linux и macOS) — по нему агент опознаётся надёжно.
+ * Последнее поле — args — может содержать `|`, поэтому идёт последним.
  */
-export const TMUX_SESSION_STATE_SCRIPT =
-  's=$1; n=$2; [ -n "$s" ] && o="-L $s" || o=; ' +
-  'tmux $o display-message -p -t "$n" "#{pane_current_path}|#{pane_path}|#{pane_current_command}" 2>/dev/null'
+export const TMUX_SESSION_STATE_SCRIPT = [
+  's=$1; n=$2; [ -n "$s" ] && o="-L $s" || o=',
+  'out=$(tmux $o display-message -p -t "$n" "#{pane_current_path}|#{pane_path}|#{pane_current_command}|#{pane_tty}" 2>/dev/null) || exit 1',
+  'tty=${out##*|}; out=${out%|*}',
+  "a=$(ps -t \"${tty#/dev/}\" -o pid= -o tpgid= -o args= 2>/dev/null | awk '$1==$2 { $1=\"\"; $2=\"\"; sub(/^ +/,\"\"); print; exit }')",
+  "printf '%s|%s\\n' \"$out\" \"$a\""
+].join('; ')
 
 /**
  * Список tmux-сессий на сокете `$1` (пусто = сокет по умолчанию) — панель показывает ВСЕ

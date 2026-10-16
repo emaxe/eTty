@@ -119,6 +119,7 @@ export class ElectronApiAdapter {
   sshImportConnections(opts) { return this._api.sshImportConnections(opts) }
   onSshFsReady(fn) { return this._on('sshFsReady', fn) }
   sshFsRetry(sessionId) { return this._api.sshFsRetry(sessionId) }
+  sshSessionResync(pid) { return this._api.sshSessionResync(pid) }
   onSshSessionState(fn) { return this._on('sshSessionState', fn) }
   onSshTmuxMissing(fn) { return this._on('sshTmuxMissing', fn) }
   sshMasterAcquire(connectionId) { return this._api.sshMasterAcquire(connectionId) }

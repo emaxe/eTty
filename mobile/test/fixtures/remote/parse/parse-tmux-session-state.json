@@ -5,7 +5,8 @@
     "expected": {
       "currentPath": "/home/dev/project",
       "pathFromOsc": "/home/dev/project",
-      "currentCommand": "zsh"
+      "currentCommand": "zsh",
+      "currentArgs": ""
     }
   },
   {
@@ -14,7 +15,8 @@
     "expected": {
       "currentPath": "onlypath",
       "pathFromOsc": "",
-      "currentCommand": ""
+      "currentCommand": "",
+      "currentArgs": ""
     }
   },
   {
@@ -33,7 +35,8 @@
     "expected": {
       "currentPath": "/a",
       "pathFromOsc": "/b",
-      "currentCommand": "vim"
+      "currentCommand": "vim",
+      "currentArgs": ""
     }
   }
 ]

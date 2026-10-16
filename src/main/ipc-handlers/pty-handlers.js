@@ -13,6 +13,35 @@ import log from 'electron-log'
 const IS_WIN = process.platform === 'win32'
 
 /**
+ * Спрашивает у tmux состояние панели (cwd, foreground-процесс) и пушит `ssh:session-state`.
+ * Вызывается сразу после attach и повторно по запросу renderer (`ssh:session-resync`) — если первый
+ * ресинк не удался (tmux не в PATH, таймаут), вкладка с уже запущенным агентом иначе так и
+ * осталась бы без панели быстрых команд.
+ * @param {number} pid
+ * @returns {Promise<boolean>} true — состояние получено и отправлено
+ */
+export async function resyncTmuxSessionState(pid, { sshSessionRegistry, webContents }) {
+  const session = sshSessionRegistry.get(pid)
+  const target = sshSessionRegistry.getTmuxTarget(pid)
+  if (!session || !target) return false
+  try {
+    const result = await session.channel.exec(
+      TMUX_SESSION_STATE_SCRIPT,
+      [target.socketName, target.sessionName],
+      { timeoutMs: SSH_FS_CONFIG.OP_TIMEOUT_MS }
+    )
+    if (!sshSessionRegistry.get(pid) || result.code !== 0) return false
+    const state = parseTmuxSessionState(result.stdout.toString('utf-8'))
+    if (!state || webContents.isDestroyed()) return false
+    webContents.send(IPC_CHANNELS.SSH_SESSION_STATE, { pid, ...state })
+    return true
+  } catch (e) {
+    log.warn('[PtyHandlers] tmux session-state resync failed', pid, e.message)
+    return false
+  }
+}
+
+/**
  * Ждёт поднятия ControlMaster для сессии `pid`, гонит одноразовый probe (ОС/флавор `stat`/
  * поддержка `find -print0`, см. `ssh/remote-scripts.js`), поднимает `SshFsProvider` и пушит
  * `ssh:fs-ready` в renderer. Переиспользуется и при первом подключении (см. `watchSshFsReadiness`),
@@ -41,15 +70,8 @@ export async function establishSshFs(pid, { sshSessionRegistry, webContents, per
   // состояние до следующего промпта (может быть через часы), см. план, Этап 2. Не блокирует и
   // не зависит от FS-проба ниже — отдельная операция по тому же каналу.
   if (persistence === 'tmux' && sessionName) {
-    session.channel
-      .exec(TMUX_SESSION_STATE_SCRIPT, [socketName || '', sessionName], { timeoutMs: SSH_FS_CONFIG.OP_TIMEOUT_MS })
-      .then((result) => {
-        if (!sshSessionRegistry.get(pid) || result.code !== 0) return
-        const state = parseTmuxSessionState(result.stdout.toString('utf-8'))
-        if (!state || webContents.isDestroyed()) return
-        webContents.send(IPC_CHANNELS.SSH_SESSION_STATE, { pid, ...state })
-      })
-      .catch((e) => log.warn('[PtyHandlers] tmux session-state resync failed', pid, e.message))
+    sshSessionRegistry.setTmuxTarget(pid, { socketName: socketName || '', sessionName })
+    resyncTmuxSessionState(pid, { sshSessionRegistry, webContents })
   }
 
   const probeResult = await session.channel.exec(PROBE_SCRIPT, [], { timeoutMs: SSH_FS_CONFIG.PROBE_TIMEOUT_MS })

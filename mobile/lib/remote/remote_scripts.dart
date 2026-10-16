@@ -176,10 +176,15 @@ abstract final class RemoteScripts {
       'for d in "\$@"; do stat -f %m -- "\$d" 2>/dev/null || echo x; done';
 
   /// Персистентные сессии (tmux): `$1` — сокет (`-L`, пусто = сокет по умолчанию), `$2` — имя
-  /// сессии. Печатает `<pane_current_path>|<pane_path>|<pane_current_command>` либо ничего.
-  /// Разбирается `RemoteParse.parseTmuxSessionState`.
-  static final String tmuxSessionStateScript = 's=\$1; n=\$2; [ -n "\$s" ] && o="-L \$s" || o=; '
-      'tmux \$o display-message -p -t "\$n" "#{pane_current_path}|#{pane_path}|#{pane_current_command}" 2>/dev/null';
+  /// сессии. Печатает `<pane_current_path>|<pane_path>|<pane_current_command>|<foreground args>`
+  /// либо ничего. Разбирается `RemoteParse.parseTmuxSessionState`.
+  static final String tmuxSessionStateScript = [
+    's=\$1; n=\$2; [ -n "\$s" ] && o="-L \$s" || o=',
+    'out=\$(tmux \$o display-message -p -t "\$n" "#{pane_current_path}|#{pane_path}|#{pane_current_command}|#{pane_tty}" 2>/dev/null) || exit 1',
+    'tty=\${out##*|}; out=\${out%|*}',
+    'a=\$(ps -t "\${tty#/dev/}" -o pid= -o tpgid= -o args= 2>/dev/null | awk \'\$1==\$2 { \$1=""; \$2=""; sub(/^ +/,""); print; exit }\')',
+    r"printf '%s|%s\n' " '"\$out" "\$a"',
+  ].join('; ');
 
   /// Список tmux-сессий на сокете `$1` (пусто = сокет по умолчанию). `exit 127` — tmux не
   /// установлен. Разбирается `RemoteParse.parseTmuxSessions`.

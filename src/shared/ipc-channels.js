@@ -118,6 +118,8 @@ export const IPC_CHANNELS = Object.freeze({
   // Персистентные удалённые сессии (tmux) — ресинк cwd/busy после attach, когда OSC 7/133
   // не проходят наружу сами (см. remote-shell-hooks.js, Этап 2)
   SSH_SESSION_STATE: 'ssh:session-state',
+  // Повторный запрос ресинка (renderer → main): ответ приходит тем же событием SSH_SESSION_STATE
+  SSH_SESSION_RESYNC: 'ssh:session-resync',
 
   // Постоянные сессии запрошены (persistence:'tmux'), но tmux на сервере не найден — push с
   // готовой командой установки (см. ssh/tmux-install.js), если менеджер пакетов распознан

@@ -12,6 +12,8 @@ import { buildQuickReplyTree } from './features/quick-replies/quick-replies-mode
  * - Двойной клик при занятом терминале (busy) без активного агента — назначает агента активным
  *   и показывает его быстрые команды (quick replies). Это нужно когда агент запущен вручную
  *   или через другое приложение, и eTty не смогла авто-определить его через OSC 133.
+ * - ПКМ по кнопке — меню «Запустить» / «Агент уже запущен»: явно назначает агента активным
+ *   независимо от busy (SSH/tmux-вкладка с уже работающим агентом, где busy не определился)
  * - Когда агент активен, остальные кнопки скрываются
  * - Кнопки агентов в busy-состоянии имеют класс status-agent-busy (а не disabled),
  *   чтобы click-события доходили для double-click обработки.
@@ -45,6 +47,7 @@ export class StatusBar {
     this._customAgentsById = new Map()
     this._activeTabBusy = false
     this._activeAgentId = null
+    this._isRemote = false
     // true, когда busy определён оптимистично (SSH-вкладка без честного OSC 133 —
     // см. launchAgentInActiveTab/selectAgentAsActive в index.js), а не через реальный сигнал.
     this._busyOptimistic = false
@@ -144,7 +147,8 @@ export class StatusBar {
     this._updateAgentButtons()
   }
 
-  setTerminalState({ isBusy, activeAgentId, busyOptimistic = false }) {
+  setTerminalState({ isBusy, activeAgentId, busyOptimistic = false, isRemote = false }) {
+    this._isRemote = !!isRemote
     this._activeTabBusy = !!isBusy
     this._activeAgentId = activeAgentId || null
     this._busyOptimistic = !!busyOptimistic
@@ -202,7 +206,8 @@ export class StatusBar {
           button.title = 'Терминал занят'
         }
       } else {
-        button.title = `Запустить ${agentStatus?.label || button.textContent}`
+        button.title = `Запустить ${agentStatus?.label || button.textContent}` +
+          (this._isRemote ? ' (ПКМ — агент уже запущен)' : '')
       }
 
     }
@@ -309,6 +314,29 @@ export class StatusBar {
       // Single-click: запуск агента только если терминал свободен
       if (button.disabled || button.classList.contains('status-agent-busy')) return
       this._onLaunchAgent?.(agentId)
+    }, { signal })
+
+    // ПКМ: явный выбор уже запущенного агента, независимо от busy
+    button.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      const agentId = button.dataset.agentId
+      if (!agentId || button.disabled) return
+      const label = this._agentsById.get(agentId)?.label || button.textContent
+      const rect = button.getBoundingClientRect()
+      const items = [{
+        label: `Запустить ${label}`,
+        disabled: this._activeTabBusy,
+        action: () => this._onLaunchAgent?.(agentId)
+      }]
+      // Выбор агента без запуска имеет смысл, если вкладка занята или удалённая (там busy
+      // может не определиться) — на свободной локальной вкладке выбирать нечего
+      if (this._activeTabBusy || this._isRemote) {
+        items.push({
+          label: `${label} уже запущен — быстрые команды`,
+          action: () => this._onSelectAgent?.(agentId)
+        })
+      }
+      this._contextMenu.show(items, Math.round(rect.left), Math.round(rect.top - 4), { placement: 'above' })
     }, { signal })
   }
 

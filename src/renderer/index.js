@@ -44,6 +44,7 @@ import { diagnostics } from './core/diagnostics.js'
 import { GitStatusService } from './services/git-status-service.js'
 import { buildSessionNameBase, pickFreeSessionName } from '../shared/ssh-session-name.js'
 import { resolveSshPersistence } from '../shared/ssh-persistence.js'
+import { resolveAgentIdByProcess as matchAgentByProcess } from '../shared/agent-command-match.js'
 
 let currentThemeName = 'dark'
 let loadedThemes = THEMES
@@ -358,27 +359,27 @@ async function init() {
   }
 
   /**
-   * Сопоставляет foreground-команду tmux-панели (`pane_current_command`) с id агента eTty.
+   * Сопоставляет foreground-процесс tmux-панели (`pane_current_command` + argv) с id агента eTty.
    * Нужно для восстановленных tmux-вкладок: OSC 133 при re-attach к живой сессии не
    * переизлучается (шелл не перезапускается), поэтому наличие запущенного агента выводим
-   * из имени текущей команды панели.
-   * @param {string} command
+   * из текущего процесса панели. Само сопоставление — shared/agent-command-match.js.
+   * @param {{ command: string, args?: string }} proc
    * @returns {string|null}
    */
-  const resolveAgentIdByCommand = (command) => {
-    const name = String(command || '').trim().split(/\s+/)[0].split('/').pop()
-    if (!name) return null
-    for (const agent of SUPPORTED_AGENTS) {
-      if (agent.id === name) return agent.id
+  const resolveAgentIdByProcess = (proc) => {
+    const candidates = new Map()
+    const add = (id, base) => {
+      if (!id) return
+      const entry = candidates.get(id) || { id, bases: [] }
+      if (base) entry.bases.push(base)
+      candidates.set(id, entry)
     }
-    for (const agent of config.agents?.custom || []) {
-      if (agent?.id === name) return agent.id
-    }
+    for (const agent of SUPPORTED_AGENTS) add(agent.id)
+    for (const agent of config.agents?.custom || []) add(agent?.id)
     for (const [id, cmd] of agentCommands) {
-      const base = String(cmd).trim().split(/\s+/)[0].split('/').pop()
-      if (base && base === name) return id
+      add(id, String(cmd).trim().split(/\s+/)[0].split('/').pop())
     }
-    return null
+    return matchAgentByProcess({ ...proc }, [...candidates.values()])
   }
 
   const focusActiveTerminal = () => {
@@ -444,7 +445,8 @@ async function init() {
     statusBar.setTerminalState({
       isBusy: !!tab?.isBusy,
       activeAgentId: tab?.activeAgentId || null,
-      busyOptimistic: !!(tab?._busyOptimistic || (tab?.isBusy && tab?._oscMaybeLost))
+      busyOptimistic: !!(tab?._busyOptimistic || (tab?.isBusy && tab?._oscMaybeLost)),
+      isRemote: !!tab?.ssh
     })
   }
 
@@ -552,6 +554,13 @@ async function init() {
     syncStatusBarTerminalState()
     statusBar.updateNow()
     retargetGit(tab)
+    // Первый ресинк при attach мог не сработать — пока агент не опознан, спрашиваем ещё раз
+    // (ответ придёт в onSshSessionState). Троттлинг, чтобы не дёргать SSH при каждом переключении.
+    if (tab.ssh && tab._sshPersistent && tab.pid != null && !tab.activeAgentId
+      && Date.now() - (tab._sshResyncAt || 0) > APP_CONFIG.SSH_SESSION_RESYNC_MIN_INTERVAL_MS) {
+      tab._sshResyncAt = Date.now()
+      api.sshSessionResync(tab.pid).catch(() => {})
+    }
     // Lazy connect: восстановленная SSH-вкладка подключается при первом переключении на неё.
     // Не срабатывает во время пакетного восстановления вкладок (isRestoringTabs) — иначе
     // каждая промежуточная addTab()→switchTo() открыла бы реальное SSH-соединение.
@@ -1363,7 +1372,7 @@ async function init() {
   // рабочий фолбэк, даже когда `markSshHooksAlive` ниже не срабатывает (tmux < 3.3/passthrough
   // недоступен) — тогда `_sshHooksMissing` намеренно остаётся true, чтобы не терять существующий
   // оптимистичный busy-фолбэк.
-  api.onSshSessionState(({ pid, currentPath, pathFromOsc, currentCommand }) => {
+  api.onSshSessionState(({ pid, currentPath, pathFromOsc, currentCommand, currentArgs }) => {
     const tab = tabBar.tabs.find(t => t.pid === pid)
     if (!tab || !tab.ssh) return
 
@@ -1396,7 +1405,7 @@ async function init() {
       tab._busyOptimistic = true
       // Восстановление агента: если панель занята известным агентом eTty — назначаем его активным,
       // чтобы вернуть панель быстрых команд (StatusBar) после рестарта.
-      const inferredAgentId = resolveAgentIdByCommand(currentCommand)
+      const inferredAgentId = resolveAgentIdByProcess({ command: currentCommand, args: currentArgs })
       if (inferredAgentId) tab.activeAgentId = inferredAgentId
       tabBar._updateTabLabel(tab)
       if (tabBar.getActive() === tab) syncStatusBarTerminalState()

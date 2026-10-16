@@ -8,13 +8,13 @@ export class SshSessionRegistry {
   constructor() {
     /** @type {Map<number, { channel: import('./ssh-control-channel.js').SshControlChannel,
      *   caps: object|null, fsProvider: import('../fs/ssh-fs-provider.js').SshFsProvider|null,
-     *   connectionId: string|null }>} */
+     *   connectionId: string|null, tmuxTarget: { socketName: string, sessionName: string }|null }>} */
     this._sessions = new Map()
   }
 
   /** @param {string|null} connectionId — id подключения (ssh-store.js), см. `findLiveChannelFor()`. */
   register(pid, channel, connectionId = null) {
-    this._sessions.set(pid, { channel, caps: null, fsProvider: null, connectionId })
+    this._sessions.set(pid, { channel, caps: null, fsProvider: null, connectionId, tmuxTarget: null })
   }
 
   get(pid) {
@@ -34,6 +34,16 @@ export class SshSessionRegistry {
       if (session.connectionId === connectionId) return session.channel
     }
     return null
+  }
+
+  /** tmux-сокет/сессия вкладки — нужны для повторного ресинка состояния панели (см. pty-handlers.js). */
+  setTmuxTarget(pid, target) {
+    const session = this._sessions.get(pid)
+    if (session) session.tmuxTarget = target
+  }
+
+  getTmuxTarget(pid) {
+    return this._sessions.get(pid)?.tmuxTarget || null
   }
 
   setCaps(pid, caps) {

@@ -5,7 +5,7 @@ import { IPC_CHANNELS } from '../../shared/ipc-channels.js'
 import { SSH_SESSION_CONFIG } from '../../shared/ssh-session-config.js'
 import { TMUX_LIST_SESSIONS_SCRIPT, TMUX_KILL_SESSION_SCRIPT, TMUX_RENAME_SESSION_SCRIPT } from '../ssh/remote-scripts.js'
 import { parseTmuxSessions } from '../ssh/remote-parse.js'
-import { establishSshFs } from './pty-handlers.js'
+import { establishSshFs, resyncTmuxSessionState } from './pty-handlers.js'
 
 /** connectionId'ы, удержанные (acquire) каждым webContents — страховка на случай, если
  *  renderer перезагрузился/закрылся, не дождавшись парного ssh:master-release. */
@@ -114,6 +114,13 @@ export function registerSshHandlers(ipcMain, { sshStore, sshSessionRegistry, ssh
     }
 
     const ok = await establishSshFs(sessionId, { sshSessionRegistry, webContents: event.sender })
+    return { success: ok }
+  })
+
+  // Повторный ресинк состояния tmux-панели (cwd/foreground-процесс) — renderer зовёт при
+  // переключении на tmux-вкладку без опознанного агента. Результат приходит как ssh:session-state.
+  ipcMain.handle(IPC_CHANNELS.SSH_SESSION_RESYNC, async (event, pid) => {
+    const ok = await resyncTmuxSessionState(pid, { sshSessionRegistry, webContents: event.sender })
     return { success: ok }
   })
 
