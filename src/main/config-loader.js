@@ -21,6 +21,8 @@ export function getConfigDefaults() {
     },
     terminal: {
       promptStyle: 'default',
+      // Windows: auto | pwsh | powershell | cmd | gitbash | <путь к exe>; на macOS/Linux не используется
+      shell: 'auto',
       newTabPlacement: 'modifierAdjacent',
       tabSwitchHotkey: 'none',
       defaultKeyboardMode: 'kitty'

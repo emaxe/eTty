@@ -1,6 +1,7 @@
 import { ContextMenu } from './components/base/context-menu/context-menu.js'
 import { Icons } from './icons.js'
 import { isBinaryPath } from '../shared/binary-extensions.js'
+import { isRunnableFile } from './core/shell-commands.js'
 
 /**
  * Дерево файлов в sidebar. Lazy-load поддиректорий, контекстные меню,
@@ -117,8 +118,7 @@ export class FileTree {
       e.stopPropagation()
       e.preventDefault()
       const path = overlay.dataset.currentPath
-      const escaped = path.replace(/'/g, "'\\''")
-      this._bus.emit('filetree.shellCmd', `cd '${escaped}'\r`)
+      this._bus.emit('filetree.shellCmd', { type: 'cd', path })
       this._bus.emit('terminal.focus')
     })
 
@@ -127,9 +127,8 @@ export class FileTree {
       e.preventDefault()
       const path = overlay.dataset.currentPath
       const name = path.split(/[\\/]/).pop()
-      const cmd = this._getRunCmd(path, name)
-      if (cmd) {
-        this._bus.emit('filetree.shellCmd', cmd)
+      if (this._isRunnable(name)) {
+        this._bus.emit('filetree.shellCmd', { type: 'run', path, name })
         this._bus.emit('terminal.focus')
       }
     })
@@ -172,7 +171,7 @@ export class FileTree {
 
     const runBtn = this._hoverOverlay.querySelector('.tree-hover-run')
     const fileName = entry.path.split(/[\\/]/).pop()
-    runBtn.style.display = (!entry.isDirectory && this._getRunCmd(entry.path, fileName)) ? 'flex' : 'none'
+    runBtn.style.display = (!entry.isDirectory && this._isRunnable(fileName)) ? 'flex' : 'none'
 
     this._positionHoverOverlay(row)
     this._hoverOverlay.style.display = 'flex'
@@ -186,19 +185,9 @@ export class FileTree {
     row?.classList.remove('hovered')
   }
 
-  _getRunCmd(filePath, fileName) {
-    const platform = this._api.platform || 'darwin'
-    const dot = fileName.lastIndexOf('.')
-    if (dot === -1) return null
-    const ext = fileName.slice(dot).toLowerCase()
-    const unix = { '.sh': 'sh', '.bash': 'bash', '.zsh': 'zsh', '.fish': 'fish' }
-    const win  = { '.bat': null, '.cmd': null, '.ps1': 'powershell -File' }
-    const runners = platform === 'win32' ? win : unix
-    if (!(ext in runners)) return null
-    const runner = runners[ext]
-    if (runner === null) return `"${filePath}"\r`
-    const escaped = filePath.replace(/'/g, "'\\''")
-    return `${runner} '${escaped}'\r`
+  /** Можно ли запустить файл кнопкой Run (команду строит диалект оболочки вкладки — index.js). */
+  _isRunnable(fileName) {
+    return isRunnableFile(fileName, { remote: this._isRemote(), platform: this._api.platform || 'darwin' })
   }
 
   _setupModKeyListeners(signal) {
@@ -958,8 +947,7 @@ export class FileTree {
         if (this._bus) {
           this._bus.emit('filetree.openFile', entry.path)
         } else if (!this._isBusy) {
-          const escaped = entry.path.replace(/'/g, "'\\''")
-          this._bus.emit('filetree.shellCmd', `open '${escaped}'\n`)
+          this._bus.emit('filetree.shellCmd', { type: 'open', path: entry.path })
         }
       }
       if (this._fileOpenMode === 'single') {
@@ -1338,8 +1326,7 @@ export class FileTree {
       { label: 'Удалить', action: () => this._deletePaths(targets) },
       { separator: true },
       { label: 'Открыть в терминале', disabled: this._isBusy, action: () => {
-          const escaped = entry.path.replace(/'/g, "'\\''")
-          this._bus.emit('filetree.shellCmd', `open '${escaped}'\n`)
+          this._bus.emit('filetree.shellCmd', { type: 'open', path: entry.path })
           this._bus.emit('terminal.focus')
         }
       }
@@ -1373,8 +1360,7 @@ export class FileTree {
     const targets = isMulti ? [...this._selectedPaths] : [entry.path]
     const items = [
       { label: 'cd в директорию', disabled: this._isBusy, action: () => {
-          const escaped = entry.path.replace(/'/g, "'\\''")
-          this._bus.emit('filetree.shellCmd', `cd '${escaped}'\r`)
+          this._bus.emit('filetree.shellCmd', { type: 'cd', path: entry.path })
           this._bus.emit('terminal.focus')
         }
       }

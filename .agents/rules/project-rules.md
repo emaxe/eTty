@@ -165,7 +165,7 @@ mobile/                      — Flutter-приложение (iOS/Android): SSH
 ## Реализованные фичи
 
 ### Терминал
-- Множественные вкладки с независимыми PTY-сессиями (zsh на macOS/Linux, cmd.exe на Windows — см. `shell-path-resolver.js`)
+- Множественные вкладки с независимыми PTY-сессиями (zsh на macOS/Linux; на Windows PowerShell (pwsh → powershell.exe), Git Bash или cmd.exe по настройке `terminal.shell` — см. `shell-integration/`)
 - WebGL-ускорение рендеринга (fallback на canvas)
 - Kitty keyboard protocol (Shift+Enter, Ctrl+Enter, Ctrl+Shift+Enter), per-agent режим (Kitty / newline / Ctrl+J)
 - Корректная обработка кириллицы и non-ASCII символов

@@ -45,6 +45,7 @@ import { createPathsService } from './core/paths.js'
 import { ScrollbarActivity } from './core/scrollbar-activity.js'
 import { isLightColor } from './core/color-utils.js'
 import { IS_MAC } from './core/platform.js'
+import { createShellCommands, dialectForShellKind, DIALECTS } from './core/shell-commands.js'
 import { diagnostics } from './core/diagnostics.js'
 import { GitStatusService } from './services/git-status-service.js'
 import { buildSessionNameBase, pickFreeSessionName } from '../shared/ssh-session-name.js'
@@ -129,15 +130,17 @@ async function createTab(api, cwd, tabId, ssh) {
 
   const { config } = await api.settingsLoad()
   const promptStyle = config.terminal?.promptStyle || 'default'
-  const { pid } = await api.ptyCreate({
+  const shell = config.terminal?.shell || 'auto'
+  const { pid, shellKind } = await api.ptyCreate({
     cols: TERMINAL_CONFIG.DEFAULT_COLS,
     rows: TERMINAL_CONFIG.DEFAULT_ROWS,
     cwd,
     tabId,
     promptStyle,
+    shell,
   })
 
-  return { term, fitAddon, pid, rootPath: cwd, tabId }
+  return { term, fitAddon, pid, rootPath: cwd, tabId, shellKind }
 }
 
 async function init() {
@@ -336,7 +339,7 @@ async function init() {
     const agents = statusPayload?.agents || []
     for (const agent of agents) {
       if (agent?.id && agent?.launchCommand) {
-        agentCommands.set(agent.id, `${agent.launchCommand}\n`)
+        agentCommands.set(agent.id, agent.launchCommand)
       }
     }
   }
@@ -357,16 +360,22 @@ async function init() {
     return raw.endsWith('/') ? raw : `${raw}/`
   }
 
-  const buildAgentCommand = (baseCommand) => {
+  /** Команды оболочки вкладки: SSH — всегда POSIX, локальная — по виду оболочки из pty:create. */
+  const commandsFor = (tab) => tab?.ssh
+    ? createShellCommands(DIALECTS.POSIX, { platform: 'linux' })
+    : createShellCommands(dialectForShellKind(tab?.shellKind), { platform: api.platform })
+
+  const buildAgentCommand = (baseCommand, commands) => {
     const cmd = (baseCommand || '').trim()
     if (!cmd) return ''
 
-    if (!config.agents?.proxyEnabled) return `${cmd}\n`
+    const proxyUrl = config.agents?.proxyEnabled ? getNormalizedProxyUrl() : ''
+    if (!proxyUrl) return `${cmd}${commands.eol}`
 
-    const proxyUrl = getNormalizedProxyUrl()
-    if (!proxyUrl) return `${cmd}\n`
-
-    return `http_proxy=${proxyUrl} https_proxy=${proxyUrl} all_proxy=${proxyUrl} ${cmd}\n`
+    return commands.withEnv(
+      { http_proxy: proxyUrl, https_proxy: proxyUrl, all_proxy: proxyUrl },
+      `${cmd}${commands.eol}`
+    )
   }
 
   /**
@@ -406,10 +415,12 @@ async function init() {
     }
   }
 
-  const shellCmdToPtyActive = (data) => {
+  /** @param {(commands: ReturnType<typeof createShellCommands>) => string} build */
+  const shellCmdToPtyActive = (build) => {
     const tab = tabBar.getActive()
     if (tab) {
-      api.ptyWrite(tab.pid, '\x15' + data)
+      const commands = commandsFor(tab)
+      api.ptyWrite(tab.pid, commands.clearLine + build(commands))
       tab.term.focus()
     }
   }
@@ -927,8 +938,9 @@ async function init() {
       if (!/^[\w.*/-]+$/.test(version) || version.startsWith('-')) return { ok: false, reason: 'Некорректная версия' }
       const command = { nvm: `nvm use ${version}`, fnm: `fnm use ${version}`, asdf: `asdf shell nodejs ${version}` }[manager]
       if (!command) return { ok: false, reason: 'Менеджер версий не определён' }
-      // \x15 (Ctrl+U) — очистить уже набранный в строке текст перед командой
-      api.ptyWrite(tab.pid, `\x15${command}\r`)
+      // clearLine (Ctrl+U / Esc) — очистить уже набранный в строке текст перед командой
+      const commands = commandsFor(tab)
+      api.ptyWrite(tab.pid, `${commands.clearLine}${command}${commands.eol}`)
       return { ok: true }
     },
     onClose: () => focusActiveTerminal(),
@@ -949,7 +961,7 @@ async function init() {
     const tab = tabBar.getActive()
     if (!tab || tab.isBusy) return
 
-    const command = buildAgentCommand(agentCommands.get(agentId))
+    const command = buildAgentCommand(agentCommands.get(agentId), commandsFor(tab))
     if (!command) return
 
     tab.activeAgentId = agentId
@@ -1131,9 +1143,11 @@ async function init() {
     }
   })
   // — FileTree EventBus subscribers —
-  bus.on('filetree.shellCmd', async (cmd) => {
+  // intent: { type: 'cd'|'open'|'run', path, name? } — текст строит диалект оболочки вкладки
+  bus.on('filetree.shellCmd', async (intent) => {
     const tab = tabBar.getActive()
     if (!tab) return
+    const build = (commands) => commands[intent.type](intent.path, intent.name)
     if (tab.isBusy) {
       const tabData = await createTab(api, tab.rootPath || startCwd)
       const newTab = tabBar.addTab(tabData)
@@ -1141,9 +1155,10 @@ async function init() {
       newTab.activeAgentId = null
       setupTabHandlers(newTab)
       newTab.fitAddon.fit()
-      api.ptyWrite(newTab.pid, cmd)
+      api.ptyWrite(newTab.pid, build(commandsFor(newTab)))
     } else {
-      api.ptyWrite(tab.pid, '\x15' + cmd)
+      const commands = commandsFor(tab)
+      api.ptyWrite(tab.pid, commands.clearLine + build(commands))
       tab.term.focus()
     }
   })
@@ -2048,8 +2063,8 @@ async function init() {
 
   // Кнопки навигации сайдбара
   btnUp.disabled = startCwd === '/'
-  btnUp.addEventListener('click', () => shellCmdToPtyActive('cd ..\n'))
-  btnHome.addEventListener('click', () => shellCmdToPtyActive('cd ~\n'))
+  btnUp.addEventListener('click', () => shellCmdToPtyActive(c => c.up()))
+  btnHome.addEventListener('click', () => shellCmdToPtyActive(c => c.home()))
 
   btnToggleSidebar.classList.add('active')
   btnToggleSidebar.addEventListener('click', () => {

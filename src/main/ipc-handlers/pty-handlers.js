@@ -193,15 +193,19 @@ export function registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshSt
     let historyFile = null
     let initialHistSize = 0
 
-    if (!IS_WIN) {
+    const shellInfo = ptyManager.resolveLocalShell(options.shell)
+
+    // История по вкладкам — только для оболочек с интеграцией (zsh, pwsh, Git Bash); cmd — без неё
+    if (shellInfo.historyKind) {
+      const kind = shellInfo.historyKind
       await historyManager.ensureHistoryDir()
-      historyFile = historyManager.getTabHistoryPath(tabId)
-      const isRestore = await historyManager.tabHistoryExists(tabId)
+      historyFile = historyManager.getTabHistoryPath(tabId, kind)
+      const isRestore = await historyManager.tabHistoryExists(tabId, kind)
 
       if (isRestore) {
-        await historyManager.prepareHistoryForRestoredTab(tabId)
+        await historyManager.prepareHistoryForRestoredTab(tabId, kind)
       } else {
-        await historyManager.prepareHistoryForNewTab(tabId)
+        await historyManager.prepareHistoryForNewTab(tabId, kind)
       }
 
       initialHistSize = await historyManager.getFileSize(historyFile)
@@ -212,6 +216,7 @@ export function registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshSt
       tabId,
       historyFile,
       initialHistSize,
+      shellInfo,
       webContents: event.sender
     })
   })
@@ -231,7 +236,7 @@ export function registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshSt
     // который срабатывает на любой kill() нижележащего pty-процесса.
     if (session?.tabId && session.historyFile) {
       ptyManager.sessions.delete(pid)
-      await historyManager.mergeTabToGlobal(session.tabId, session.initialHistSize)
+      await historyManager.mergeTabToGlobal(session.tabId, session.initialHistSize, session.historyKind)
       session.pty.kill()
     } else {
       ptyManager.kill(pid)

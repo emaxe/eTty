@@ -20,7 +20,7 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 
 ### Terminal
 
-- **Multiple tabs** with independent shell sessions (zsh on macOS/Linux, `cmd.exe` on Windows)
+- **Multiple tabs** with independent shell sessions (zsh on macOS/Linux; PowerShell 7 / Windows PowerShell 5.1 / Git Bash / `cmd.exe` on Windows, selectable in Settings → Terminal)
 - **WebGL-accelerated** rendering (canvas fallback)
 - **Kitty keyboard protocol** — Shift+Enter, Ctrl+Enter, Ctrl+Shift+Enter sequences
 - **Full Unicode support** — Cyrillic, accented characters, emoji

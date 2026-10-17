@@ -5,6 +5,10 @@ import path from 'path'
 import log from 'electron-log'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 import { SshControlChannel } from './ssh/ssh-control-channel.js'
+import { buildChildEnv } from './env-utils.js'
+import { resolveWindowsShell, SHELL_KINDS, HISTORY_KIND } from './shell-integration/shell-resolver.js'
+import { buildPwshArgs } from './shell-integration/pwsh.js'
+import { createGitBashLaunch } from './shell-integration/git-bash.js'
 
 const IS_WIN = process.platform === 'win32'
 
@@ -38,8 +42,9 @@ const PROMPT_MAP = {
 /**
  * Управляет PTY-сессиями (псевдотерминалами) для вкладок.
  * На macOS/Linux каждая вкладка получает изолированную zsh-сессию с собственными
- * ZDOTDIR и HISTFILE (история, OSC 7/133 хуки). На Windows — сессия cmd.exe без
- * ZDOTDIR/истории/OSC-хуков (zsh-специфичны).
+ * ZDOTDIR и HISTFILE (история, OSC 7/133 хуки). На Windows оболочка выбирается настройкой
+ * `terminal.shell` (по умолчанию PowerShell): pwsh/powershell и Git Bash получают те же хуки
+ * и историю по вкладкам (shell-integration/), cmd.exe и произвольный shell — без интеграции.
  */
 export class PtyManager {
   /** @param {{ shellPathResolver, sshSessionRegistry: import('./ssh/ssh-session-registry.js').SshSessionRegistry }} deps */
@@ -48,6 +53,21 @@ export class PtyManager {
     this.sessions = new Map()
     this._shellPathResolver = shellPathResolver
     this._sshSessionRegistry = sshSessionRegistry
+  }
+
+  /**
+   * Определяет оболочку локальной вкладки и вид её истории — до `create()`, чтобы вызывающий
+   * подготовил файл истории нужного вида.
+   * @param {string} [shellSetting] — `terminal.shell`
+   * @returns {{ file: string, kind: string, historyKind: string|null }}
+   */
+  resolveLocalShell(shellSetting) {
+    if (IS_WIN) {
+      const { file, kind, fellBack } = resolveWindowsShell(shellSetting)
+      if (fellBack) log.warn(`[PtyManager] shell "${shellSetting}" недоступен, используется ${file}`)
+      return { file, kind, historyKind: HISTORY_KIND[kind] || null }
+    }
+    return { file: this._shellPathResolver.getDefaultShell(), kind: SHELL_KINDS.ZSH, historyKind: HISTORY_KIND[SHELL_KINDS.ZSH] }
   }
 
   /**
@@ -113,13 +133,15 @@ export class PtyManager {
    * @param {object} params
    * @param {{file: string, args: string[], env: object, tmpDir: string|null,
    *   control: {dir: string, path: string, target: string, port: number}|null}} [params.sshLaunch]
-   * @returns {{pid: number}} — PID процесса для идентификации сессии
+   * @returns {{pid: number, shellKind: string|null}} — PID процесса и вид локальной оболочки (null для SSH)
    */
-  create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize, promptStyle, sshLaunch, ssh }) {
+  create({ cols, rows, cwd, webContents, tabId, historyFile, initialHistSize, promptStyle, sshLaunch, ssh, shellInfo }) {
     const isWin = IS_WIN
     const isSsh = !!sshLaunch
 
     let spawnFile, spawnArgs, env, tmpDir
+    let shellKind = null
+    let historyKind = null
 
     if (isSsh) {
       spawnFile = sshLaunch.file
@@ -127,20 +149,30 @@ export class PtyManager {
       env = sshLaunch.env
       tmpDir = sshLaunch.tmpDir
     } else {
-      spawnFile = this._shellPathResolver.getDefaultShell()
+      const shell = shellInfo || this.resolveLocalShell()
+      shellKind = shell.kind
+      historyKind = shell.historyKind
+      spawnFile = shell.file
       spawnArgs = []
-      tmpDir = isWin ? null : this._createZdotdir(historyFile, promptStyle)
-      env = {
-        ...process.env,
+      tmpDir = null
+      const overrides = {
         PATH: this._shellPathResolver.getResolvedPath()
           || process.env.PATH
           || (isWin ? '' : '/usr/bin:/bin:/usr/sbin:/sbin')
       }
-      if (!isWin) {
-        env.ZDOTDIR = tmpDir
-        env.LANG = process.env.LANG || 'en_US.UTF-8'
-        env.LC_CTYPE = process.env.LC_CTYPE || 'en_US.UTF-8'
+      if (shell.kind === SHELL_KINDS.ZSH) {
+        tmpDir = this._createZdotdir(historyFile, promptStyle)
+        overrides.ZDOTDIR = tmpDir
+        overrides.LANG = process.env.LANG || 'en_US.UTF-8'
+        overrides.LC_CTYPE = process.env.LC_CTYPE || 'en_US.UTF-8'
+      } else if (shell.kind === SHELL_KINDS.PWSH || shell.kind === SHELL_KINDS.POWERSHELL) {
+        spawnArgs = buildPwshArgs({ historyFile, promptStyle })
+      } else if (shell.kind === SHELL_KINDS.GITBASH) {
+        const launch = createGitBashLaunch({ historyFile, promptStyle })
+        tmpDir = launch.tmpDir
+        spawnArgs = launch.args
       }
+      env = buildChildEnv(process.env, overrides)
     }
 
     const ptyProcess = spawn(spawnFile, spawnArgs, {
@@ -171,6 +203,7 @@ export class PtyManager {
       webContents,
       tabId,
       historyFile: isSsh ? null : historyFile,
+      historyKind: isSsh ? null : historyKind,
       initialHistSize: initialHistSize || 0,
       tmpDir,
       isSsh
@@ -226,7 +259,7 @@ export class PtyManager {
       this._rmDirSafe(tmpDir, 'tmpDir on exit')
     })
 
-    return { pid: ptyProcess.pid }
+    return { pid: ptyProcess.pid, shellKind }
   }
 
   _rmDirSafe(dir, label) {

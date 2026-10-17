@@ -70,7 +70,7 @@ export class TabBar {
     this._store.set('tabs.activeIndex', this.activeIndex)
   }
 
-  addTab({ pid, term, fitAddon, rootPath, tabId, ssh, remoteCwd }, insertIndex = -1) {
+  addTab({ pid, term, fitAddon, rootPath, tabId, ssh, remoteCwd, shellKind = null }, insertIndex = -1) {
     const folderName = ssh ? ssh.label : (this._paths.local.basename(rootPath) || rootPath)
     const container = document.createElement('div')
     container.className = 'terminal-pane'
@@ -83,6 +83,7 @@ export class TabBar {
     const element = this._createTabEl(folderName, '', !!ssh, ssh?.persistence === 'tmux' ? tmuxBadgeText(ssh) : null)
 
     const tab = { pid, term, fitAddon, container, element, rootPath, folderName, termTitle: '', tabId, ssh: ssh || null,
+      shellKind, // вид локальной оболочки из pty:create (диалект команд — core/shell-commands.js)
       remoteCwd: remoteCwd || null,
       treeExpandedDirs: new Set(),
       treeScrollTop: 0,

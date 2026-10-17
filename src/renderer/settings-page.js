@@ -188,11 +188,30 @@ export class SettingsPage {
     ]))
 
     body.appendChild(this._buildCategory('Терминал', [
+      ...(this._api.platform === 'win32' ? [{
+        label: 'Оболочка (для новых вкладок)',
+        control: this._createSelect(
+          [
+            { key: 'auto', name: 'Авто (PowerShell 7 → PowerShell 5.1 → cmd)' },
+            { key: 'pwsh', name: 'PowerShell 7' },
+            { key: 'powershell', name: 'Windows PowerShell 5.1' },
+            { key: 'gitbash', name: 'Git Bash' },
+            { key: 'cmd', name: 'cmd.exe (без интеграции)' }
+          ],
+          this._config.terminal?.shell || 'auto',
+          (val) => {
+            if (!this._config.terminal) this._config.terminal = {}
+            this._config.terminal.shell = val
+            this._bus.emit('settings.changed', { key: 'terminal.shell', value: val })
+            this._scheduleSave()
+          }
+        )
+      }] : []),
       {
         label: 'Стиль промпта (для новых вкладок)',
         control: this._createSelect(
           [
-            { key: 'default', name: 'По умолчанию (из ~/.zshrc)' },
+            { key: 'default', name: this._api.platform === 'win32' ? 'По умолчанию (из профиля оболочки)' : 'По умолчанию (из ~/.zshrc)' },
             { key: 'short', name: 'Короткий — dirname %' },
             { key: 'minimal', name: 'Минимальный — >' },
             { key: 'arrow', name: 'Стрелка — dirname ❯' }

@@ -1,4 +1,5 @@
 import fs from 'fs'
+import { buildChildEnv } from './env-utils.js'
 import path from 'path'
 import { buildRemoteInitCommand } from './ssh/remote-shell-hooks.js'
 import { createControlSocket } from './ssh/ssh-control-channel.js'
@@ -121,12 +122,11 @@ export function buildSshLaunch({ connection, resolvedPath, skipShellIntegration 
     }))
   }
 
-  const env = {
-    ...process.env,
+  const env = buildChildEnv(process.env, {
     PATH: resolvedPath || process.env.PATH || (IS_WIN ? '' : '/usr/bin:/bin:/usr/sbin:/sbin'),
     LANG: process.env.LANG || 'en_US.UTF-8',
     LC_CTYPE: process.env.LC_CTYPE || 'en_US.UTF-8'
-  }
+  })
 
   // Секрет используется и для пароля пользователя, и для passphrase приватного ключа —
   // SSH_ASKPASS перехватывает оба типа запросов одинаково.
