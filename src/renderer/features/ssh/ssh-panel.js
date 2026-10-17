@@ -19,6 +19,7 @@ import { buildSessionNameBase, pickFreeSessionName } from '../../../shared/ssh-s
 
 const SESSION_REASON_TEXT = {
   'auth-required': 'Подключитесь, чтобы увидеть сессии',
+  'host-key': 'Сначала подключитесь из вкладки и подтвердите ключ хоста',
   'no-controlmaster': 'Список сессий недоступен на Windows',
   'socket-path-too-long': 'Служебный канал недоступен (слишком длинный путь к сокету)',
   'no-tmux': 'tmux не установлен на сервере',
@@ -409,7 +410,7 @@ export class SshPanel {
       hint.className = 'ssh-sessions-status error'
       hint.textContent = SESSION_REASON_TEXT[state.reason] || SESSION_REASON_TEXT.error
       block.appendChild(hint)
-      if (!['auth-required', 'no-controlmaster', 'socket-path-too-long', 'no-tmux', 'connection-not-found'].includes(state.reason)) {
+      if (!['auth-required', 'host-key', 'no-controlmaster', 'socket-path-too-long', 'no-tmux', 'connection-not-found'].includes(state.reason)) {
         const retry = document.createElement('button')
         retry.type = 'button'
         retry.className = 'ssh-sessions-retry'

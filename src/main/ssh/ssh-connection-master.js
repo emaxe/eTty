@@ -2,6 +2,7 @@ import { spawn } from 'child_process'
 import fs from 'fs'
 import log from 'electron-log'
 import { createControlSocket, SshControlChannel } from './ssh-control-channel.js'
+import { SshStdioChannel } from './ssh-stdio-channel.js'
 import { applyAskpassEnv } from './askpass.js'
 import { SSH_SESSION_CONFIG } from '../../shared/ssh-session-config.js'
 
@@ -86,16 +87,43 @@ export class SshConnectionMaster {
     return this._pendingEnsure
   }
 
+  /**
+   * Windows: ControlMaster нет, служебный канал — отдельное долгоживущее `ssh -T … /bin/sh`
+   * (`SshStdioChannel`). Аутентификация неинтерактивная: ключ/ssh-agent либо сохранённый пароль
+   * через askpass (иначе BatchMode — быстрый отказ вместо зависания на невидимом запросе).
+   */
+  async _connectStdio() {
+    const env = { ...process.env }
+    const askpass = this._secret ? applyAskpassEnv(env, this._secret, { sshFile: this._sshFile }) : { tmpDir: null }
+    this._askpassTmpDir = askpass.tmpDir
+
+    const args = ['-p', String(this._port), '-o', 'NumberOfPasswordPrompts=1', '-o', 'ConnectTimeout=10']
+    if (!askpass.tmpDir) args.push('-o', 'BatchMode=yes')
+    if (this._privateKeyPath) args.push('-i', this._privateKeyPath)
+    const extra = this._extraArgs.trim()
+    if (extra) args.push(...extra.split(/\s+/).filter(Boolean))
+
+    const channel = new SshStdioChannel({ sshFile: this._sshFile, args, env, target: this._target })
+    const ready = await channel.waitReady({ maxWaitMs: SSH_SESSION_CONFIG.MASTER_CONNECT_TIMEOUT_MS })
+    if (!ready) {
+      const reason = channel.failureReason || 'timeout'
+      channel.dispose()
+      return this._fail(reason)
+    }
+    this._channel = channel
+    this._state = 'ready'
+    return { ok: true }
+  }
+
   async _connect() {
     this._state = 'connecting'
     this._failure = null
 
     const socket = createControlSocket()
     if (!socket) {
-      // null — либо Windows (OpenSSH для Windows не поддерживает ControlMaster), либо путь к
-      // сокету не влезает в лимит sun_path даже с фолбэком на /tmp (см. createControlSocket).
-      const reason = process.platform === 'win32' ? 'no-controlmaster' : 'socket-path-too-long'
-      return this._fail(reason)
+      // null — Windows (ControlMaster нет) либо путь к сокету не влезает в лимит sun_path даже с
+      // фолбэком на /tmp (см. createControlSocket): в обоих случаях служебный канал — stdio.
+      return this._connectStdio()
     }
 
     const env = { ...process.env }

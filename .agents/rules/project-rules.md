@@ -186,7 +186,10 @@ mobile/                      — Flutter-приложение (iOS/Android): SSH
 - SSH-вкладка — PTY, в котором node-pty напрямую спавнит системный `ssh` (`ssh-command.js`), не библиотека
 - ControlMaster-мультиплексирование (`-o ControlMaster=auto`, сокет в `os.tmpdir()/etty-cm-*`): один
   параллельный служебный канал (`SshControlChannel`) для операций удалённой ФС без повторной
-  аутентификации; недоступно на Windows (OpenSSH для Windows не поддерживает мультиплексирование).
+  аутентификации. На Windows (и при слишком длинном пути к сокету) вместо него — `SshStdioChannel`
+  (`ssh-stdio-channel.js`, протокол — `ssh-stdio-protocol.js`): одно долгоживущее `ssh -T target /bin/sh` с
+  диспетчером в stdin; тот же интерфейс (`exec`/`waitReady`/`isAlive`/`dispose`), отдельное неинтерактивное
+  соединение (ключ/ssh-agent либо сохранённый пароль через askpass).
   Отдельно — `SshConnectionMaster`/`SshConnectionMasterRegistry` (`main/ssh/`): служебный мастер
   НА ПОДКЛЮЧЕНИЕ (не на PTY), для листинга/kill/rename tmux-сессий панелью без открытой вкладки;
   сперва пробует «одолжить» канал уже живой вкладки этого подключения
@@ -247,9 +250,9 @@ mobile/                      — Flutter-приложение (iOS/Android): SSH
 - **Удалённое дерево по SSH**: читает/пишет через `FsProvider` (`src/main/fs/*`), контекст
   вкладки (`{kind:'local'}`/`{kind:'ssh', sessionId}`) хранится в `StateStore` (`fs.context`) и
   подставляется автоматически через `scoped-fs-api.js` — сам `file-tree.js` не знает о контексте
-  явно (кроме `_isRemote()` для гейтинга меню). Полный CRUD; на Windows недоступно (OpenSSH для
-  Windows не поддерживает ControlMaster) — деградации к локальным файлам НЕТ, дерево просто не
-  синхронизируется до появления реализации на этой платформе
+  явно (кроме `_isRemote()` для гейтинга меню). Полный CRUD; на Windows работает через `SshStdioChannel`
+  (ControlMaster там нет). Деградации к локальным файлам НЕТ: если канал не поднялся (нет ключа/сохранённого
+  пароля), дерево не синхронизируется
 
 ### Редактор файлов (CodeMirror 6)
 - Подсветка синтаксиса: JS/TS, Python, Go, Rust, HTML, CSS/SCSS, JSON, YAML, Markdown, Vue, C#

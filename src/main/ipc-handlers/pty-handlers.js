@@ -10,8 +10,6 @@ import { SSH_FS_CONFIG } from '../../shared/ssh-fs-config.js'
 import { SSH_SESSION_CONFIG } from '../../shared/ssh-session-config.js'
 import log from 'electron-log'
 
-const IS_WIN = process.platform === 'win32'
-
 /**
  * Спрашивает у tmux состояние панели (cwd, foreground-процесс) и пушит `ssh:session-state`.
  * Вызывается сразу после attach и повторно по запросу renderer (`ssh:session-resync`) — если первый
@@ -62,7 +60,7 @@ export async function establishSshFs(pid, { sshSessionRegistry, webContents, per
   const ready = await session.channel.waitReady({ isCancelled: () => !sshSessionRegistry.get(pid) })
   if (!sshSessionRegistry.get(pid)) return false // вкладку закрыли/переподключили, пока ждали
   if (!ready) {
-    send({ available: false, reason: 'master-timeout' })
+    send({ available: false, reason: session.channel.failureReason || 'master-timeout' })
     return false
   }
 
@@ -120,11 +118,7 @@ async function watchSshFsReadiness(pid, { sshSessionRegistry, sshLaunch, webCont
     }
   }
 
-  if (IS_WIN) {
-    send({ available: false, reason: 'no-controlmaster-on-windows' })
-    return
-  }
-  if (!sshLaunch.control) {
+  if (!sshLaunch.control && !sshLaunch.stdio) {
     send({ available: false, reason: 'socket-path-too-long' })
     return
   }

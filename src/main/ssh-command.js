@@ -58,10 +58,12 @@ export function findSshBinary(resolvedPath) {
  *   см. `hooksWanted` ниже; `sessionName` в этом случае обязателен (валидируется в
  *   `buildRemoteInitCommand`).
  * @returns {{ file: string, args: string[], env: object, tmpDir: string|null,
- *   control: { dir: string, path: string, target: string, port: number } | null }}
+ *   control: { dir: string, path: string, target: string, port: number } | null,
+ *   stdio: { sshFile: string, target: string, args: string[], env: object } | null }}
  *   `control` — параметры ControlMaster-сокета для `SshControlChannel` (Этап 4, удалённая ФС),
  *   `null` на Windows (OpenSSH для Windows не поддерживает мультиплексирование) либо когда путь
- *   к сокету не влезает в лимит `sun_path` даже с фолбэком на `/tmp` (см. `createControlSocket`).
+ *   к сокету не влезает в лимит `sun_path` даже с фолбэком на `/tmp` (см. `createControlSocket`) —
+ *   тогда вместо него заполняется `stdio` (параметры `SshStdioChannel`).
  */
 export function buildSshLaunch({ connection, resolvedPath, skipShellIntegration = false, sessionName = null, persistence = undefined }) {
   const file = findSshBinary(resolvedPath)
@@ -133,5 +135,17 @@ export function buildSshLaunch({ connection, resolvedPath, skipShellIntegration 
   const wantsAskpass = connection.secret && (connection.authType === 'password' || connection.authType === 'key')
   const { tmpDir } = wantsAskpass ? applyAskpassEnv(env, connection.secret, { sshFile: file }) : { tmpDir: null }
 
-  return { file, args, env, tmpDir, control }
+  // Без ControlMaster (Windows) служебные вызовы идут по отдельному долгоживущему `ssh -T … /bin/sh`
+  // (ssh-stdio-channel.js): ему нужны те же порт/ключ/доп. аргументы и тот же askpass-env. Без
+  // askpass — BatchMode, иначе ssh завис бы на невидимом запросе пароля.
+  let stdio = null
+  if (!control) {
+    const stdioArgs = ['-p', String(port), '-o', 'NumberOfPasswordPrompts=1', '-o', 'ConnectTimeout=10']
+    if (!tmpDir) stdioArgs.push('-o', 'BatchMode=yes')
+    if (connection.authType === 'key' && connection.privateKeyPath) stdioArgs.push('-i', connection.privateKeyPath)
+    if (extraArgs) stdioArgs.push(...extraArgs.split(/\s+/).filter(Boolean))
+    stdio = { sshFile: file, target, args: stdioArgs, env }
+  }
+
+  return { file, args, env, tmpDir, control, stdio }
 }

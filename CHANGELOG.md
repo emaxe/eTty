@@ -17,6 +17,9 @@ All notable changes to this project will be documented in this file.
 - **Windows: агенты и версии Node** — CLI-агенты определяются по PATH/PATHEXT без `sh` (включая `.cmd`-шимы npm);
   менеджеры версий Node — fnm, nvm-windows и Volta (список, установка, удаление; переключение в терминале
   через диалект оболочки вкладки).
+- **Windows: удалённое дерево, git, tmux-панель и трекинг агентов по SSH** — служебный канал `SshStdioChannel`
+  (одно долгоживущее `ssh -T … /bin/sh` вместо ControlMaster, которого в OpenSSH для Windows нет); тот же канал
+  выручает на macOS/Linux, когда путь к ControlMaster-сокету не влезает в лимит `sun_path`.
 - **Windows: пароль SSH** — сохранённый пароль/passphrase подставляется через `askpass.cmd` (OpenSSH ≥ 8.4).
 - **Windows/Linux: оверлейные скроллбары** — ползунок виден только при прокрутке, нативные контролы следуют теме.
 

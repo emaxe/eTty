@@ -5,6 +5,7 @@ import path from 'path'
 import log from 'electron-log'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 import { SshControlChannel } from './ssh/ssh-control-channel.js'
+import { SshStdioChannel } from './ssh/ssh-stdio-channel.js'
 import { buildChildEnv } from './env-utils.js'
 import { resolveWindowsShell, SHELL_KINDS, HISTORY_KIND } from './shell-integration/shell-resolver.js'
 import { buildPwshArgs } from './shell-integration/pwsh.js'
@@ -183,14 +184,16 @@ export class PtyManager {
       env
     })
 
-    if (isSsh && sshLaunch.control) {
-      const channel = new SshControlChannel({
-        sshFile: sshLaunch.file,
-        target: sshLaunch.control.target,
-        port: sshLaunch.control.port,
-        controlPath: sshLaunch.control.path,
-        controlDir: sshLaunch.control.dir
-      })
+    if (isSsh && (sshLaunch.control || sshLaunch.stdio)) {
+      const channel = sshLaunch.control
+        ? new SshControlChannel({
+            sshFile: sshLaunch.file,
+            target: sshLaunch.control.target,
+            port: sshLaunch.control.port,
+            controlPath: sshLaunch.control.path,
+            controlDir: sshLaunch.control.dir
+          })
+        : new SshStdioChannel(sshLaunch.stdio)
       // Канал сам владеет жизненным циклом controlDir (создаёт/чистит при dispose()) —
       // PtyManager отдельно этот каталог не отслеживает. connectionId — чтобы панель SSH/tmux
       // могла найти и «одолжить» уже живой канал этой вкладки вместо подъёма отдельного

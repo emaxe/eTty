@@ -351,7 +351,7 @@ All user data is stored in `~/.config/eTty/` (Electron `userData`):
 - Auto-update is **stubbed** — logs only, no update server configured yet.
 - Settings overlay blocks tab switching to prevent focus leaking to hidden terminals.
 - Saved SSH passwords are auto-filled via `SSH_ASKPASS` on macOS/Linux (OpenSSH ≥ 8.4); on Windows the same works via an `askpass.cmd` helper when OpenSSH ≥ 8.4 is installed (otherwise the terminal prompts for the password).
-- The remote file tree, remote agent tracking and the tmux session list rely on SSH ControlMaster multiplexing, which OpenSSH for Windows doesn't support — on Windows an SSH tab is terminal-only and the tree isn't synced.
+- The remote file tree, remote agent tracking and the tmux session list use a second service connection. On macOS/Linux it multiplexes over SSH ControlMaster; OpenSSH for Windows has no ControlMaster, so there eTty opens a separate long-lived `ssh -T … /bin/sh` channel. It authenticates non-interactively (key / `ssh-agent`, or a saved password via `askpass`), so on Windows an SSH tab without either stays terminal-only.
 - Passing the working directory and busy state through tmux needs tmux ≥ 3.3 on the server (DCS passthrough); on older versions persistent sessions still work, with the optimistic busy fallback.
 
 ## License

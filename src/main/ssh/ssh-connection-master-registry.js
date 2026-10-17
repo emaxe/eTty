@@ -2,8 +2,6 @@ import log from 'electron-log'
 import { SshConnectionMaster } from './ssh-connection-master.js'
 import { findSshBinary } from '../ssh-command.js'
 
-const IS_WIN = process.platform === 'win32'
-
 /**
  * Реестр `SshConnectionMaster` по `connectionId` — держатель панельных мастеров для листинга/
  * kill/rename tmux-сессий (см. модуль-докстринг `ssh-connection-master.js`). Перед подъёмом
@@ -27,8 +25,6 @@ export class SshConnectionMasterRegistry {
    * @returns {Promise<{ ok: true }|{ ok: false, reason: string }>}
    */
   async acquire(connectionId, connection) {
-    if (IS_WIN) return { ok: false, reason: 'no-controlmaster' }
-
     const borrowed = this._sshSessionRegistry.findLiveChannelFor(connectionId)
     if (borrowed) return { ok: true }
 
@@ -54,8 +50,6 @@ export class SshConnectionMasterRegistry {
    * @returns {Promise<{ code: number|null, signal: string|null, stdout: Buffer, stderr: Buffer, timedOut: boolean }|{ error: string }>}
    */
   async exec(connectionId, connection, script, args = [], { force, ...opts } = {}) {
-    if (IS_WIN) return { error: 'no-controlmaster' }
-
     const borrowed = this._sshSessionRegistry.findLiveChannelFor(connectionId)
     if (borrowed) {
       const result = await borrowed.exec(script, args, opts)
