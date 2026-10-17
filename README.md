@@ -199,6 +199,7 @@ Build and run instructions: [mobile/README.md](mobile/README.md).
 | `Cmd+ArrowLeft` (macOS) | Home — `\x1b[H` |
 | `Cmd+ArrowRight` (macOS) | End — `\x1b[F` |
 | `Cmd+Option+←/→` or `Cmd+Shift+←/→` (configurable, off by default) | Switch to adjacent tab (wraps around) |
+| `Cmd+Shift+T` | New local tab (even when the active tab is SSH); right-click on `+` also offers local / SSH connections |
 
 ## Tech Stack
 

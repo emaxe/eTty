@@ -732,6 +732,11 @@ export class SshPanel {
     this._newSessionDraft.clear()
   }
 
+  /** Список сохранённых подключений (для меню «+» в таб-баре). */
+  getConnections() {
+    return [...this._connections]
+  }
+
   /** Находит подключение по id (используется index.js для наследования cwd/подключения на новых вкладках). */
   getConnection(id) {
     return this._connections.find(c => c.id === id) || null
