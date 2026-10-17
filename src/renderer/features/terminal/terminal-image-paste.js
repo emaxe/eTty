@@ -1,4 +1,4 @@
-const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform)
+import { IS_MAC } from '../../core/platform.js'
 
 /**
  * Вставка изображения из буфера обмена в SSH-вкладку.

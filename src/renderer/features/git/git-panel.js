@@ -21,7 +21,8 @@ export class GitPanel {
    * @param {import('../../confirm-dialog.js').ConfirmDialog} deps.confirmDialog
    * @param {Function} [deps.onClose]
    */
-  constructor({ overlayEl, eventBus, store, api, confirmDialog, onClose }) {
+  constructor({ overlayEl, eventBus, store, api, confirmDialog, onClose, paths }) {
+    this._paths = paths
     this._overlayEl = overlayEl
     this._bus = eventBus
     this._store = store
@@ -370,8 +371,7 @@ export class GitPanel {
 
   _openFile(file) {
     if (!this._rootPath || !file) return
-    const base = this._rootPath.replace(/\/$/, '')
-    this._bus.emit('filetree.openFile', `${base}/${file.path}`)
+    this._bus.emit('filetree.openFile', this._paths.current().join(this._rootPath, file.path))
   }
 
   async _copyPath(file) {

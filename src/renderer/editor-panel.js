@@ -36,7 +36,7 @@ import {
 const _fallbackHighlight = syntaxHighlighting(defaultHighlightStyle, { fallback: true })
 import { buildEditorTheme } from './editor-theme.js'
 import { getLanguageExtension } from './editor-languages.js'
-import { fileLinksExtension, normalizePath } from './editor-file-links.js'
+import { fileLinksExtension } from './editor-file-links.js'
 import { ContextMenu } from './components/base/context-menu/context-menu.js'
 
 // ── Diff Gutter Extension ────────────────────────────────────────────────────
@@ -104,13 +104,14 @@ export class EditorPanel {
    * @param {Function}   opts.shellCmdToPty  — (data: string) => void, clears line + writes for shell commands
    * @param {Function}   opts.getActiveCwd   — () => string, active terminal cwd
    */
-  constructor({ panelEl, resizeHandleEl, eventBus, electronAPI, getActiveCwd, store }) {
+  constructor({ panelEl, resizeHandleEl, eventBus, electronAPI, getActiveCwd, store, paths }) {
     this._panelEl = panelEl
     this._resizeHandleEl = resizeHandleEl
     this._bus = eventBus
     this._api = electronAPI
     this._getActiveCwd = getActiveCwd
     this._store = store
+    this._paths = paths
 
     this._tabBarEl = panelEl.querySelector('#editor-tab-bar')
     this._bodyEl = panelEl.querySelector('#editor-body')
@@ -154,7 +155,9 @@ export class EditorPanel {
 
   // ── Public API ───────────────────────────────────────────────────────────
 
-  async openFile(filePath) {
+  async openFile(rawPath) {
+    // Канонический вид пути = ключ вкладки: `C:\\a`, `c:/a` и `C:\\a\\.` — один файл
+    const filePath = this._paths.current().normalize(rawPath)
     // If already open, check sync and switch
     if (this._tabs.has(filePath)) {
       await this._checkAndSyncTab(filePath)
@@ -529,7 +532,7 @@ export class EditorPanel {
   }
 
   _createTabElement(filePath) {
-    const name = filePath.split('/').pop()
+    const name = this._paths.current().basename(filePath)
     const tab = document.createElement('div')
     tab.className = 'editor-tab'
     tab.dataset.path = filePath
@@ -649,7 +652,7 @@ export class EditorPanel {
     const tab = this._tabs.get(filePath)
     if (!tab || tab.pendingClose) return
 
-    const name = filePath.split('/').pop()
+    const name = this._paths.current().basename(filePath)
     tab.pendingClose = true
 
     // Replace close button with confirm/cancel
@@ -737,10 +740,10 @@ export class EditorPanel {
 
     // Relative path from cwd
     const cwd = this._getActiveCwd?.() || ''
-    let displayPath = filePath
-    if (cwd && filePath.startsWith(cwd + '/')) {
-      displayPath = filePath.slice(cwd.length + 1)
-    }
+    const paths = this._paths.current()
+    const displayPath = cwd && paths.isInside(cwd, filePath) && !paths.equals(cwd, filePath)
+      ? paths.relative(cwd, filePath)
+      : filePath
     this._statusFile.textContent = displayPath
 
     // Cursor position
@@ -811,10 +814,10 @@ export class EditorPanel {
 
     // Relative path from cwd
     const cwd = this._getActiveCwd?.() || ''
-    let displayPath = filePath
-    if (cwd && filePath.startsWith(cwd + '/')) {
-      displayPath = filePath.slice(cwd.length + 1)
-    }
+    const paths = this._paths.current()
+    const displayPath = cwd && paths.isInside(cwd, filePath) && !paths.equals(cwd, filePath)
+      ? paths.relative(cwd, filePath)
+      : filePath
 
     const lineRef = startLine === endLine
       ? `${displayPath}:${startLine}`
@@ -836,17 +839,18 @@ export class EditorPanel {
   }
 
   async _handleFileLinkClick(pathText) {
+    const paths = this._paths.current()
     let resolved
-    if (pathText.startsWith('/')) {
-      resolved = normalizePath(pathText)
+    if (pathText.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathText)) {
+      resolved = paths.normalize(pathText)
     } else if (pathText.startsWith('./') || pathText.startsWith('../')) {
       const base = this._activeFilePath
-        ? this._activeFilePath.substring(0, this._activeFilePath.lastIndexOf('/'))
-        : this._getActiveCwd?.() || '/'
-      resolved = normalizePath(base + '/' + pathText)
+        ? paths.dirname(this._activeFilePath)
+        : this._getActiveCwd?.() || paths.sep
+      resolved = paths.join(base, pathText)
     } else {
-      const cwd = this._getActiveCwd?.() || '/'
-      resolved = normalizePath(cwd + '/' + pathText)
+      const cwd = this._getActiveCwd?.() || paths.sep
+      resolved = paths.join(cwd, pathText)
     }
 
     // Pre-check: try reading the file before switching tabs
@@ -991,7 +995,7 @@ export class EditorPanel {
   _showConflictDialog(filePath, newMtime) {
     this._closeConflictOverlay()
 
-    const fileName = filePath.split('/').pop()
+    const fileName = this._paths.current().basename(filePath)
 
     const overlay = document.createElement('div')
     overlay.className = 'conflict-dialog-overlay'
@@ -1164,7 +1168,7 @@ export class EditorPanel {
   _showSaveConflictDialog(filePath, diskMtime, pendingContent) {
     this._closeConflictOverlay()
 
-    const fileName = filePath.split('/').pop()
+    const fileName = this._paths.current().basename(filePath)
 
     const overlay = document.createElement('div')
     overlay.className = 'conflict-dialog-overlay'
@@ -1396,6 +1400,13 @@ export class EditorPanel {
 
   // — Diff gutter —
 
+  /** Путь файла относительно корня git-репозитория в git-формате (всегда с `/`). */
+  _gitRelPath(rootPath, filePath) {
+    const paths = this._paths.current()
+    if (!rootPath || !paths.isInside(rootPath, filePath)) return filePath
+    return paths.relative(rootPath, filePath).replace(/\\/g, '/')
+  }
+
   _setupGitStatusSubscription() {
     if (!this._bus) return
 
@@ -1403,11 +1414,7 @@ export class EditorPanel {
       const filePath = this._activeFilePath
       if (!filePath) return
 
-      let relPath = filePath
-      if (rootPath && filePath.startsWith(rootPath)) {
-        relPath = filePath.slice(rootPath.length)
-        if (relPath.startsWith('/')) relPath = relPath.slice(1)
-      }
+      const relPath = this._gitRelPath(rootPath, filePath)
 
       if (fileStatuses[relPath]) {
         this._fetchAndApplyDiff(filePath)
@@ -1433,11 +1440,7 @@ export class EditorPanel {
     const tab = this._tabs.get(filePath)
     if (!tab?.view) return
 
-    let relPath = filePath
-    if (filePath.startsWith(rootPath)) {
-      relPath = filePath.slice(rootPath.length)
-      if (relPath.startsWith('/')) relPath = relPath.slice(1)
-    }
+    const relPath = this._gitRelPath(rootPath, filePath)
 
     const diffStr = await this._api.gitGetDiff(rootPath, relPath, { compareTo: 'head' }, this._store?.get('git.ctx') || null)
 

@@ -9,6 +9,38 @@
   --green: #a6e3a1;
   --red: #f38ba8;
   --hover: #45475a;
+  --scrollbar-size: 8px;
+  --scrollbar-thumb: color-mix(in srgb, var(--text) 28%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--text) 45%, transparent);
+}
+
+/* Оверлейные скроллбары на Windows/Linux: узкий прозрачный жёлоб, ползунок виден при прокрутке
+   (.is-scrolling ставит core/scrollbar-activity.js) и при наведении. На macOS — системные.
+   scrollbar-width/scrollbar-color не используем: в Chromium они отключают ::-webkit-scrollbar. */
+body:not(.platform-darwin) ::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+  background: transparent;
+}
+body:not(.platform-darwin) ::-webkit-scrollbar-track,
+body:not(.platform-darwin) ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+body:not(.platform-darwin) ::-webkit-scrollbar-button {
+  display: none;
+}
+body:not(.platform-darwin) ::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+body:not(.platform-darwin) .is-scrolling::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+}
+body:not(.platform-darwin) ::-webkit-scrollbar-thumb:hover,
+body:not(.platform-darwin) ::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 * {

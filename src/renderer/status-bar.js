@@ -19,7 +19,8 @@ import { buildQuickReplyTree } from './features/quick-replies/quick-replies-mode
  *   чтобы click-события доходили для double-click обработки.
  */
 export class StatusBar {
-  constructor({ btnEl, cwdEl, nodeEl, onOpen, onOpenNodeVersion, agentsContainerEl = null, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, onClearOptimisticBusy = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [], groups: [] }, api, store = null }) {
+  constructor({ btnEl, cwdEl, nodeEl, onOpen, onOpenNodeVersion, agentsContainerEl = null, agentButtons = [], onLaunchAgent, onSelectAgent, agentCommandsPanelEl = null, onAgentCommand = null, onClearOptimisticBusy = null, proxyToggleEl = null, onToggleProxy = null, quickReplies = { items: [], groups: [] }, api, store = null, paths }) {
+    this._paths = paths
     this._btnEl = btnEl
     this._cwdEl = cwdEl
     this._nodeEl = nodeEl
@@ -429,12 +430,11 @@ export class StatusBar {
       if (this._cwdEl) {
         if (rootPath) {
           const home = this._homeDir || ''
-          const idx = rootPath.lastIndexOf('/')
-          const parentPath = idx > 0 ? rootPath.slice(0, idx) : rootPath
-          const abbrev = home && parentPath.startsWith(home)
-            ? '~' + parentPath.slice(home.length)
-            : parentPath
-          this._cwdEl.innerHTML = `${Icons.folderOpen} ${abbrev || '/'}`
+          const p = this._paths.current()
+          const dir = p.dirname(rootPath)
+          const parentPath = p.isRoot(dir) ? rootPath : dir
+          const abbrev = p.toDisplay(parentPath, home)
+          this._cwdEl.innerHTML = `${Icons.folderOpen} ${abbrev || p.sep}`
           this._cwdEl.classList.remove('hidden')
         } else {
           this._cwdEl.classList.add('hidden')

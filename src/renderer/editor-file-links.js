@@ -16,10 +16,9 @@ import {
   Decoration,
   EditorView
 } from '@codemirror/view'
+import { IS_MAC } from './core/platform.js'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform)
 
 function isModKey(e) {
   return IS_MAC ? e.key === 'Meta' : e.key === 'Control'
@@ -48,7 +47,7 @@ const KNOWN_EXTS = new Set([
 
 /** Returns true when text looks like a file path (for backtick-wrapped content). */
 function isPathLike(text) {
-  if (text.includes('/')) return true
+  if (text.includes('/') || text.includes('\\')) return true
   const dot = text.lastIndexOf('.')
   if (dot > 0 && dot < text.length - 1) {
     return KNOWN_EXTS.has(text.slice(dot + 1).toLowerCase())
@@ -68,20 +67,6 @@ function stripTrailing(text) {
   })
 }
 
-/**
- * Normalise a path — resolve `.` and `..` segments.
- * Works without Node.js `path` module.
- */
-export function normalizePath(p) {
-  const parts = p.split('/')
-  const result = []
-  for (const part of parts) {
-    if (part === '..') result.pop()
-    else if (part !== '.' && part !== '') result.push(part)
-  }
-  return '/' + result.join('/')
-}
-
 // ── Regex ───────────────────────────────────────────────────────────────────
 //
 // Combined pattern with named-ish groups (captured by index):
@@ -96,8 +81,7 @@ const FILE_PATH_RE = new RegExp(
   ')|(?:' +
     '\\[(?:[^\\]]*)\\]\\(([^)\\s]+)\\)' +                // group 2: markdown link
   ')|(' +
-    '(?<!:)' +                                            // not preceded by : (skip URLs)
-    '(?:\\.{1,2}/|/(?=[a-zA-Z]))' +                      // group 3: ./  ../  /A
+    '(?:(?<!:)(?:\\.{1,2}/|/(?=[a-zA-Z]))|(?<!\\w)[A-Za-z]:[\\\\/])' + // group 3: ./  ../  /A  C:\\  C:/
     '[^\\s`\'"\\]}>]+' +
   ')|(' +
     '(?<=^|[\\s`\'"(\\[{,;:])' +                         // group 4: word-boundary start

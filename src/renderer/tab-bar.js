@@ -27,7 +27,8 @@ function tmuxBadgeText(ssh) {
 }
 
 export class TabBar {
-  constructor({ tabBarEl, terminalContainerEl, eventBus, store }) {
+  constructor({ tabBarEl, terminalContainerEl, eventBus, store, paths }) {
+    this._paths = paths
     this.tabBarEl = tabBarEl
     this.terminalContainerEl = terminalContainerEl
     this._bus = eventBus
@@ -41,6 +42,12 @@ export class TabBar {
     this._addBtn = tabBarEl.querySelector('#tab-add')
     this._cleanupController = new AbortController()
     this._addBtn.addEventListener('click', (e) => this._bus.emit('tab.add', { metaKey: e.metaKey, ctrlKey: e.ctrlKey }), { signal: this._cleanupController.signal })
+    // ПКМ по «+» — выбор типа новой вкладки (локальная / SSH-подключение), обрабатывает index.js
+    this._addBtn.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      const rect = this._addBtn.getBoundingClientRect()
+      this._bus.emit('tab.add.menu', { x: rect.left, y: rect.bottom })
+    }, { signal: this._cleanupController.signal })
 
     this._contextMenu = new ContextMenu()
 
@@ -64,7 +71,7 @@ export class TabBar {
   }
 
   addTab({ pid, term, fitAddon, rootPath, tabId, ssh, remoteCwd }, insertIndex = -1) {
-    const folderName = ssh ? ssh.label : (rootPath.split('/').filter(Boolean).pop() || '/')
+    const folderName = ssh ? ssh.label : (this._paths.local.basename(rootPath) || rootPath)
     const container = document.createElement('div')
     container.className = 'terminal-pane'
     this.terminalContainerEl.appendChild(container)
@@ -172,7 +179,7 @@ export class TabBar {
     const tab = this.tabs[index]
     if (!tab || tab.ssh) return // SSH-вкладки хранят локальный rootPath, но не переименовываются по нему
     tab.rootPath = rootPath
-    tab.folderName = rootPath.split('/').filter(Boolean).pop() || '/'
+    tab.folderName = this._paths.local.basename(rootPath) || rootPath
     this._updateTabLabel(tab)
   }
 

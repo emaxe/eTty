@@ -27,6 +27,7 @@ import { ProjectSearchDialog } from './project-search.js'
 import { NodeVersionDialog } from './node-version-dialog.js'
 import { ConfirmDialog } from './confirm-dialog.js'
 import { Icons } from './icons.js'
+import { ContextMenu } from './components/base/context-menu/context-menu.js'
 import { TERMINAL_CONFIG } from './core/config/terminal-config.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 import { TerminalKeyboardHandler } from './features/terminal/terminal-keyboard-handler.js'
@@ -40,6 +41,10 @@ import { StateStore } from './core/state-store.js'
 import { ElectronApiAdapter } from './core/adapters/electron-api.js'
 import { createScopedFsApi } from './core/adapters/scoped-fs-api.js'
 import { AppContainer } from './core/container.js'
+import { createPathsService } from './core/paths.js'
+import { ScrollbarActivity } from './core/scrollbar-activity.js'
+import { isLightColor } from './core/color-utils.js'
+import { IS_MAC } from './core/platform.js'
 import { diagnostics } from './core/diagnostics.js'
 import { GitStatusService } from './services/git-status-service.js'
 import { buildSessionNameBase, pickFreeSessionName } from '../shared/ssh-session-name.js'
@@ -236,6 +241,8 @@ async function init() {
       root.setProperty('--green', theme.ui.green)
       root.setProperty('--red', theme.ui.red)
       root.setProperty('--hover', theme.ui.hover)
+      // Нативные контролы (select, input, угол скроллбара) на Windows/Linux следуют теме
+      root.colorScheme = isLightColor(theme.ui.bg) ? 'light' : 'dark'
 
       // Git diff — токены подсветки синтаксиса (features/git/diff-highlighter.js)
       if (theme.editor) {
@@ -313,6 +320,10 @@ async function init() {
   container.register('store', () => appStore)
   container.register('bus', () => bus)
   container.register('api', () => api)
+  container.register('paths', (r) => createPathsService({
+    localSep: r('api').pathSep,
+    getContext: () => r('store').get('fs.context')
+  }))
   container.register('scopedApi', (r) => createScopedFsApi(api, () => r('store').get('fs.context')))
   container.register('gitStatusService', (r) => new GitStatusService({
     api: r('api'),
@@ -377,7 +388,7 @@ async function init() {
     for (const agent of SUPPORTED_AGENTS) add(agent.id)
     for (const agent of config.agents?.custom || []) add(agent?.id)
     for (const [id, cmd] of agentCommands) {
-      add(id, String(cmd).trim().split(/\s+/)[0].split('/').pop())
+      add(id, String(cmd).trim().split(/\s+/)[0].split(/[\\/]/).pop().replace(/\.(exe|cmd|bat|ps1)$/i, ''))
     }
     return matchAgentByProcess({ ...proc }, [...candidates.values()])
   }
@@ -414,11 +425,12 @@ async function init() {
     electronAPI: r('scopedApi'),
     getActiveCwd: () => container.resolve('tabBar').getActive()?.rootPath || startCwd,
     store: r('store'),
+    paths: r('paths'),
   }))
   // Регистрация здесь (не рядом с остальными resolve('confirmDialog') ниже) — FileTree
   // резолвится намного раньше и уже сейчас нуждается в confirmDialog для подтверждения удаления.
   container.register('confirmDialog', () => new ConfirmDialog())
-  container.register('fileTree', (r) => new FileTree(fileTreeContainerEl, { eventBus: r('bus'), api: r('scopedApi'), store: r('store'), confirmDialog: r('confirmDialog') }))
+  container.register('fileTree', (r) => new FileTree(fileTreeContainerEl, { eventBus: r('bus'), api: r('scopedApi'), store: r('store'), confirmDialog: r('confirmDialog'), paths: r('paths') }))
 
   editorPanel = container.resolve('editorPanel')
   // Apply current theme immediately (applyTheme ran before editorPanel was created)
@@ -433,7 +445,7 @@ async function init() {
   function updateNavButtons() {
     const tab = tabBar.getActive()
     const busy = tab?.isBusy ?? false
-    btnUp.disabled = busy || (tab?.rootPath === '/')
+    btnUp.disabled = busy || (!!tab?.rootPath && container.resolve('paths').forTab(tab).isRoot(tab.rootPath))
     btnHome.disabled = busy
     fileTree.setIsBusy(busy)
   }
@@ -451,6 +463,7 @@ async function init() {
   }
 
   container.register('tabBar', (r) => new TabBar({
+    paths: r('paths'),
     tabBarEl,
     terminalContainerEl,
     eventBus: r('bus'),
@@ -462,6 +475,12 @@ async function init() {
 
   // Platform class for CSS
   document.body.classList.add(`platform-${api.platform}`)
+
+  // Оверлейные скроллбары: на macOS системные, на Windows/Linux — ползунок только при прокрутке
+  if (!IS_MAC) {
+    container.register('scrollbarActivity', () => new ScrollbarActivity())
+    container.resolve('scrollbarActivity')
+  }
 
   // Window controls (Windows / Linux)
   if (api.platform !== 'darwin') {
@@ -608,7 +627,8 @@ async function init() {
     // Активная SSH-вкладка + "+" → новая вкладка того же подключения (REQ: наследование SSH).
     // persistence — от активной вкладки; для tmux всегда НОВОЕ имя сессии (не переиспользуем
     // текущее — иначе new-session -A -D отцепил бы вкладку-источник).
-    const sshInherit = active?.ssh
+    // payload.local — явный запрос обычной локальной вкладки (ПКМ по «+», Cmd+Shift+T)
+    const sshInherit = active?.ssh && !payload?.local
       ? {
           connectionId: active.ssh.connectionId,
           label: active.ssh.label,
@@ -639,6 +659,21 @@ async function init() {
     setupTabHandlers(tab)
     tab.fitAddon.fit()
     if (sshInherit) connectSshTab(tab)
+  })
+
+  // ПКМ по «+»: локальная вкладка или новая вкладка выбранного SSH-подключения
+  const addTabMenu = new ContextMenu()
+  bus.on('tab.add.menu', ({ x, y }) => {
+    if (settingsPage.isVisible()) return
+    const items = [{ label: 'Локальная вкладка', action: () => bus.emit('tab.add', { local: true }) }]
+    const connections = sshPanel.getConnections()
+    if (connections.length > 0) {
+      items.push({ separator: true })
+      for (const c of connections) {
+        items.push({ label: `SSH: ${c.label}`, action: () => bus.emit('ssh.connect', { connectionId: c.id, forceNew: true }) })
+      }
+    }
+    addTabMenu.show(items, x, y)
   })
 
   /**
@@ -784,6 +819,7 @@ async function init() {
   await settingsPage.init()
 
   container.register('gitPanel', (r) => new GitPanel({
+    paths: r('paths'),
     overlayEl: document.getElementById('git-overlay'),
     onClose: () => {
       appStore.set('ui.gitPanelVisible', false)
@@ -869,6 +905,7 @@ async function init() {
   const projectSearch = container.resolve('projectSearch')
 
   container.register('nodeVersionDialog', (r) => new NodeVersionDialog({
+    paths: r('paths'),
     api: r('api'),
     confirmDialog: r('confirmDialog'),
     getContext: () => {
@@ -964,6 +1001,7 @@ async function init() {
   }
 
   container.register('statusBar', (r) => new StatusBar({
+    paths: r('paths'),
     btnEl: document.getElementById('btn-git-diff'),
     cwdEl: document.getElementById('status-cwd'),
     nodeEl: document.getElementById('status-node'),
@@ -1516,6 +1554,10 @@ async function init() {
     tab._wheelHandler = wheelHandler
 
     const oscHandler = new TerminalOscHandler({
+      parseFileUrl: (url, pid) => {
+        const owner = tabBar.tabs.find(t => t.pid === pid)
+        return container.resolve('paths').forTab(owner).fromFileUrl(url)
+      },
       onCwdChange: (newPath, pid) => {
         const index = tabBar.tabs.findIndex(t => t.pid === pid)
         const changedTab = tabBar.tabs[index]
@@ -1539,7 +1581,7 @@ async function init() {
 
         tabBar.updateRootPath(index, newPath)
         if (tabBar.getActive()?.pid === pid) {
-          if (newPath !== fileTree.getCwd() || !fileTree.isSameContext({ kind: 'local' })) {
+          if (!fileTree.getCwd() || !container.resolve('paths').local.equals(newPath, fileTree.getCwd()) || !fileTree.isSameContext({ kind: 'local' })) {
             fileTree.setRoot(newPath, { kind: 'local' })
             api.fsSetRoot(newPath, { kind: 'local' })
           }
@@ -2042,6 +2084,13 @@ async function init() {
       e.preventDefault()
       bus.emit('search.show')
     }
+    // Cmd+Shift+T / Ctrl+Shift+T — новая локальная вкладка (даже если активна SSH-вкладка)
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 't') {
+      if (document.activeElement?.closest('#editor-body')) return
+      if (settingsPage.isVisible()) return
+      e.preventDefault()
+      bus.emit('tab.add', { local: true })
+    }
     // Cmd+Shift+G / Ctrl+Shift+G — toggle git-панели (открыть/закрыть)
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'g') {
       if (document.activeElement?.closest('#editor-body')) return
@@ -2256,6 +2305,7 @@ async function init() {
     document.removeEventListener('mouseup', onMouseUp)
     gitStatusService.destroy()
     projectSearch.destroy()
+    addTabMenu.destroy()
     container.destroy()
   }
 

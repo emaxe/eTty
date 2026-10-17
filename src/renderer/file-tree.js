@@ -13,12 +13,13 @@ import { isBinaryPath } from '../shared/binary-extensions.js'
  * - Undo: Ctrl+Z для отката move-операций
  */
 export class FileTree {
-  constructor(container, { eventBus, api, store, confirmDialog } = {}) {
+  constructor(container, { eventBus, api, store, confirmDialog, paths } = {}) {
     this._container = container
     this._bus = eventBus
     this._api = api
     this._store = store || null
     this._confirmDialog = confirmDialog || null
+    this._paths = paths
     this._cwd = null
     // Контекст текущего корня — {kind:'local'} | {kind:'ssh', sessionId}. Обновляется извне
     // (см. index.js) синхронно с setRoot(); используется только чтобы прятать пункты меню,
@@ -287,12 +288,23 @@ export class FileTree {
     })
   }
 
+  /** Утилиты путей для текущего корня дерева: SSH — POSIX, локально — разделитель ОС. */
+  _p() {
+    return this._context.kind === 'ssh' ? this._paths.remote : this._paths.local
+  }
+
+  /** Путь относительно корня git-репозитория в git-формате (с `/`); вне репозитория или сам корень — как есть. */
+  _gitRel(rootPath, absPath) {
+    const p = this._p()
+    if (!rootPath || !absPath || p.equals(rootPath, absPath) || !p.isInside(rootPath, absPath)) return absPath
+    return p.relative(rootPath, absPath).replace(/\\/g, '/')
+  }
+
   _applyGitStatuses() {
     if (!this._store) return
 
     const isRepo = this._store.get('git.isRepo')
     const rootPath = this._store.get('git.rootPath')
-    const rootPathLower = rootPath ? rootPath.toLowerCase() : null
     const fileStatuses = this._store.get('git.fileStatuses') || {}
     const ignoredTracked = this._store.get('git.ignoredTracked') || new Set()
     const ignoredPaths = this._store.get('git.ignoredPaths') || []
@@ -343,11 +355,7 @@ export class FileTree {
       const absPath = li.dataset.path
       if (!absPath) continue
 
-      let relPath = absPath
-      if (rootPathLower && absPath.toLowerCase().startsWith(rootPathLower + '/')) {
-        relPath = absPath.slice(rootPath.length)
-        if (relPath.startsWith('/')) relPath = relPath.slice(1)
-      }
+      const relPath = this._gitRel(rootPath, absPath)
 
       const status = fileStatuses[relPath]
       const row = li.querySelector(':scope > .tree-node-row')
@@ -397,11 +405,7 @@ export class FileTree {
       const dirAbsPath = li.dataset.path
       if (!dirAbsPath) continue
 
-      let dirRelPath = dirAbsPath
-      if (rootPathLower && dirAbsPath.toLowerCase().startsWith(rootPathLower + '/')) {
-        dirRelPath = dirAbsPath.slice(rootPath.length)
-        if (dirRelPath.startsWith('/')) dirRelPath = dirRelPath.slice(1)
-      }
+      const dirRelPath = this._gitRel(rootPath, dirAbsPath)
 
       const dirRow = li.querySelector(':scope > .tree-node-row')
       const nameEl = dirRow?.querySelector('.tree-name')
@@ -427,11 +431,7 @@ export class FileTree {
     // --- Корневая папка ---
     if (rootRow) {
       const rootAbsPath = this._cwd
-      let rootRelPath = rootAbsPath
-      if (rootPathLower && rootAbsPath.toLowerCase().startsWith(rootPathLower + '/')) {
-        rootRelPath = rootAbsPath.slice(rootPath.length)
-        if (rootRelPath.startsWith('/')) rootRelPath = rootRelPath.slice(1)
-      }
+      const rootRelPath = this._gitRel(rootPath, rootAbsPath)
 
       const rootLabelEl = rootRow.querySelector('.tree-root-label')
       if (rootLabelEl) {
@@ -519,7 +519,7 @@ export class FileTree {
   }
 
   async restoreExpandedDirs(expandedDirs) {
-    const sorted = [...expandedDirs].sort((a, b) => a.split('/').length - b.split('/').length)
+    const sorted = [...expandedDirs].sort((a, b) => this._p().split(a).length - this._p().split(b).length)
     for (const dirPath of sorted) {
       const li = this._container.querySelector(`li[data-path="${CSS.escape(dirPath)}"]`)
       if (!li) continue
@@ -584,8 +584,7 @@ export class FileTree {
 
     const labelEl = this._rootNodeRow?.querySelector('.tree-root-label')
     if (labelEl) {
-      const parts = newPath.replace(/\/$/, '').split('/')
-      labelEl.textContent = parts[parts.length - 1] || newPath
+      labelEl.textContent = this._p().basename(newPath) || newPath
     }
 
     await this._refreshList(this._rootContainer, newPath, 1)
@@ -686,7 +685,7 @@ export class FileTree {
       if (paths.length === 0) return
 
       const dirPath = this._cwd
-      const isInvalid = paths.some(p => p === dirPath || dirPath.startsWith(p + '/'))
+      const isInvalid = paths.some(src => this._p().isInside(src, dirPath))
       if (isInvalid) return
 
       this._setMoving(true)
@@ -704,8 +703,7 @@ export class FileTree {
   }
 
   _renderRootNode(dirPath) {
-    const parts = dirPath.replace(/\/$/, '').split('/')
-    const name = parts[parts.length - 1] || dirPath
+    const name = this._p().basename(dirPath) || dirPath
 
     const row = document.createElement('div')
     row.className = 'tree-root-node-row'
@@ -838,9 +836,7 @@ export class FileTree {
     name.textContent = entry.name
     row.appendChild(name)
 
-    const rel = entry.path.startsWith(this._cwd + '/')
-      ? entry.path.slice(this._cwd.length + 1)
-      : entry.path
+    const rel = this._relToCwd(entry.path)
 
     row.addEventListener('mouseenter', () => {
       if (!this._isDragging) {
@@ -1161,7 +1157,7 @@ export class FileTree {
       if (paths.length === 0) return
 
       // Validate: prevent dropping onto self or into own children
-      const isInvalid = paths.some(p => p === dirPath || dirPath.startsWith(p + '/'))
+      const isInvalid = paths.some(src => this._p().isInside(src, dirPath))
       if (isInvalid) return
 
       this._setMoving(true)
@@ -1309,7 +1305,15 @@ export class FileTree {
   // ── Context menus ────────────────────────────────────────────────
 
   _parentDir(filePath) {
-    return filePath.replace(/\/[^/]+$/, '')
+    return this._p().dirname(filePath)
+  }
+
+  /** Путь относительно корня дерева (для подписи и «Копировать относительный путь»); вне корня — как есть. */
+  _relToCwd(absPath) {
+    const p = this._p()
+    return this._cwd && !p.equals(this._cwd, absPath) && p.isInside(this._cwd, absPath)
+      ? p.relative(this._cwd, absPath)
+      : absPath
   }
 
   _isRemote() {
@@ -1319,9 +1323,7 @@ export class FileTree {
   _showMenuFile(x, y, entry, row) {
     const parentDir = this._parentDir(entry.path)
     const parentContainer = this._findContainerForDir(parentDir)
-    const rel = entry.path.startsWith(this._cwd + '/')
-      ? entry.path.slice(this._cwd.length + 1)
-      : entry.path
+    const rel = this._relToCwd(entry.path)
     const isMulti = this._selectedPaths.has(entry.path) && this._selectedPaths.size > 1
     const targets = isMulti ? [...this._selectedPaths] : [entry.path]
     const items = [
@@ -1366,9 +1368,7 @@ export class FileTree {
   }
 
   _showMenuDir(x, y, entry, childrenEl, arrow, childDepth, row) {
-    const rel = entry.path.startsWith(this._cwd + '/')
-      ? entry.path.slice(this._cwd.length + 1)
-      : entry.path
+    const rel = this._relToCwd(entry.path)
     const isMulti = this._selectedPaths.has(entry.path) && this._selectedPaths.size > 1
     const targets = isMulti ? [...this._selectedPaths] : [entry.path]
     const items = [
@@ -1500,7 +1500,7 @@ export class FileTree {
       const name = input.value.trim()
       if (!name) { cleanup(); return }
 
-      const targetPath = parentPath.replace(/\/$/, '') + '/' + name
+      const targetPath = this._p().join(parentPath, name)
       let result
       if (kind === 'file') {
         result = await this._api.fsCreateFile(targetPath)
@@ -1548,7 +1548,7 @@ export class FileTree {
       if (!newName || newName === original) { restore(); return }
 
       const dir = this._parentDir(entry.path)
-      const newPath = dir + '/' + newName
+      const newPath = this._p().join(dir, newName)
       const result = await this._api.fsRename(entry.path, newPath)
 
       if (result && result.success === false) {
@@ -1580,7 +1580,7 @@ export class FileTree {
     if (this._confirmDialog) {
       const remoteSuffix = this._isRemote() ? ' на удалённом сервере' : ''
       const message = paths.length === 1
-        ? `Удалить «${paths[0].split('/').filter(Boolean).pop() || paths[0]}»${remoteSuffix}?`
+        ? `Удалить «${this._p().basename(paths[0]) || paths[0]}»${remoteSuffix}?`
         : `Удалить ${paths.length} элементов${remoteSuffix}?`
       const confirmed = await this._confirmDialog.open({
         title: 'Подтверждение удаления',

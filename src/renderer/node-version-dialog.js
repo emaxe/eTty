@@ -18,7 +18,8 @@ export class NodeVersionDialog {
    * @param {Object} deps.confirmDialog
    * @param {Function} [deps.onClose]
    */
-  constructor({ api, getContext, onUseVersion, confirmDialog, onClose }) {
+  constructor({ api, getContext, onUseVersion, confirmDialog, onClose, paths }) {
+    this._paths = paths
     this._api = api
     this._getContext = getContext
     this._onUseVersion = onUseVersion
@@ -195,10 +196,11 @@ export class NodeVersionDialog {
    */
   async _findRequiredVersion(cwd, ctx) {
     if (!cwd) return null
+    const p = ctx?.kind === 'ssh' ? this._paths.remote : this._paths.local
     let dir = cwd
     for (let depth = 0; depth < 6; depth++) {
       for (const name of ['.nvmrc', '.node-version', '.tool-versions']) {
-        const res = await this._api.fsReadFile(`${dir.replace(/\/$/, '')}/${name}`, ctx).catch(() => null)
+        const res = await this._api.fsReadFile(p.join(dir, name), ctx).catch(() => null)
         if (!res?.success) continue
         let version = res.content.trim().split('\n')[0].trim()
         if (name === '.tool-versions') {
@@ -206,15 +208,10 @@ export class NodeVersionDialog {
           if (!m) continue
           version = m[1]
         }
-        if (version) return { version: version.replace(/^v(?=\d)/, ''), file: `${dir === '/' ? '' : dir}/${name}` }
+        if (version) return { version: version.replace(/^v(?=\d)/, ''), file: p.join(dir, name) }
       }
-      const idx = dir.lastIndexOf('/')
-      if (idx <= 0) {
-        if (dir === '/') break
-        dir = '/'
-      } else {
-        dir = dir.slice(0, idx)
-      }
+      if (p.isRoot(dir)) break
+      dir = p.dirname(dir)
     }
     return null
   }
@@ -334,7 +331,7 @@ export class NodeVersionDialog {
         break
       }
       case 'pin': {
-        const file = `${cwd.replace(/\/$/, '')}/.nvmrc`
+        const file = (ctx?.kind === 'ssh' ? this._paths.remote : this._paths.local).join(cwd, '.nvmrc')
         this._setStatus(`Запись ${file}...`)
         const res = await this._api.fsWriteFile(file, version + '\n', ctx).catch(e => ({ success: false, error: e.message }))
         this._setStatus(res?.success ? `v${version} записана в ${file}` : `Ошибка записи: ${res?.error || 'неизвестная'}`)

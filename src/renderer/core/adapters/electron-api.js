@@ -95,6 +95,7 @@ export class ElectronApiAdapter {
   getHomedir() { return this._api.getHomedir() }
   get nodeVersion() { return this._api.nodeVersion }
   get platform() { return this._api.platform }
+  get pathSep() { return this._api.pathSep }
   openExternal(path) { return this._api.appOpenExternal(path) }
 
   // — Node Version Manager —

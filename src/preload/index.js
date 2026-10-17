@@ -76,6 +76,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clipboardUploadImage: (ctx) => ipcRenderer.invoke(IPC_CHANNELS.CLIPBOARD_UPLOAD_IMAGE, { ctx }),
   nodeVersion: process.versions.node,
   platform: process.platform,
+  pathSep: process.platform === 'win32' ? '\\' : '/',
   nodeVersionResolve: (nodePath, ctx) => ipcRenderer.invoke(IPC_CHANNELS.NODE_VERSION_RESOLVE, { nodePath, ctx }),
   nodeVersionDetectManager: (ctx) => ipcRenderer.invoke(IPC_CHANNELS.NODE_VERSION_DETECT_MANAGER, { ctx }),
   nodeVersionListInstalled: (ctx) => ipcRenderer.invoke(IPC_CHANNELS.NODE_VERSION_LIST_INSTALLED, { ctx }),

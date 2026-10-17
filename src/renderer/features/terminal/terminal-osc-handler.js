@@ -1,3 +1,7 @@
+import { createPathUtils } from '../../../shared/path-utils.js'
+
+const posixFromFileUrl = createPathUtils('/').fromFileUrl
+
 /**
  * Handles OSC sequences from the terminal:
  * - OSC 7: directory change synchronization
@@ -11,8 +15,11 @@ export class TerminalOscHandler {
    * @param {Function} callbacks.onCwdChange — (newPath, pid) => void
    * @param {Function} callbacks.onBusyChange — (isBusy, pid, wasBusy) => void
    * @param {Function} [callbacks.onNodeChange] — (nodePath|null, pid) => void
+   * @param {Function} [callbacks.parseFileUrl] — (url, pid) => path|null: разбор OSC 7 (`file:///C:/x` → `C:\x`
+   *   на локальном Windows, POSIX по умолчанию и для SSH)
    */
-  constructor({ onCwdChange, onBusyChange, onNodeChange }) {
+  constructor({ onCwdChange, onBusyChange, onNodeChange, parseFileUrl = posixFromFileUrl }) {
+    this._parseFileUrl = parseFileUrl
     this._onCwdChange = onCwdChange
     this._onBusyChange = onBusyChange
     this._onNodeChange = onNodeChange
@@ -50,11 +57,8 @@ export class TerminalOscHandler {
   }
 
   _handleCwd(data, pid) {
-    const match = data.match(/^file:\/\/[^/]*(.+)$/)
-    if (match) {
-      const newPath = match[1].replace(/\/$/, '') || '/'
-      this._onCwdChange?.(newPath, pid)
-    }
+    const newPath = this._parseFileUrl(data, pid)
+    if (newPath) this._onCwdChange?.(newPath, pid)
     return false
   }
 

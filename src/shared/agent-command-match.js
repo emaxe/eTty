@@ -17,7 +17,8 @@ const PATH_HINTS = [
   ['opencode-ai', 'opencode']
 ]
 
-const baseName = (token) => String(token || '').split('/').pop()
+// Имя исполняемого файла: оба разделителя, без Windows-расширения (`C:\\bin\\claude.exe` → `claude`)
+const baseName = (token) => String(token || '').split(/[\\/]/).pop().replace(/\.(exe|cmd|bat|ps1)$/i, '')
 
 /**
  * @param {{ command?: string, args?: string }} proc — `command`: имя процесса, `args`: полный argv
@@ -33,8 +34,9 @@ export function resolveAgentIdByProcess({ command = '', args = '' } = {}, candid
     return null
   }
   const byPath = (token) => {
+    const normalized = token.replace(/\\/g, '/')
     for (const [fragment, id] of PATH_HINTS) {
-      if (token.includes(fragment) && candidates.some(c => c.id === id)) return id
+      if (normalized.includes(fragment) && candidates.some(c => c.id === id)) return id
     }
     return null
   }

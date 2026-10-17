@@ -1,3 +1,4 @@
+import path from 'path'
 import { IPC_CHANNELS } from '../../shared/ipc-channels.js'
 import { parseStatusPorcelainZ, parseNumstat, parseBranchList } from '../git/git-parse.js'
 
@@ -132,7 +133,9 @@ export function registerGitHandlers(ipcMain, { gitRunnerRegistry }) {
     try {
       const git = gitRunnerRegistry.resolve(rootPath, ctx)
       const root = await git.run(['rev-parse', '--show-toplevel'])
-      return root.trim()
+      const trimmed = root.trim()
+      // git на Windows отдаёт `C:/repo`; дерево и редактор оперируют `C:\\repo`
+      return ctx?.kind === 'ssh' || process.platform !== 'win32' ? trimmed : path.win32.normalize(trimmed)
     } catch {
       return null
     }

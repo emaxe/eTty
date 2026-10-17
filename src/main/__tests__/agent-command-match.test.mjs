@@ -64,4 +64,16 @@ check('подсказка пути игнорируется, если агент
   assertEq(resolveAgentIdByProcess({ command: '1.0.0', args: '/x/claude/versions/1.0.0' }, [{ id: 'codex', bases: ['codex'] }]), null)
 })
 
+check('Windows: argv0 C:\\...\\claude.exe', () => {
+  assertEq(resolveAgentIdByProcess({ command: 'claude.exe', args: 'C:\\Users\\u\\.local\\bin\\claude.exe --resume' }, candidates), 'claude')
+})
+
+check('Windows: интерпретатор + скрипт codex.cmd', () => {
+  assertEq(resolveAgentIdByProcess({ command: 'node.exe', args: 'node.exe C:\\npm\\codex.cmd' }, candidates), 'codex')
+})
+
+check('Windows: путь установки через обратные слэши', () => {
+  assertEq(resolveAgentIdByProcess({ command: '2.1.19', args: 'C:\\x\\claude\\versions\\2.1.19' }, candidates), 'claude')
+})
+
 process.exit(failed ? 1 : 0)

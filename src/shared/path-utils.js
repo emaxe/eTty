@@ -25,7 +25,8 @@ export function createPathUtils(sep = '/') {
     if (isWin) {
       const m = norm.match(/^[A-Za-z]:\\/)
       if (m) return m[0]
-      if (norm.startsWith('\\\\')) return '\\\\' // UNC — упрощённо, без разбора \\server\share
+      const unc = norm.match(/^\\\\[^\\]+\\[^\\]+\\?/)
+      if (unc) return unc[0].endsWith('\\') ? unc[0] : unc[0] + '\\'
       return ''
     }
     return norm.startsWith('/') ? sep : ''
@@ -87,5 +88,51 @@ export function createPathUtils(sep = '/') {
     return isWin ? childNorm.toLowerCase().startsWith(prefix.toLowerCase()) : childNorm.startsWith(prefix)
   }
 
-  return { sep, join, dirname, basename, extname, normalize, isInside, split }
+  /** Сравнение путей: регистронезависимо на Windows, разделители и `..` нормализуются. */
+  function equals(a, b) {
+    const na = normalize(a)
+    const nb = normalize(b)
+    return isWin ? na.toLowerCase() === nb.toLowerCase() : na === nb
+  }
+
+  /** true, если путь — корень ФС (`/`, `C:\\`, `\\\\server\\share\\`). */
+  function isRoot(p) {
+    const root = rootPrefix(p)
+    return !!root && normalize(p) === normalize(root)
+  }
+
+  /** Относительный путь `to` от `from` (разделитель — `sep`); '' если пути равны. */
+  function relative(from, to) {
+    if (equals(from, to)) return ''
+    if (!isInside(from, to)) return normalize(to)
+    return split(normalize(to).slice(normalize(from).length)).join(sep)
+  }
+
+  /**
+   * `file://` URL (OSC 7) → путь. Windows: `file:///C:/a%20b` → `C:\\a b`,
+   * `file://server/share/x` → `\\\\server\\share\\x`. POSIX: хост отбрасывается.
+   */
+  function fromFileUrl(url) {
+    const m = /^file:\/\/([^/]*)(\/.*)?$/.exec(url)
+    if (!m) return null
+    let rest = m[2] || '/'
+    try { rest = decodeURIComponent(rest) } catch { /* оставляем как есть */ }
+    if (isWin) {
+      const drive = rest.match(/^\/([A-Za-z]:)(\/.*)?$/)
+      if (drive) rest = drive[1] + (drive[2] || '/')
+      else if (m[1] && m[1] !== 'localhost') rest = '//' + m[1] + rest
+      const out = normalizeSlashes(rest)
+      return /^[A-Za-z]:\\?$/.test(out) ? out.replace(/\\?$/, '\\') : out.replace(/\\+$/, '')
+    }
+    return rest.replace(/\/+$/, '') || '/'
+  }
+
+  /** Путь для показа: домашний каталог → `~` (только POSIX; Windows показывает путь как есть). */
+  function toDisplay(p, home) {
+    if (isWin || !home) return p
+    if (p === home) return '~'
+    return p.startsWith(home + '/') ? '~' + p.slice(home.length) : p
+  }
+
+  return { sep, join, dirname, basename, extname, normalize, isInside, split, equals, isRoot, relative, fromFileUrl, toDisplay }
 }
