@@ -3,10 +3,8 @@
  * Проверяет наличие команд claude, codex, gh copilot, agent, opencode в resolved PATH.
  * Результат кэшируется; обновляется при открытии настроек.
  */
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-
-const execFileAsync = promisify(execFile)
+import { findExecutable, getPathValue } from './env-utils.js'
+import { execProgram } from './exec-utils.js'
 
 export const SUPPORTED_AGENTS = [
   {
@@ -60,23 +58,13 @@ export const SUPPORTED_AGENTS = [
 ]
 
 async function commandExists(command, resolvedPath) {
-  try {
-    await execFileAsync('sh', ['-c', `command -v ${command} >/dev/null 2>&1`], {
-      timeout: 2500,
-      env: { ...process.env, PATH: resolvedPath }
-    })
-    return true
-  } catch {
-    return false
-  }
+  return findExecutable(command, resolvedPath || getPathValue(process.env)) !== null
 }
 
-async function probeCommand(cmd, resolvedPath) {
+/** Запуск фиксированной команды как проверки доступности (`gh copilot --help`); успех = код 0. */
+async function probeCommand(name, args, resolvedPath) {
   try {
-    await execFileAsync('sh', ['-c', cmd], {
-      timeout: 3000,
-      env: { ...process.env, PATH: resolvedPath }
-    })
+    await execProgram(name, args, { resolvedPath, timeout: 3000 })
     return true
   } catch {
     return false
@@ -88,7 +76,7 @@ async function resolveCopilotLaunchCommand(resolvedPath) {
     return 'copilot'
   }
 
-  if (await probeCommand('gh copilot --help >/dev/null 2>&1', resolvedPath)) {
+  if (await probeCommand('gh', ['copilot', '--help'], resolvedPath)) {
     return 'gh copilot'
   }
 
@@ -110,10 +98,7 @@ async function detectAgent(agent, resolvedPath) {
   // Fallback для Codex: если глобальный codex не найден — пробуем через npx
   if (agent.id === 'codex' && !detected) {
     if (await commandExists('npx', resolvedPath)) {
-      const npxOk = await probeCommand(
-        'npx --no-install @openai/codex --version >/dev/null 2>&1',
-        resolvedPath
-      )
+      const npxOk = await probeCommand('npx', ['--no-install', '@openai/codex', '--version'], resolvedPath)
       if (npxOk) {
         detected = true
         launchCommand = 'npx @openai/codex'
@@ -159,7 +144,7 @@ export class AgentService {
       (customAgents || []).map(async (agent) => {
         let detected = true
         if (agent.checkCommand) {
-          detected = await commandExists(agent.checkCommand, resolvedPath)
+          detected = await commandExists(String(agent.checkCommand).trim().split(/\s+/)[0], resolvedPath)
         }
         return {
           id: agent.id,

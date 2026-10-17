@@ -99,7 +99,7 @@ export class SshConnectionMaster {
     }
 
     const env = { ...process.env }
-    const askpass = this._secret ? applyAskpassEnv(env, this._secret) : { tmpDir: null }
+    const askpass = this._secret ? applyAskpassEnv(env, this._secret, { sshFile: this._sshFile }) : { tmpDir: null }
     this._askpassTmpDir = askpass.tmpDir
 
     const args = [

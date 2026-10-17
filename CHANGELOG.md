@@ -14,6 +14,10 @@ All notable changes to this project will be documented in this file.
   оболочка выбирается в Настройки → Терминал (`terminal.shell`: авто / pwsh / powershell / Git Bash / cmd).
 - **Windows: пути** — сервис путей в renderer (`C:\`, UNC, регистронезависимое сравнение), разбор OSC 7 `file:///C:/…`,
   git-пути, ссылки на файлы в редакторе.
+- **Windows: агенты и версии Node** — CLI-агенты определяются по PATH/PATHEXT без `sh` (включая `.cmd`-шимы npm);
+  менеджеры версий Node — fnm, nvm-windows и Volta (список, установка, удаление; переключение в терминале
+  через диалект оболочки вкладки).
+- **Windows: пароль SSH** — сохранённый пароль/passphrase подставляется через `askpass.cmd` (OpenSSH ≥ 8.4).
 - **Windows/Linux: оверлейные скроллбары** — ползунок виден только при прокрутке, нативные контролы следуют теме.
 
 ### Changed

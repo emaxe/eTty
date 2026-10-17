@@ -284,7 +284,7 @@ export class NodeVersionDialog {
       if (this._currentTab === 'installed') {
         actions = `
           <button class="node-version-row-btn" data-action="use" data-version="${v.version}" title="Выполнить в терминале вкладки">Использовать</button>
-          ${this._manager === 'asdf' ? '' : `<button class="node-version-row-btn" data-action="pin" data-version="${v.version}" title="Записать версию в .nvmrc рабочей папки">В .nvmrc</button>`}
+          ${['asdf', 'volta'].includes(this._manager) ? '' : `<button class="node-version-row-btn" data-action="pin" data-version="${v.version}" title="Записать версию в .nvmrc рабочей папки">В .nvmrc</button>`}
           ${isCurrent ? '' : `<button class="node-version-row-btn danger" data-action="uninstall" data-version="${v.version}">Удалить</button>`}
         `
       } else if (!isInstalled) {

@@ -39,7 +39,7 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 - **SSH panel** — dedicated sidebar for saved connections; position configurable in Settings → SSH Panel (left, right, or off — off by default). The toolbar toggle button is hidden entirely when the panel is off
 - **SSH / tmux switch** — a segmented control in the panel header decides what a click on a connection does: open a regular SSH tab, or (tmux mode) expand the row into the list of tmux sessions on the server; the choice is remembered
 - **Add/edit/delete/reorder** — host, port, user, auth type (ssh-agent, private key, or password), private key path, extra `ssh` arguments; drag-and-drop to reorder
-- **Encrypted password storage** — saved passwords/passphrases are encrypted at rest via Electron `safeStorage` (OS keychain); not supported on Windows, where the terminal prompts for it instead
+- **Encrypted password storage** — saved passwords/passphrases are encrypted at rest via Electron `safeStorage` (OS keychain); on Windows it uses DPAPI
 - **Click to connect** — opens a regular terminal tab (color-accented, SSH icon) running the system `ssh` binary — full support for `~/.ssh/config`, ssh-agent, `ProxyJump`, 2FA
 - **"+" clones the active connection** — pressing "+" while an SSH tab is active opens another tab to the same host
 - **Connection overlay** — spinner while connecting; on a dropped session, an error with exit code and a reconnect button, without closing the tab
@@ -350,7 +350,7 @@ All user data is stored in `~/.config/eTty/` (Electron `userData`):
 - `build/entitlements.mac.plist` contains macOS entitlements required for node-pty under hardened runtime (JIT, unsigned memory, library validation).
 - Auto-update is **stubbed** — logs only, no update server configured yet.
 - Settings overlay blocks tab switching to prevent focus leaking to hidden terminals.
-- Saved SSH passwords are auto-filled via `SSH_ASKPASS` on macOS/Linux (OpenSSH ≥ 8.4); on Windows the terminal always prompts for the password manually.
+- Saved SSH passwords are auto-filled via `SSH_ASKPASS` on macOS/Linux (OpenSSH ≥ 8.4); on Windows the same works via an `askpass.cmd` helper when OpenSSH ≥ 8.4 is installed (otherwise the terminal prompts for the password).
 - The remote file tree, remote agent tracking and the tmux session list rely on SSH ControlMaster multiplexing, which OpenSSH for Windows doesn't support — on Windows an SSH tab is terminal-only and the tree isn't synced.
 - Passing the working directory and busy state through tmux needs tmux ≥ 3.3 on the server (DCS passthrough); on older versions persistent sessions still work, with the optimistic busy fallback.
 

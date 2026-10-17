@@ -66,7 +66,12 @@ export function createShellCommands(dialect, { platform = 'darwin' } = {}) {
         home: () => `Set-Location ~${eol}`,
         open: (p) => `Invoke-Item -LiteralPath ${psQuote(p)}${eol}`,
         run: (p) => `& ${psQuote(p)}${eol}`,
-        withEnv: (env, cmd) => Object.entries(env).map(([k, v]) => `$env:${k}=${psQuote(v)}; `).join('') + cmd
+        withEnv: (env, cmd) => Object.entries(env).map(([k, v]) => `$env:${k}=${psQuote(v)}; `).join('') + cmd,
+        // fnm в PowerShell работает только после `fnm env`: подключает multishell-каталог в PATH сессии
+        useNode: (manager, v) => ({
+          nvm: `nvm use ${v}`,
+          fnm: `fnm env --shell powershell | Out-String | Invoke-Expression; fnm use ${v}`
+        })[manager] ?? null
       }
     case DIALECTS.CMD:
       return {
@@ -76,7 +81,8 @@ export function createShellCommands(dialect, { platform = 'darwin' } = {}) {
         home: () => `cd /d %USERPROFILE%${eol}`,
         open: (p) => `start "" ${cmdQuote(p)}${eol}`,
         run: (p, name) => (extOf(name) === '.ps1' ? `powershell -File ${cmdQuote(p)}` : cmdQuote(p)) + eol,
-        withEnv: (env, cmd) => Object.entries(env).map(([k, v]) => `set "${k}=${v}" && `).join('') + cmd
+        withEnv: (env, cmd) => Object.entries(env).map(([k, v]) => `set "${k}=${v}" && `).join('') + cmd,
+        useNode: (manager, v) => (manager === 'nvm' ? `nvm use ${v}` : null)
       }
     case DIALECTS.GITBASH:
       return {
@@ -91,7 +97,11 @@ export function createShellCommands(dialect, { platform = 'darwin' } = {}) {
           if (ext === '.bat' || ext === '.cmd') return `cmd //c ${shQuote(p)}${eol}`
           return `${UNIX_RUNNERS[ext] || 'sh'} ${shQuote(forward(p))}${eol}`
         },
-        withEnv: (env, cmd) => Object.entries(env).map(([k, v]) => `${k}=${shQuote(v)} `).join('') + cmd
+        withEnv: (env, cmd) => Object.entries(env).map(([k, v]) => `${k}=${shQuote(v)} `).join('') + cmd,
+        useNode: (manager, v) => ({
+          nvm: `nvm use ${v}`,
+          fnm: `eval "$(fnm env --shell bash)" && fnm use ${v}`
+        })[manager] ?? null
       }
     default:
       return {
@@ -101,7 +111,8 @@ export function createShellCommands(dialect, { platform = 'darwin' } = {}) {
         home: () => `cd ~${eol}`,
         open: (p) => `${platform === 'darwin' ? 'open' : 'xdg-open'} ${shQuote(p)}${eol}`,
         run: (p, name) => `${UNIX_RUNNERS[extOf(name)] || 'sh'} ${shQuote(p)}${eol}`,
-        withEnv: (env, cmd) => Object.entries(env).map(([k, v]) => `${k}=${shQuote(v)} `).join('') + cmd
+        withEnv: (env, cmd) => Object.entries(env).map(([k, v]) => `${k}=${shQuote(v)} `).join('') + cmd,
+        useNode: (manager, v) => ({ nvm: `nvm use ${v}`, fnm: `fnm use ${v}`, asdf: `asdf shell nodejs ${v}` })[manager] ?? null
       }
   }
 }

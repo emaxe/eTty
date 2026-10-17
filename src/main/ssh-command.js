@@ -130,8 +130,8 @@ export function buildSshLaunch({ connection, resolvedPath, skipShellIntegration 
 
   // Секрет используется и для пароля пользователя, и для passphrase приватного ключа —
   // SSH_ASKPASS перехватывает оба типа запросов одинаково.
-  const wantsAskpass = !IS_WIN && connection.secret && (connection.authType === 'password' || connection.authType === 'key')
-  const { tmpDir } = wantsAskpass ? applyAskpassEnv(env, connection.secret) : { tmpDir: null }
+  const wantsAskpass = connection.secret && (connection.authType === 'password' || connection.authType === 'key')
+  const { tmpDir } = wantsAskpass ? applyAskpassEnv(env, connection.secret, { sshFile: file }) : { tmpDir: null }
 
   return { file, args, env, tmpDir, control }
 }

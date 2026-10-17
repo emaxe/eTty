@@ -65,6 +65,8 @@ src/
     theme-loader.js           — встроенные темы + загрузка пользовательских тем из `themes/*.json`
     agent-service.js          — авто-детект CLI ИИ-агентов (Claude, Codex, Copilot, Cursor, OpenCode, Qwen, Agento) + кастомные
     shell-path-resolver.js    — резолв логин-шелла и его PATH кроссплатформенно (фикс запуска из GUI/Dock)
+    shell-integration/        — Windows: выбор оболочки (pwsh/powershell/Git Bash/cmd), хуки OSC 7/133/6973 и история вкладки
+    env-utils.js              — buildChildEnv (Path/PATH), findExecutable (PATH+PATHEXT без sh); exec-utils.js — execProgram (запуск по имени, .cmd-шимы)
   preload/                    — contextBridge API (~90 методов)
     index.js                  — IPC-мост: pty, fs (+ctx для SSH), window, tabs, settings, git, agents, search, node-version, ssh
   renderer/                   — UI

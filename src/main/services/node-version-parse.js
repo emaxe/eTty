@@ -84,12 +84,51 @@ export function parseAsdfRemote(stdout) {
     .reverse()
 }
 
+const SEMVER = '\\d+\\.\\d+\\.\\d+'
+
+/** nvm-windows `nvm list`: `  * 20.11.0 (Currently using 64-bit executable)` / `    18.19.1`. */
+export function parseNvmWindowsList(stdout) {
+  const versions = []
+  for (const line of stripTerminalEscapes(stdout).split(/\r?\n/)) {
+    const m = line.match(new RegExp(`^\\s*(\\*)?\\s*v?(${SEMVER})\\b`))
+    if (m) versions.push({ version: m[2], current: Boolean(m[1]), lts: false })
+  }
+  return versions
+}
+
+/** nvm-windows `nvm list available` — таблица `|  CURRENT  |  LTS  | OLD STABLE | ...`; свежие первыми, без Node < 4. */
+export function parseNvmWindowsRemote(stdout) {
+  const seen = new Set()
+  for (const line of stripTerminalEscapes(stdout).split(/\r?\n/)) {
+    if (!line.includes('|')) continue
+    for (const m of line.matchAll(new RegExp(`(${SEMVER})`, 'g'))) {
+      if (Number(m[1].split('.')[0]) >= 4) seen.add(m[1])
+    }
+  }
+  const cmp = (a, b) => {
+    const [pa, pb] = [a, b].map(v => v.split('.').map(Number))
+    return pb[0] - pa[0] || pb[1] - pa[1] || pb[2] - pa[2]
+  }
+  return [...seen].sort(cmp).map(version => ({ version }))
+}
+
+/** `volta list node --format plain`: `runtime node@20.11.0 (default)`. */
+export function parseVoltaList(stdout) {
+  const versions = []
+  for (const line of stripTerminalEscapes(stdout).split(/\r?\n/)) {
+    const m = line.match(new RegExp(`node@v?(${SEMVER})`))
+    if (m) versions.push({ version: m[1], current: false, default: /\(default\)/.test(line) })
+  }
+  return versions
+}
+
 // ~/.nvm/versions/node/v22.1.0/bin/node, fnm: .../node-versions/v20.1.0/installation/bin/node,
-// asdf: ~/.asdf/installs/nodejs/20.1.0/bin/node, volta: ~/.volta/tools/image/node/20.1.0/bin/node
-const NODE_PATH_VERSION_RE = /\/(?:versions\/node|node-versions|installs\/nodejs|tools\/image\/node)\/v?(\d+\.\d+\.\d+)\//
+// asdf: ~/.asdf/installs/nodejs/20.1.0/bin/node, volta: ~/.volta/tools/image/node/20.1.0/bin/node,
+// nvm-windows: %NVM_HOME%\v20.1.0\node.exe, fnm/volta на Windows — те же каталоги с обратными слэшами
+const NODE_PATH_VERSION_RE = /\/(?:versions\/node|node-versions|installs\/nodejs|tools\/image\/node|nvm)\/v?(\d+\.\d+\.\d+)\//
 
 /** Версия из пути к бинарю node либо null (shim'ы, brew, системная установка — нужен запуск). */
 export function versionFromNodePath(nodePath) {
-  const m = typeof nodePath === 'string' ? nodePath.match(NODE_PATH_VERSION_RE) : null
+  const m = typeof nodePath === 'string' ? nodePath.replace(/\\/g, '/').match(NODE_PATH_VERSION_RE) : null
   return m ? m[1] : null
 }

@@ -105,7 +105,7 @@ export class SshConnectionDialog {
     if (isWin) {
       const hint = document.createElement('div')
       hint.className = 'settings-dialog-hint'
-      hint.textContent = 'На Windows сохранённый пароль не подставляется автоматически — потребуется ввести его в терминале.'
+      hint.textContent = 'На Windows пароль подставляется автоматически при OpenSSH 8.4+; иначе его потребуется ввести в терминале.'
       secretRow.appendChild(hint)
     }
     body.appendChild(secretRow)

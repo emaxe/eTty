@@ -936,10 +936,10 @@ async function init() {
       if (!tab || tab.pid == null) return { ok: false, reason: 'Нет активного терминала' }
       if (tab.isBusy) return { ok: false, reason: 'Терминал занят — дождитесь завершения команды' }
       if (!/^[\w.*/-]+$/.test(version) || version.startsWith('-')) return { ok: false, reason: 'Некорректная версия' }
-      const command = { nvm: `nvm use ${version}`, fnm: `fnm use ${version}`, asdf: `asdf shell nodejs ${version}` }[manager]
-      if (!command) return { ok: false, reason: 'Менеджер версий не определён' }
-      // clearLine (Ctrl+U / Esc) — очистить уже набранный в строке текст перед командой
       const commands = commandsFor(tab)
+      const command = commands.useNode(manager, version)
+      if (!command) return { ok: false, reason: `Менеджер версий «${manager}» не поддерживает переключение в этой оболочке` }
+      // clearLine (Ctrl+U / Esc) — очистить уже набранный в строке текст перед командой
       api.ptyWrite(tab.pid, `${commands.clearLine}${command}${commands.eol}`)
       return { ok: true }
     },

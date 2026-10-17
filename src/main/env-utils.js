@@ -62,7 +62,10 @@ export function findExecutable(name, pathValue, {
 
 export function fileExists(p) {
   try {
-    return fs.statSync(p).isFile()
+    if (!fs.statSync(p).isFile()) return false
+    // На POSIX важен бит исполнения; Windows определяет исполняемость расширением (PATHEXT)
+    if (process.platform !== 'win32') fs.accessSync(p, fs.constants.X_OK)
+    return true
   } catch {
     return false
   }

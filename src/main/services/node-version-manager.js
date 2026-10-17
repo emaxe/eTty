@@ -2,6 +2,8 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import log from 'electron-log'
 import { SSH_FS_CONFIG } from '../../shared/ssh-fs-config.js'
+import { execProgram } from '../exec-utils.js'
+import { findExecutable, getPathValue } from '../env-utils.js'
 import {
   stripTerminalEscapes,
   parseNvmList,
@@ -10,6 +12,9 @@ import {
   parseFnmRemote,
   parseAsdfList,
   parseAsdfRemote,
+  parseNvmWindowsList,
+  parseNvmWindowsRemote,
+  parseVoltaList,
   versionFromNodePath,
   validateVersion,
 } from './node-version-parse.js'
@@ -24,7 +29,19 @@ const MANAGERS = Object.freeze({
   NVM: 'nvm',
   FNM: 'fnm',
   ASDF: 'asdf',
+  VOLTA: 'volta',
 })
+
+/**
+ * Windows (локальные вкладки): менеджеры — исполняемые файлы, а не shell-функции, поэтому команды
+ * запускаются напрямую (без shell и без NVM_PRELUDE), аргументы — массивом. Порядок = приоритет детекта.
+ * nvm здесь — nvm-windows (`nvm.exe`); volta не умеет listRemote и uninstall отдельной версии.
+ */
+const WIN_MANAGERS = Object.freeze([
+  { id: MANAGERS.FNM, bin: 'fnm', version: ['--version'], list: ['list'], remote: ['list-remote'], parseList: parseFnmList, parseRemote: parseFnmRemote, install: v => ['install', v], uninstall: v => ['uninstall', v] },
+  { id: MANAGERS.NVM, bin: 'nvm', version: ['version'], list: ['list'], remote: ['list', 'available'], parseList: parseNvmWindowsList, parseRemote: parseNvmWindowsRemote, install: v => ['install', v], uninstall: v => ['uninstall', v] },
+  { id: MANAGERS.VOLTA, bin: 'volta', version: ['--version'], list: ['list', 'node', '--format', 'plain'], remote: null, parseList: parseVoltaList, parseRemote: null, install: v => ['install', `node@${v}`], uninstall: null },
+])
 
 /**
  * nvm — shell-функция: в интерактивном шелле она уже есть (если .zshrc/.bashrc её загружает),
@@ -86,7 +103,40 @@ export class NodeVersionManager {
     return promise
   }
 
+  /** Локальная вкладка на Windows: менеджеры ищутся по PATH, команды запускаются без shell. */
+  _isWinLocal(ctx) {
+    return !isUnix() && ctx?.kind !== 'ssh'
+  }
+
+  _winManager(id) {
+    return WIN_MANAGERS.find(m => m.id === id)
+  }
+
+  async _winRun(manager, args, timeoutMs = COMMAND_TIMEOUT_MS) {
+    const resolvedPath = await this._resolver.resolve()
+    const { stdout, stderr } = await execProgram(manager.bin, args, { resolvedPath, timeout: timeoutMs })
+    return { stdout: stripTerminalEscapes(stdout), stderr }
+  }
+
+  async _detectManagerWin() {
+    const resolvedPath = (await this._resolver.resolve()) || getPathValue(process.env)
+    for (const manager of WIN_MANAGERS) {
+      if (!findExecutable(manager.bin, resolvedPath)) continue
+      let version = null
+      try {
+        const { stdout } = await this._winRun(manager, manager.version)
+        version = stdout.split(/\r?\n/).map(l => l.trim()).find(Boolean)?.match(/\d+\.\d+(?:\.\d+)?/)?.[0] || null
+      } catch (e) {
+        log.warn(`[NodeVersionManager] ${manager.bin} version check failed:`, e.message)
+      }
+      log.info(`[NodeVersionManager] Detected ${manager.id} ${version || ''} (local, win32)`)
+      return { manager: manager.id, version }
+    }
+    return { manager: null, version: null }
+  }
+
   async _detectManager(ctx) {
+    if (this._isWinLocal(ctx)) return this._detectManagerWin()
     try {
       const { stdout } = await this._exec(ctx, DETECT_SCRIPT)
       const [manager, version] = stripTerminalEscapes(stdout).split('\n').map(l => l.trim()).filter(Boolean)
@@ -107,11 +157,15 @@ export class NodeVersionManager {
    * @returns {Promise<{version: string, source: 'path'|'binary'}|null>}
    */
   async resolveNodePath(nodePath, ctx) {
-    if (typeof nodePath !== 'string' || !nodePath.startsWith('/')) return null
+    const isAbsolute = typeof nodePath === 'string'
+      && (nodePath.startsWith('/') || (this._isWinLocal(ctx) && /^[A-Za-z]:[\\/]/.test(nodePath)))
+    if (!isAbsolute) return null
     const fromPath = versionFromNodePath(nodePath)
     if (fromPath) return { version: fromPath, source: 'path' }
     try {
-      const { stdout } = await this._exec(ctx, '"$1" --version', [nodePath], { interactive: false })
+      const { stdout } = this._isWinLocal(ctx)
+        ? await execFileAsync(nodePath, ['--version'], { timeout: COMMAND_TIMEOUT_MS, windowsHide: true })
+        : await this._exec(ctx, '"$1" --version', [nodePath], { interactive: false })
       const m = stripTerminalEscapes(stdout).trim().match(/^v?(\d+\.\d+\.\d+)/)
       return m ? { version: m[1], source: 'binary' } : null
     } catch (e) {
@@ -125,6 +179,17 @@ export class NodeVersionManager {
   async listInstalled(ctx) {
     const { manager } = await this.detectManager(ctx)
     if (!manager) return { manager: null, versions: [] }
+
+    if (this._isWinLocal(ctx)) {
+      const m = this._winManager(manager)
+      try {
+        const { stdout } = await this._winRun(m, m.list)
+        return { manager, versions: m.parseList(stdout) }
+      } catch (e) {
+        log.warn(`[NodeVersionManager] Failed to list installed versions (${manager}):`, e.message)
+        return { manager, versions: [] }
+      }
+    }
 
     try {
       switch (manager) {
@@ -150,6 +215,18 @@ export class NodeVersionManager {
   async listRemote(ctx) {
     const { manager } = await this.detectManager(ctx)
     if (!manager) return { manager: null, versions: [] }
+
+    if (this._isWinLocal(ctx)) {
+      const m = this._winManager(manager)
+      if (!m.remote) return { manager, versions: [] }
+      try {
+        const { stdout } = await this._winRun(m, m.remote, 60000)
+        return { manager, versions: m.parseRemote(stdout) }
+      } catch (e) {
+        log.warn(`[NodeVersionManager] Failed to list remote versions (${manager}):`, e.message)
+        return { manager, versions: [] }
+      }
+    }
 
     try {
       switch (manager) {
@@ -188,6 +265,19 @@ export class NodeVersionManager {
     const { manager } = await this.detectManager(ctx)
     if (!manager) throw new Error('No node version manager found')
 
+    if (this._isWinLocal(ctx)) {
+      const m = this._winManager(manager)
+      const buildArgs = m[action]
+      if (!buildArgs) throw new Error(`${m.bin} does not support "${action}" for a single Node version`)
+      try {
+        await this._winRun(m, buildArgs(v), INSTALL_TIMEOUT_MS)
+        return { success: true, manager, version: v }
+      } catch (e) {
+        log.warn(`[NodeVersionManager] Failed to ${action} ${v} (${manager}):`, e.message)
+        throw e
+      }
+    }
+
     const script = {
       [MANAGERS.NVM]: `${NVM_PRELUDE}; nvm ${action} "$1"`,
       [MANAGERS.FNM]: `fnm ${action} "$1"`,
@@ -209,7 +299,7 @@ export class NodeVersionManager {
       throw new Error('Automatic nvm installation is only supported for local tabs. Install nvm on the server manually.')
     }
     if (!isUnix()) {
-      throw new Error('Automatic nvm installation is only supported on Unix-like systems. Please install nvm manually.')
+      throw new Error('Automatic installation is only supported on Unix-like systems. On Windows install fnm (winget install Schniz.fnm) or nvm-windows (https://github.com/coreybutler/nvm-windows) manually.')
     }
 
     try {

@@ -45,3 +45,11 @@ test('isRunnableFile зависит от ОС клиента и ФС', () => {
   assert.equal(isRunnableFile('a.sh', { platform: 'darwin' }), true)
   assert.equal(isRunnableFile('a', { platform: 'darwin' }), false)
 })
+
+test('useNode: диалекты и неподдерживаемые менеджеры', () => {
+  assert.equal(createShellCommands(DIALECTS.POSIX).useNode('asdf', '20.1.0'), 'asdf shell nodejs 20.1.0')
+  assert.equal(createShellCommands(DIALECTS.PWSH).useNode('fnm', '20'), 'fnm env --shell powershell | Out-String | Invoke-Expression; fnm use 20')
+  assert.equal(createShellCommands(DIALECTS.PWSH).useNode('nvm', '20'), 'nvm use 20')
+  assert.equal(createShellCommands(DIALECTS.PWSH).useNode('volta', '20'), null)
+  assert.equal(createShellCommands(DIALECTS.CMD).useNode('fnm', '20'), null)
+})
