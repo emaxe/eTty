@@ -1,6 +1,6 @@
 {
   "name": "etty",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Modern Electron terminal emulator with a file tree, code editor, Git integration and AI agents",
   "main": "./out/main/index.js",
   "scripts": {

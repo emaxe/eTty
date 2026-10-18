@@ -7,6 +7,7 @@
   <a href="https://github.com/emaxe/eTty/releases"><img src="https://img.shields.io/github/downloads/emaxe/eTty/total" alt="Downloads" /></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platforms: macOS, Windows, Linux" />
   <img src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white" alt="Electron 33" />
+  <img src="https://img.shields.io/badge/mobile-Flutter%20%7C%20Dart-02569A?logo=flutter&logoColor=white" alt="Mobile app: Flutter, Dart" />
   <a href="https://github.com/emaxe/eTty/commits"><img src="https://img.shields.io/github/last-commit/emaxe/eTty" alt="Last commit" /></a>
 </p>
 
@@ -26,20 +27,23 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 - **Full Unicode support** — Cyrillic, accented characters, emoji
 - **Shell directory tracking** via OSC 7 — file tree syncs automatically
 - **Command busy indicator** via OSC 133 — navigation buttons reflect shell state
+- **Per-shell command dialect** — everything eTty types into a tab (`cd`, open file, run script, launch agent with a proxy) is built for that tab's shell (POSIX / PowerShell / `cmd` / Git Bash); SSH tabs are always POSIX
 - **Tab drag-and-drop** — reorder tabs by dragging the grip handle
 - **Configurable new tab placement** — choose whether new tabs open adjacent to the active tab or at the end; hold Cmd/Ctrl while clicking "+" to toggle the behavior (configurable in Settings)
+- **Local tab from an SSH tab** — right-click "+" for a "Local tab / SSH: <connection>" menu, or press `Cmd+Shift+T` (`Ctrl+Shift+T`); otherwise a lone SSH tab made "+" always inherit its connection
 - **Keyboard shortcut to switch tabs** — bind `Cmd+Option+←/→` or `Cmd+Shift+←/→` to jump to the adjacent tab (wraps around at the ends); off by default, configurable in Settings → Terminal
 - **Confirmation before closing a busy tab** — closing a tab (× button or context menu) while an AI agent/process is still running shows a confirmation dialog instead of silently killing it
 - **Auto-open tab for busy terminal** — triggering a run-script or cd from the file tree while the active tab is occupied by an agent automatically opens a new tab for the command
 - **2,500 lines** scrollback buffer (performance-optimized)
 - **Scroll-to-bottom button** — floating button appears when you scroll up into history; click to jump back to the latest output
+- **Overlay scrollbars** — the handle shows only while scrolling and native scrollbar controls follow the app theme (Windows/Linux)
 
 ### SSH Connections
 
 - **SSH panel** — dedicated sidebar for saved connections; position configurable in Settings → SSH Panel (left, right, or off — off by default). The toolbar toggle button is hidden entirely when the panel is off
 - **SSH / tmux switch** — a segmented control in the panel header decides what a click on a connection does: open a regular SSH tab, or (tmux mode) expand the row into the list of tmux sessions on the server; the choice is remembered
 - **Add/edit/delete/reorder** — host, port, user, auth type (ssh-agent, private key, or password), private key path, extra `ssh` arguments; drag-and-drop to reorder
-- **Encrypted password storage** — saved passwords/passphrases are encrypted at rest via Electron `safeStorage` (OS keychain); on Windows it uses DPAPI
+- **Encrypted password storage** — saved passwords/passphrases are encrypted at rest via Electron `safeStorage` (OS keychain); on Windows it uses DPAPI, and over SSH they're passed to `ssh` through `askpass.cmd` (OpenSSH ≥ 8.4)
 - **Click to connect** — opens a regular terminal tab (color-accented, SSH icon) running the system `ssh` binary — full support for `~/.ssh/config`, ssh-agent, `ProxyJump`, 2FA
 - **"+" clones the active connection** — pressing "+" while an SSH tab is active opens another tab to the same host
 - **Connection overlay** — spinner while connecting; on a dropped session, an error with exit code and a reconnect button, without closing the tab
@@ -48,11 +52,13 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 
 #### Remote file system and agents
 
-- **File tree and editor over SSH** — browse, create, rename, delete, copy, move, read and write remote files; operations run as short-lived non-interactive calls multiplexed over the system `ssh` (ControlMaster), so there's no extra authentication and nothing to install on the server
+- **File tree and editor over SSH** — browse, create, rename, delete, copy, move, read and write remote files; operations run as short-lived non-interactive calls multiplexed over the system `ssh` (a long-lived `ssh -T … /bin/sh` stdio channel, since OpenSSH for Windows has no ControlMaster), so there's no extra authentication and nothing to install on the server
+- **Windows paths** — a renderer-side path service handles `C:\`, UNC and case-insensitive comparison; OSC 7 `file:///C:/…`, Git paths and editor links all resolve
 - **Change detection** — polling of expanded directories (`fs.watch` isn't available over SSH) with an immediate refresh after your own changes
 - **Git over SSH** — branch, file statuses, editor gutter and the Git panel work for remote repositories (git runs on the server through the tab's SSH channel)
 - **Image paste** — `Cmd+V` / `Ctrl+V` with an image in the clipboard uploads it to the server (`/tmp/etty-paste/`) and pastes the remote path, so claude/opencode/agy can attach it
 - **CLI agents work remotely** — remote shell hooks (zsh and bash) report the working directory and busy state, so quick replies, Shift+Enter and the busy indicator behave as in local tabs; falls back to an optimistic busy state if the server blocks hooks (`RemoteCommand`/`ForceCommand`)
+- **Agents detected on Windows too** — CLI agents are found via PATH/PATHEXT without `sh`, including the `.cmd` shims npm installs
 
 #### Persistent sessions (tmux)
 
@@ -163,7 +169,7 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 
 ### Node Version Manager
 
-- **Detects nvm, fnm, and asdf** — reads the manager already installed on your system
+- **Detects nvm, fnm, and asdf** — reads the manager already installed on your system (plus fnm, nvm-windows and Volta on Windows)
 - **Switch, install, uninstall** Node.js versions from a dialog, no manual shell commands
 - **Current version** shown per-project, respecting `.nvmrc` where present
 - **Status bar indicator** — shows the version actually running in the active tab (local or SSH), reported by the shell hook; click to open the version dialog
@@ -172,6 +178,7 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 
 - **macOS, Windows, Linux** — native window controls and shell resolution per platform
 - **Shell auto-detection** — resolves the login shell and its `PATH` correctly even when launched from a GUI (Dock/Start Menu), not just from a terminal
+- **Windows first-class** — PowerShell 7 / Windows PowerShell 5.1 / Git Bash / `cmd.exe` with cwd sync (OSC 7), busy indicator (OSC 133), node version reporting and per-tab history; Windows paths, agent detection and the remote file tree work without a POSIX shell anywhere
 
 ## Mobile app (iOS / Android)
 
@@ -180,7 +187,7 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 - **SSH + tmux** — pure-Dart client (`dartssh2`), several tabs per connection, sessions survive app restarts and are shared with the desktop app (same protocol and tmux socket)
 - **Session picker** — list and open the server's tmux sessions, or start a new one in a folder chosen in the file tree
 - **Remote file tree and editor** — browse (including hidden files), edit and share files over SFTP
-- **Touch gestures in the terminal** — one-finger scroll (tmux history, mouse wheel for TUI apps — Page Up/Down on full-screen TUIs, local scrollback), two-finger swipe sends an arrow key, tap clicks in mouse-aware TUIs (htop, mc, vim), long-press selects text, three-finger tap opens a quick-action wheel (Ctrl+C, Esc, Shift+Tab, Ctrl+O, Ctrl+D, Ctrl+L, attach a photo/file), two-finger double-tap opens a two-level wheel of your own commands (Settings → Quick commands); a key row above the keyboard has Esc, Tab, arrows, modifiers and Shift+Enter
+- **Touch gestures in the terminal** — one-finger scroll (tmux history, mouse wheel for TUI apps — Page Up/Down on full-screen TUIs, local scrollback), two-finger swipe sends an arrow key, tap clicks in mouse-aware TUIs (htop, mc, vim), long-press selects text, a plain three-finger tap opens the quick-action wheel (Ctrl+C, Esc, Shift+Tab, Ctrl+O, Ctrl+D, Ctrl+L, attach a photo/file — pick a sector with a tap), two-finger double-tap opens a two-level wheel of your own commands (Settings → Quick commands); a key row above the keyboard has Esc, Tab, arrows, modifiers and Shift+Enter
 - **Security** — biometric lock (Android `FlutterFragmentActivity` / iOS Face ID/Touch ID); secrets in the OS secure storage; import of desktop connections via `.ettyx`
 
 Build and run instructions: [mobile/README.md](mobile/README.md).
@@ -211,6 +218,7 @@ Build and run instructions: [mobile/README.md](mobile/README.md).
 | PTY backend | node-pty 1.1 (native module) |
 | Code editor | CodeMirror 6 with 13 language packages (JS/TS, Python, Go, Rust, HTML, CSS, JSON, YAML, Markdown, Vue, C#) |
 | Git operations | simple-git |
+| Mobile app | Flutter (Dart 3.13+, `dartssh2`) for iOS and Android |
 | UI font | Roboto (global application font) |
 | Packaging | electron-builder |
 | Logging | electron-log |
