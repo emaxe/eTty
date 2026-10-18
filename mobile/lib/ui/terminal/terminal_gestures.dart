@@ -13,7 +13,7 @@ import 'package:mobile/ui/terminal/scroll_bridge.dart';
 
 typedef GestureTimerFactory = Timer Function(Duration d, void Function() cb);
 
-enum _Phase { idle, pending, scrolling, longPress, twoFinger, wheel, ignored }
+enum _Phase { idle, pending, scrolling, longPress, twoFinger, threeFinger, ignored }
 
 /// Чистая логика разбора касаний терминала (без виджетов) — отделяет тап, скролл одним пальцем,
 /// long-press и свайп двумя пальцами. Встроенные жесты `xterm.TerminalView` (Scrollable,
@@ -23,9 +23,8 @@ enum _Phase { idle, pending, scrolling, longPress, twoFinger, wheel, ignored }
 /// Свайп двумя пальцами — один на жест: после первого срабатывания остальное движение до отпускания
 /// всех пальцев игнорируется ("один свайп = одна стрелка").
 ///
-/// Удержание двух пальцев без движения открывает колесо быстрых действий: [onWheelStart], затем
-/// [onWheelMove] с центром пальцев, и [onWheelEnd] при отпускании первого пальца (с последним
-/// центром до отрыва). Третий палец или cancel — [onWheelCancel].
+/// Короткий тап тремя пальцами без движения открывает колесо быстрых действий ([onThreeFingerTap]
+/// с центром пальцев). Четвёртый палец или cancel отменяют жест.
 class TerminalGestureInterpreter {
   TerminalGestureInterpreter({
     this.onTap,
@@ -34,10 +33,7 @@ class TerminalGestureInterpreter {
     this.onLongPressMove,
     this.onLongPressEnd,
     this.onSwipe,
-    this.onWheelStart,
-    this.onWheelMove,
-    this.onWheelEnd,
-    this.onWheelCancel,
+    this.onThreeFingerTap,
     this.onTwoFingerDoubleTap,
     GestureTimerFactory? timerFactory,
     Duration Function()? clock,
@@ -55,10 +51,8 @@ class TerminalGestureInterpreter {
   /// Направление движения пальцев.
   final void Function(AxisDirection direction)? onSwipe;
 
-  final void Function(Offset centroid)? onWheelStart;
-  final void Function(Offset centroid)? onWheelMove;
-  final void Function(Offset centroid)? onWheelEnd;
-  final void Function()? onWheelCancel;
+  /// Короткий тап тремя пальцами — центр пальцев.
+  final void Function(Offset centroid)? onThreeFingerTap;
 
   /// Два быстрых тапа двумя пальцами подряд (в одном месте) — центр второго тапа.
   final void Function(Offset centroid)? onTwoFingerDoubleTap;
@@ -77,9 +71,12 @@ class TerminalGestureInterpreter {
   Offset _lastPos = Offset.zero;
   Offset _swipeStartCentroid = Offset.zero;
   bool _swipeFired = false;
-  Offset _wheelLast = Offset.zero;
   Duration _twoDownAt = Duration.zero;
+  Duration _threeDownAt = Duration.zero;
+  Offset _threeStartCentroid = Offset.zero;
+  Offset _threeLastCentroid = Offset.zero;
   bool _twoFingerMoved = false;
+  bool _threeFingerMoved = false;
   Duration? _lastTapAt;
   Offset _lastTapPos = Offset.zero;
   Timer? _longPressTimer;
@@ -104,13 +101,19 @@ class TerminalGestureInterpreter {
         _swipeStartCentroid = _centroid();
         _twoDownAt = _clock();
         _twoFingerMoved = false;
-        _longPressTimer = _timerFactory(
-          const Duration(milliseconds: TerminalGestureConfig.twoFingerLongPressMs),
-          _onTwoFingerTimer,
-        );
+      case 3:
+        // Два пальца, к которым прижался третий, — уже не двухпальцевый тап.
+        _lastTapAt = null;
+        if (_phase == _Phase.twoFinger && !_swipeFired && !_twoFingerMoved) {
+          _phase = _Phase.threeFinger;
+          _threeDownAt = _clock();
+          _threeStartCentroid = _centroid();
+          _threeLastCentroid = _threeStartCentroid;
+          _threeFingerMoved = false;
+        } else {
+          _phase = _Phase.ignored;
+        }
       default:
-        _cancelTimer();
-        if (_phase == _Phase.wheel) onWheelCancel?.call();
         _phase = _Phase.ignored;
     }
   }
@@ -136,10 +139,7 @@ class TerminalGestureInterpreter {
       case _Phase.twoFinger:
         if (_swipeFired) return;
         final delta = _centroid() - _swipeStartCentroid;
-        if (delta.distance > TerminalGestureConfig.tapSlopPx) {
-          _cancelTimer();
-          _twoFingerMoved = true;
-        }
+        if (delta.distance > TerminalGestureConfig.tapSlopPx) _twoFingerMoved = true;
         if (delta.distance < TerminalGestureConfig.swipeThresholdPx) return;
         _swipeFired = true;
         if (delta.dx.abs() >= delta.dy.abs()) {
@@ -147,9 +147,12 @@ class TerminalGestureInterpreter {
         } else {
           onSwipe?.call(delta.dy < 0 ? AxisDirection.up : AxisDirection.down);
         }
-      case _Phase.wheel:
-        _wheelLast = _centroid();
-        onWheelMove?.call(_wheelLast);
+      case _Phase.threeFinger:
+        _threeLastCentroid = _centroid();
+        if ((_threeLastCentroid - _threeStartCentroid).distance >
+            TerminalGestureConfig.tapSlopPx) {
+          _threeFingerMoved = true;
+        }
       case _Phase.idle:
       case _Phase.ignored:
         break;
@@ -166,9 +169,8 @@ class TerminalGestureInterpreter {
       onLongPressEnd?.call(position);
     } else if (_phase == _Phase.twoFinger && _pointers.length == 2) {
       _maybeTwoFingerTap();
-    } else if (_phase == _Phase.wheel) {
-      // Центр после отрыва пальца прыгает — берём последний центр двух пальцев.
-      onWheelEnd?.call(_wheelLast);
+    } else if (_phase == _Phase.threeFinger && _pointers.length == 3) {
+      _maybeThreeFingerTap();
     }
     _cancelTimer();
     _release(id);
@@ -177,7 +179,6 @@ class TerminalGestureInterpreter {
   void pointerCancel(int id) {
     if (!_pointers.containsKey(id)) return;
     if (_phase == _Phase.longPress) onLongPressEnd?.call(_lastPos);
-    if (_phase == _Phase.wheel) onWheelCancel?.call();
     _cancelTimer();
     _release(id);
   }
@@ -224,12 +225,14 @@ class TerminalGestureInterpreter {
     }
   }
 
-  void _onTwoFingerTimer() {
-    _longPressTimer = null;
-    if (_phase != _Phase.twoFinger || _swipeFired || _pointers.length != 2) return;
-    _phase = _Phase.wheel;
-    _wheelLast = _centroid();
-    onWheelStart?.call(_wheelLast);
+  /// Тап тремя пальцами: все три коснулись и один отпущен быстро и без движения. Центр берём по
+  /// последним позициям до отрыва — после отпускания пальца он прыгает.
+  void _maybeThreeFingerTap() {
+    if (_threeFingerMoved ||
+        (_clock() - _threeDownAt).inMilliseconds > TerminalGestureConfig.threeFingerTapMaxMs) {
+      return;
+    }
+    onThreeFingerTap?.call(_threeLastCentroid);
   }
 
   void _cancelTimer() {
@@ -249,7 +252,7 @@ class TerminalGestureInterpreter {
 /// Слой поверх `xterm.TerminalView`, перехватывающий все касания и маршрутизирующий их:
 /// мышь TUI-приложения (если оно включило mouse mode) → колесо/клик; tmux → мост
 /// [ScrollDeltaAccumulator]; иначе локальный scrollback. Свайп двумя пальцами всегда шлёт стрелку,
-/// удержание двух пальцев открывает колесо быстрых действий ([QuickActionWheel]).
+/// тап тремя пальцами открывает колесо быстрых действий ([QuickActionWheel]).
 class TerminalGestureLayer extends StatefulWidget {
   const TerminalGestureLayer({
     super.key,
@@ -275,7 +278,7 @@ class TerminalGestureLayer extends StatefulWidget {
   /// Прямая запись в SSH-канал (tmux-мост колеса).
   final void Function(String data) write;
 
-  /// Действия колеса быстрых действий (долгий тап двумя пальцами), по часовой с 12 часов.
+  /// Действия колеса быстрых действий (тап тремя пальцами), по часовой с 12 часов.
   final List<QuickAction> quickActions;
 
   /// Группы пользовательских команд второго колеса (двойной тап двумя пальцами).
@@ -328,10 +331,7 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
       onLongPressMove: _onLongPressMove,
       onLongPressEnd: _onLongPressEnd,
       onSwipe: _onSwipe,
-      onWheelStart: _onWheelStart,
-      onWheelMove: _onWheelMove,
-      onWheelEnd: _onWheelEnd,
-      onWheelCancel: _closeWheel,
+      onThreeFingerTap: _onThreeFingerTap,
       onTwoFingerDoubleTap: _onTwoFingerDoubleTap,
     );
   }
@@ -522,7 +522,7 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
     );
   }
 
-  void _onWheelStart(Offset p) {
+  void _onThreeFingerTap(Offset p) {
     if (widget.quickActions.isEmpty) {
       _snack('Нет быстрых действий — добавьте их в настройках');
       return;
@@ -532,33 +532,10 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
     setState(() {
       _wheelCenter = _clampWheelCenter(p);
       _wheelHighlight = null;
-      _wheelPinned = false;
+      _wheelPinned = true;
       _commandsWheel = false;
       _commandGroup = null;
     });
-  }
-
-  void _onWheelMove(Offset p) {
-    if (_wheelCenter == null) return;
-    final sector = _sectorAt(p);
-    if (sector == _wheelHighlight) return;
-    HapticFeedback.selectionClick();
-    setState(() => _wheelHighlight = sector);
-  }
-
-  void _onWheelEnd(Offset p) {
-    if (_wheelCenter == null) return;
-    final sector = _sectorAt(p);
-    if (sector == null) {
-      // Отпустили в центре — оставляем колесо открытым для тапа по сектору.
-      setState(() {
-        _wheelHighlight = null;
-        _wheelPinned = true;
-      });
-      return;
-    }
-    _runQuickAction(sector);
-    _closeWheel();
   }
 
   void _onPinnedWheelTap(Offset p) {

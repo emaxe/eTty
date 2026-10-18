@@ -45,7 +45,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             key: const Key('open-quick-actions'),
             leading: const Icon(Icons.radar_outlined),
             title: const Text('Быстрые действия'),
-            subtitle: const Text('Меню по долгому тапу двумя пальцами в терминале'),
+            subtitle: const Text('Меню по тапу тремя пальцами в терминале'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () =>
                 Navigator.of(context)

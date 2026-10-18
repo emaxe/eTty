@@ -11,8 +11,8 @@ abstract final class TerminalGestureConfig {
   /// Смещение центра двух пальцев (px), после которого свайп засчитывается и шлёт одну стрелку.
   static const double swipeThresholdPx = 40;
 
-  /// Удержание двух пальцев без движения до открытия колеса быстрых действий.
-  static const int twoFingerLongPressMs = 500;
+  /// Тап тремя пальцами: первый палец отпущен быстрее этого времени (мс) от третьего касания.
+  static const int threeFingerTapMaxMs = 250;
 
   /// Двухпальцевый тап: оба пальца отпущены быстрее этого времени (мс) от второго касания.
   static const int twoFingerTapMaxMs = 250;

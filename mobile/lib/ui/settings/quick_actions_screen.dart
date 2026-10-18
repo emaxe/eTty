@@ -8,7 +8,7 @@ import 'package:mobile/ui/settings/settings_dialogs.dart';
 
 String _newId() => 'a-${DateTime.now().microsecondsSinceEpoch}';
 
-/// Редактор колеса быстрых действий (долгий тап двумя пальцами в терминале). Порядок списка —
+/// Редактор колеса быстрых действий (тап тремя пальцами в терминале). Порядок списка —
 /// порядок секторов по часовой стрелке с 12 часов. Каждое изменение сразу сохраняется.
 class QuickActionsScreen extends ConsumerWidget {
   const QuickActionsScreen({super.key});

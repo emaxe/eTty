@@ -40,10 +40,6 @@ void main() {
         onLongPressMove: (p) => log.add('lpMove'),
         onLongPressEnd: (p) => log.add('lpEnd'),
         onSwipe: (d) => log.add('swipe ${d.name}'),
-        onWheelStart: (p) => log.add('wheelStart ${p.dx.round()},${p.dy.round()}'),
-        onWheelMove: (p) => log.add('wheelMove ${p.dx.round()},${p.dy.round()}'),
-        onWheelEnd: (p) => log.add('wheelEnd ${p.dx.round()},${p.dy.round()}'),
-        onWheelCancel: () => log.add('wheelCancel'),
         timerFactory: (d, cb) {
           final t = _FakeTimer(cb);
           timers.add(t);
@@ -129,75 +125,90 @@ void main() {
     });
   });
 
-  group('колесо быстрых действий (интерпретатор)', () {
+  group('тап тремя пальцами (интерпретатор)', () {
     late List<String> log;
-    late List<_FakeTimer> timers;
+    late Duration now;
     late TerminalGestureInterpreter g;
 
     setUp(() {
       log = [];
-      timers = [];
+      now = Duration.zero;
       g = TerminalGestureInterpreter(
+        onThreeFingerTap: (p) => log.add('three ${p.dx.round()},${p.dy.round()}'),
+        onTwoFingerDoubleTap: (p) => log.add('double'),
         onSwipe: (d) => log.add('swipe ${d.name}'),
-        onWheelStart: (p) => log.add('wheelStart ${p.dx.round()},${p.dy.round()}'),
-        onWheelMove: (p) => log.add('wheelMove ${p.dx.round()},${p.dy.round()}'),
-        onWheelEnd: (p) => log.add('wheelEnd ${p.dx.round()},${p.dy.round()}'),
-        onWheelCancel: () => log.add('wheelCancel'),
-        timerFactory: (d, cb) {
-          final t = _FakeTimer(cb);
-          timers.add(t);
-          return t;
-        },
+        timerFactory: (d, cb) => _FakeTimer(cb),
+        clock: () => now,
       );
     });
 
-    void twoDown() {
-      g.pointerDown(1, const Offset(100, 100));
-      g.pointerDown(2, const Offset(140, 100));
+    void threeDown() {
+      g.pointerDown(1, const Offset(80, 100));
+      g.pointerDown(2, const Offset(120, 100));
+      g.pointerDown(3, const Offset(160, 100));
     }
 
-    test('удержание двух пальцев открывает колесо, движение и отпускание сообщаются', () {
-      twoDown();
-      timers.last.fire();
-      g.pointerMove(1, const Offset(100, 60));
-      g.pointerMove(2, const Offset(140, 60));
-      g.pointerUp(1, const Offset(100, 60));
-      expect(log, [
-        'wheelStart 120,100',
-        'wheelMove 120,80',
-        'wheelMove 120,60',
-        'wheelEnd 120,60',
-      ]);
+    void threeUp() {
+      g.pointerUp(1, const Offset(80, 100));
+      g.pointerUp(2, const Offset(120, 100));
+      g.pointerUp(3, const Offset(160, 100));
+    }
+
+    test('короткий тап тремя пальцами — с центром пальцев', () {
+      threeDown();
+      now += const Duration(milliseconds: 50);
+      threeUp();
+      expect(log, ['three 120,100']);
     });
 
-    test('конец колеса берёт последний центр двух пальцев, а не скачок после отрыва', () {
-      twoDown();
-      timers.last.fire();
-      g.pointerUp(2, const Offset(300, 300));
-      expect(log.last, 'wheelEnd 120,100');
-    });
-
-    test('свайп до таймера — стрелка, колесо не открывается', () {
-      twoDown();
-      g.pointerMove(1, const Offset(60, 100));
-      g.pointerMove(2, const Offset(100, 100));
-      timers.last.fire();
-      expect(log, ['swipe left']);
-    });
-
-    test('отпускание до таймера — ничего', () {
-      twoDown();
-      g.pointerUp(1, const Offset(100, 100));
-      timers.last.fire();
+    test('долгое удержание тремя пальцами — не тап', () {
+      threeDown();
+      now += Duration(milliseconds: TerminalGestureConfig.threeFingerTapMaxMs + 50);
+      threeUp();
       expect(log, isEmpty);
     });
 
-    test('третий палец при открытом колесе отменяет его', () {
-      twoDown();
-      timers.last.fire();
-      g.pointerDown(3, const Offset(10, 10));
-      g.pointerUp(3, const Offset(10, 10));
-      expect(log, ['wheelStart 120,100', 'wheelCancel']);
+    test('движение тремя пальцами — не тап', () {
+      threeDown();
+      g.pointerMove(1, const Offset(80, 60));
+      g.pointerMove(2, const Offset(120, 60));
+      g.pointerMove(3, const Offset(160, 60));
+      now += const Duration(milliseconds: 50);
+      threeUp();
+      expect(log, isEmpty);
+    });
+
+    test('четвёртый палец отменяет жест', () {
+      threeDown();
+      g.pointerDown(4, const Offset(200, 100));
+      now += const Duration(milliseconds: 50);
+      threeUp();
+      g.pointerUp(4, const Offset(200, 100));
+      expect(log, isEmpty);
+    });
+
+    test('свайп двумя пальцами и третий палец после — не тап', () {
+      g.pointerDown(1, const Offset(80, 100));
+      g.pointerDown(2, const Offset(120, 100));
+      g.pointerMove(1, const Offset(20, 100));
+      g.pointerMove(2, const Offset(60, 100));
+      g.pointerDown(3, const Offset(160, 100));
+      now += const Duration(milliseconds: 50);
+      g.pointerUp(1, const Offset(20, 100));
+      expect(log, ['swipe left']);
+    });
+
+    test('тап двумя пальцами рядом с тапом тремя не даёт двойной тап', () {
+      g.pointerDown(1, const Offset(80, 100));
+      g.pointerDown(2, const Offset(120, 100));
+      now += const Duration(milliseconds: 50);
+      g.pointerUp(1, const Offset(80, 100));
+      g.pointerUp(2, const Offset(120, 100));
+      now += const Duration(milliseconds: 50);
+      threeDown();
+      now += const Duration(milliseconds: 50);
+      threeUp();
+      expect(log, ['three 120,100']);
     });
   });
 
@@ -347,34 +358,28 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    Future<void> openWheel(WidgetTester tester,
-        {Offset a = const Offset(180, 300), Offset b = const Offset(220, 300)}) async {
-      final ga = await tester.startGesture(a, pointer: 1);
-      final gb = await tester.startGesture(b, pointer: 2);
-      await tester.pump(const Duration(milliseconds: 600));
+    Future<void> openWheel(WidgetTester tester, {Offset center = const Offset(200, 300)}) async {
+      final ga = await tester.startGesture(center - const Offset(20, 0), pointer: 1);
+      final gb = await tester.startGesture(center, pointer: 2);
+      final gc = await tester.startGesture(center + const Offset(20, 0), pointer: 3);
       await ga.up();
       await gb.up();
+      await gc.up();
       await tester.pump();
     }
 
-    testWidgets('протяжка вверх к сектору ^C и отпускание шлёт Ctrl+C', (tester) async {
+    testWidgets('тап тремя пальцами открывает колесо, тап по сектору ^C шлёт Ctrl+C', (tester) async {
       await pump(tester, isTmux: false);
-      final a = await tester.startGesture(const Offset(180, 300), pointer: 1);
-      final b = await tester.startGesture(const Offset(220, 300), pointer: 2);
-      await tester.pump(const Duration(milliseconds: 600));
+      await openWheel(tester);
       expect(find.byType(QuickActionWheel), findsOneWidget);
-      await a.moveBy(const Offset(0, -70));
-      await b.moveBy(const Offset(0, -70));
-      await tester.pump();
-      await a.up();
-      await b.up();
+      await tester.tapAt(const Offset(200, 300 - 75));
       await tester.pumpAndSettle();
       expect(raw, ['\x03']);
       expect(find.byType(QuickActionWheel), findsNothing);
       expect(out, isEmpty);
     });
 
-    testWidgets('отпускание в центре закрепляет колесо, тап по сектору шлёт его последовательность',
+    testWidgets('тап по сектору ^D шлёт его последовательность',
         (tester) async {
       await pump(tester, isTmux: false);
       await openWheel(tester);
@@ -427,14 +432,8 @@ void main() {
 
     testWidgets('сектор Esc шлёт \\x1b', (tester) async {
       await pump(tester, isTmux: false);
-      final a = await tester.startGesture(const Offset(380, 300), pointer: 1);
-      final b = await tester.startGesture(const Offset(420, 300), pointer: 2);
-      await tester.pump(const Duration(milliseconds: 600));
-      await a.moveBy(const Offset(60, -48));
-      await b.moveBy(const Offset(60, -48));
-      await tester.pump();
-      await a.up();
-      await b.up();
+      await openWheel(tester, center: const Offset(400, 300));
+      await tester.tapAt(const Offset(460, 252));
       await tester.pumpAndSettle();
       expect(raw, ['\x1b']);
     });
@@ -442,14 +441,8 @@ void main() {
     testWidgets('сектор «Файл» вызывает onAttach и ничего не шлёт в канал', (tester) async {
       var attached = 0;
       await pump(tester, isTmux: false, onAttach: () async => attached++);
-      final a = await tester.startGesture(const Offset(380, 300), pointer: 1);
-      final b = await tester.startGesture(const Offset(420, 300), pointer: 2);
-      await tester.pump(const Duration(milliseconds: 600));
-      await a.moveBy(const Offset(-60, -48));
-      await b.moveBy(const Offset(-60, -48));
-      await tester.pump();
-      await a.up();
-      await b.up();
+      await openWheel(tester, center: const Offset(400, 300));
+      await tester.tapAt(const Offset(340, 252));
       await tester.pumpAndSettle();
       expect(attached, 1);
       expect(raw, isEmpty);

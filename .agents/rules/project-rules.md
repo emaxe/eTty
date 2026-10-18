@@ -342,7 +342,7 @@ mobile/                      — Flutter-приложение (iOS/Android): SSH
 - **Жесты терминала** (`ui/terminal/terminal_gestures.dart`) — скролл, свайп двумя пальцами
   (стрелки), тап (клик мышью в TUI), long-press (выделение). На alternate screen истории tmux нет,
   поэтому прокрутка транслируется в `PgUp`/`PgDn` (шаг — `TerminalGestureConfig.altBufferPageLines`)
-- **Колесо быстрых действий** и **колесо своих команд** — круговые меню по долгому тапу и двойному
+- **Колесо быстрых действий** и **колесо своих команд** — круговые меню по тапу тремя пальцами и двойному
   тапу двумя пальцами (`ui/terminal/quick_action_wheel.dart`); состав/порядок редактируются в
   Настройки → «Быстрые действия» / «Быстрые команды» (`ui/settings/quick_actions_screen.dart`,
   `quick_commands_screen.dart`), конфиг — `core/config/quick_actions_config.dart`,
