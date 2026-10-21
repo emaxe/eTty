@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   nodeVersionInstall: (version, ctx) => ipcRenderer.invoke(IPC_CHANNELS.NODE_VERSION_INSTALL, { version, ctx }),
   nodeVersionUninstall: (version, ctx) => ipcRenderer.invoke(IPC_CHANNELS.NODE_VERSION_UNINSTALL, { version, ctx }),
   nodeVersionInstallManager: (ctx) => ipcRenderer.invoke(IPC_CHANNELS.NODE_VERSION_INSTALL_MANAGER, { ctx }),
+  appOpenUrl: (url) => ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_URL, url),
   appOpenExternal: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_EXTERNAL, filePath),
   searchQuery: (dirPath, query, options) => ipcRenderer.invoke(IPC_CHANNELS.SEARCH_QUERY, { dirPath, query, options }),
   windowMinimize: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_MINIMIZE),

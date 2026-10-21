@@ -68,6 +68,7 @@ let resizeObserver = null
 let resizeDebounceTimer = null
 let newTabPlacement = 'modifierAdjacent'
 let tabSwitchHotkey = 'none'
+let linkOpenMode = 'cmd-click'
 let isRestoringTabs = false
 
 /** Применяет стиль индикатора фокуса через data-атрибут на корневом элементе. */
@@ -90,6 +91,13 @@ function applySshPanelPosition(pos) {
   appStore?.set('ssh.panelPosition', pos || 'off')
 }
 
+/** Открывает ссылку терминала в системном браузере согласно настройке terminal.linkOpenMode. */
+function handleTerminalLink(api, event, uri) {
+  const modifier = IS_MAC ? event.metaKey : event.ctrlKey
+  if (linkOpenMode === 'cmd-click' && !modifier) return
+  api.openUrl(uri)
+}
+
 /**
  * Создаёт новую вкладку: Terminal + FitAddon + PTY-сессия.
  * @param {object} [ssh] — { connectionId, label }. Если передан, PTY не создаётся сразу —
@@ -102,12 +110,13 @@ async function createTab(api, cwd, tabId, ssh) {
     fontFamily: TERMINAL_CONFIG.FONT_FAMILY,
     scrollback: TERMINAL_CONFIG.SCROLLBACK,
     allowProposedApi: TERMINAL_CONFIG.ALLOW_PROPOSED_API,
+    linkHandler: { activate: (e, uri) => handleTerminalLink(api, e, uri) },
     theme: loadedThemes[currentThemeName].terminal,
   })
 
   const fitAddon = new FitAddon()
   term.loadAddon(fitAddon)
-  term.loadAddon(new WebLinksAddon())
+  term.loadAddon(new WebLinksAddon((e, uri) => handleTerminalLink(api, e, uri)))
   term.loadAddon(new SearchAddon())
 
   tabId = tabId || crypto.randomUUID()
@@ -151,6 +160,7 @@ async function init() {
   loadedThemes = { ...THEMES, ...themes }
   newTabPlacement = config.terminal?.newTabPlacement || 'modifierAdjacent'
   tabSwitchHotkey = config.terminal?.tabSwitchHotkey || 'none'
+  linkOpenMode = config.terminal?.linkOpenMode || 'cmd-click'
   if (warnings && warnings.length > 0) {
     console.warn('Settings warnings:', ...warnings)
   }
@@ -1225,6 +1235,9 @@ async function init() {
     }
     if (key === 'terminal.tabSwitchHotkey') {
       tabSwitchHotkey = value
+    }
+    if (key === 'terminal.linkOpenMode') {
+      linkOpenMode = value
     }
     if (key === 'terminal.defaultKeyboardMode') {
       if (!config.terminal) config.terminal = {}

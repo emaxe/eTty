@@ -155,6 +155,7 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 - **Status bar size** — compact, standard, or large; adjustable in Settings → Appearance
 - **New tab placement** — `modifierAdjacent` (Cmd/Ctrl opens next to active tab) or `modifierEnd` (Cmd/Ctrl appends to end); configurable in Settings → Terminal
 - **Tab switch hotkey** — off, `Cmd+Option+←/→`, or `Cmd+Shift+←/→`; configurable in Settings → Terminal
+- **Open links in system browser** — `click` or `cmd-click` (Cmd/Ctrl+click, default) on a terminal link opens it in the default browser; configurable in Settings → Terminal
 - **Default Shift+Enter mode** — Kitty protocol, newline, or Ctrl+J; the fallback for agents without a per-agent override, configurable in Settings → Terminal
 - **SSH panel position** — off (default), left, or right; configurable in Settings → SSH Panel
 - **SSH panel mode** — SSH (regular tabs) or tmux (persistent sessions); switched right in the panel header

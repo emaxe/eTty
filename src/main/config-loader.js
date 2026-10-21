@@ -25,6 +25,8 @@ export function getConfigDefaults() {
       shell: 'auto',
       newTabPlacement: 'modifierAdjacent',
       tabSwitchHotkey: 'none',
+      // Открытие ссылок терминала в системном браузере: click | cmd-click (Cmd на macOS, Ctrl на остальных)
+      linkOpenMode: 'cmd-click',
       defaultKeyboardMode: 'kitty'
     },
     agents: {

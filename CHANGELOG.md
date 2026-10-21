@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Ссылки терминала в системном браузере** — клик по ссылке (в том числе OSC 8) открывает её в браузере по умолчанию;
+  режим «Click» / «Cmd+click» выбирается в Настройки → Терминал (`terminal.linkOpenMode`, по умолчанию Cmd+click).
+
 ## [0.7.0] - 2026-10-18
 
 ### Added

@@ -97,6 +97,7 @@ export class ElectronApiAdapter {
   get platform() { return this._api.platform }
   get pathSep() { return this._api.pathSep }
   openExternal(path) { return this._api.appOpenExternal(path) }
+  openUrl(url) { return this._api.appOpenUrl(url) }
 
   // — Node Version Manager —
   nodeVersionResolve(nodePath, ctx) { return this._api.nodeVersionResolve(nodePath, ctx) }

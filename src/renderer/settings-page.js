@@ -242,6 +242,22 @@ export class SettingsPage {
         )
       },
       {
+        label: 'Открывать ссылку в системном браузере',
+        control: this._createSelect(
+          [
+            { key: 'click', name: 'Click' },
+            { key: 'cmd-click', name: 'Cmd+click' }
+          ],
+          this._config.terminal?.linkOpenMode || 'cmd-click',
+          (val) => {
+            if (!this._config.terminal) this._config.terminal = {}
+            this._config.terminal.linkOpenMode = val
+            this._bus.emit('settings.changed', { key: 'terminal.linkOpenMode', value: val })
+            this._scheduleSave()
+          }
+        )
+      },
+      {
         label: 'Переключение вкладок с клавиатуры',
         control: this._createSelect(
           [
