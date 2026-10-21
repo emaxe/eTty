@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-21
+
 ### Added
 
 - **Ссылки терминала в системном браузере** — клик по ссылке (в том числе OSC 8) открывает её в браузере по умолчанию;
