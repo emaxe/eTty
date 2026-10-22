@@ -39,6 +39,9 @@ export function getConfigDefaults() {
       // swipeHorizontal — off | arrows | tabs
       swipeVertical: 'off',
       swipeHorizontal: 'off',
+      // Модификатор для вертикального свайпа (чтобы не конфликтовал с прокруткой):
+      // none | shift | alt | primary (Cmd на macOS, Ctrl на остальных)
+      swipeModifier: 'none',
       defaultKeyboardMode: 'kitty',
       // Шрифт терминала; fontFamily '' = системный моно-шрифт по умолчанию
       fontSize: 14,

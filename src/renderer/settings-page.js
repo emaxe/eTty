@@ -325,6 +325,14 @@ export class SettingsPage {
         )
       },
       {
+        label: 'Модификатор для свайпа вверх/вниз (чтобы не мешал прокрутке)',
+        control: this._createSelect(
+          SWIPE_CONFIG.MODIFIER_OPTIONS,
+          normalizeSwipeSettings(this._config.terminal).modifier,
+          (val) => this._saveTerminalSetting('swipeModifier', val)
+        )
+      },
+      {
         label: 'Свайп двумя пальцами влево/вправо',
         control: this._createSelect(
           SWIPE_CONFIG.HORIZONTAL_OPTIONS,

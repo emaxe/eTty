@@ -44,7 +44,7 @@ import { RadialMenu } from './features/radial-menu/radial-menu.js'
 import { TouchGestureDetector } from './features/radial-menu/touch-gesture-detector.js'
 import { buildRadialLevel, normalizeRadialSettings } from './features/radial-menu/radial-menu-model.js'
 import { RADIAL_MENU_CONFIG } from './core/config/radial-menu-config.js'
-import { normalizeSwipeSettings, isSwipeGesture, hasActiveSwipe, swipeAction, shouldSuppressWheel } from './features/terminal/terminal-swipe.js'
+import { normalizeSwipeSettings, isSwipeGesture, isVerticalSwipe, hasActiveSwipe, swipeAction, shouldSuppressWheel } from './features/terminal/terminal-swipe.js'
 import { SWIPE_CONFIG } from './core/config/swipe-config.js'
 import { SwipeFlash } from './features/terminal/swipe-flash.js'
 import { TerminalOscHandler } from './features/terminal/terminal-osc-handler.js'
@@ -1128,14 +1128,31 @@ async function init() {
     openRadialMenu(point.x, point.y)
   }
 
+  // Зажатые модификаторы: нативный жест их не несёт, поэтому следим за клавишами и колесом
+  const heldModifiers = { shift: false, alt: false, meta: false, ctrl: false }
+  const trackModifiers = (e) => {
+    heldModifiers.shift = e.shiftKey
+    heldModifiers.alt = e.altKey
+    heldModifiers.meta = e.metaKey
+    heldModifiers.ctrl = e.ctrlKey
+  }
+  window.addEventListener('keydown', trackModifiers, true)
+  window.addEventListener('keyup', trackModifiers, true)
+  window.addEventListener('blur', () => trackModifiers({ shiftKey: false, altKey: false, metaKey: false, ctrlKey: false }))
+  // Вертикальный свайп с модификатором уже сработал в текущем касании (гасим и инерцию колеса)
+  let swipeEngaged = false
+
   /** Свайп двумя пальцами над терминалом: стрелки в PTY или переключение вкладки. */
   const handleSwipeGesture = (gesture, point) => {
     const tab = terminalUnderGesture(point)
     if (!tab || radialMenu.isVisible()) return
     const action = swipeAction(gesture, swipeSettings, {
-      appCursor: !!tab.term.modes?.applicationCursorKeysMode
+      appCursor: !!tab.term.modes?.applicationCursorKeysMode,
+      held: heldModifiers,
+      isMac: IS_MAC
     })
     if (!action) return
+    if (action.kind === 'arrow' && isVerticalSwipe(gesture)) swipeEngaged = true
     swipeFlash.show(gesture)
     if (action.kind === 'arrow') {
       if (tab.pid != null) api.ptyWrite(tab.pid, action.seq)
@@ -1162,10 +1179,14 @@ async function init() {
   api.onTrackpadTouch(({ fingers }) => {
     const active = fingers >= 2
     if (twoFingers && !active) wheelMomentumUntil = performance.now() + SWIPE_CONFIG.WHEEL_MOMENTUM_MS
+    if (active && !twoFingers) swipeEngaged = false
     twoFingers = active
   })
   terminalContainerEl.addEventListener('wheel', (e) => {
-    if (!shouldSuppressWheel(e, swipeSettings, { twoFingers, momentumUntil: wheelMomentumUntil, now: performance.now() })) return
+    trackModifiers(e)
+    if (!shouldSuppressWheel(e, swipeSettings, {
+      twoFingers, momentumUntil: wheelMomentumUntil, now: performance.now(), isMac: IS_MAC, engaged: swipeEngaged
+    })) return
     e.preventDefault()
     e.stopPropagation()
   }, { capture: true, passive: false })
@@ -1379,7 +1400,7 @@ async function init() {
       if (!radialMenuSettings.enabled) radialMenu?.hide()
       syncTrackpadNative()
     }
-    if (key === 'terminal.swipeVertical' || key === 'terminal.swipeHorizontal') {
+    if (key === 'terminal.swipeVertical' || key === 'terminal.swipeHorizontal' || key === 'terminal.swipeModifier') {
       if (!config.terminal) config.terminal = {}
       config.terminal[key.slice('terminal.'.length)] = value
       swipeSettings = normalizeSwipeSettings(config.terminal)

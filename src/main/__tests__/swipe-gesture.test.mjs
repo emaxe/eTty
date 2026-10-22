@@ -1,5 +1,5 @@
 import { SwipeGestureRecognizer, TRACKPAD_SWIPE_PROFILE, SWIPE_GESTURES } from '../../shared/swipe-gesture-recognizer.js'
-import { normalizeSwipeSettings, swipeAction, shouldSuppressWheel } from '../../renderer/features/terminal/terminal-swipe.js'
+import { normalizeSwipeSettings, swipeAction, shouldSuppressWheel, isModifierHeld } from '../../renderer/features/terminal/terminal-swipe.js'
 
 let failed = false
 
@@ -99,8 +99,10 @@ check('поздно опущенный второй палец — не свай
 })
 
 check('настройки: неизвестное значение → выключено', () => {
-  assertEq(normalizeSwipeSettings({ swipeVertical: 'tabs', swipeHorizontal: 'tabs' }), { vertical: 'off', horizontal: 'tabs' })
-  assertEq(normalizeSwipeSettings(null), { vertical: 'off', horizontal: 'off' })
+  assertEq(normalizeSwipeSettings({ swipeVertical: 'tabs', swipeHorizontal: 'tabs' }), { vertical: 'off', horizontal: 'tabs', modifier: 'none' })
+  assertEq(normalizeSwipeSettings(null), { vertical: 'off', horizontal: 'off', modifier: 'none' })
+  assertEq(normalizeSwipeSettings({ swipeModifier: 'alt' }).modifier, 'alt')
+  assertEq(normalizeSwipeSettings({ swipeModifier: 'hyper' }).modifier, 'none')
 })
 
 check('действия: стрелки (обычный и application режим)', () => {
@@ -126,6 +128,40 @@ check('колесо гасится только по включённой оси
   assertEq(shouldSuppressWheel({ deltaX: 0, deltaY: 10 }, s, { twoFingers: false, momentumUntil: 500, now: 100 }), true)
   assertEq(shouldSuppressWheel({ deltaX: 0, deltaY: 10 }, s, { twoFingers: false, momentumUntil: 50, now: 100 }), false)
   assertEq(shouldSuppressWheel({ deltaX: 0, deltaY: 10, ctrlKey: true }, s, busy), false)
+})
+
+check('модификатор: none всегда, остальные по зажатой клавише; primary = Cmd на macOS, Ctrl иначе', () => {
+  assertEq(isModifierHeld('none', {}, true), true)
+  assertEq(isModifierHeld('shift', { shift: true }, true), true)
+  assertEq(isModifierHeld('shift', { alt: true }, true), false)
+  assertEq(isModifierHeld('alt', { alt: true }, true), true)
+  assertEq(isModifierHeld('primary', { meta: true }, true), true)
+  assertEq(isModifierHeld('primary', { ctrl: true }, true), false)
+  assertEq(isModifierHeld('primary', { ctrl: true }, false), true)
+})
+
+check('вертикальный свайп без модификатора игнорируется, горизонтальный — нет', () => {
+  const s = { vertical: 'arrows', horizontal: 'arrows', modifier: 'shift' }
+  assertEq(swipeAction(SWIPE_GESTURES.UP, s, { held: {} }), null)
+  assertEq(swipeAction(SWIPE_GESTURES.UP, s, { held: { shift: true } }), { kind: 'arrow', seq: '\x1b[A' })
+  assertEq(swipeAction(SWIPE_GESTURES.LEFT, s, { held: {} }), { kind: 'arrow', seq: '\x1b[D' })
+})
+
+check('колесо: без модификатора вертикальная прокрутка не гасится, с модификатором — гасится', () => {
+  const s = { vertical: 'arrows', horizontal: 'off', modifier: 'alt' }
+  const busy = { twoFingers: true, momentumUntil: 0, now: 100 }
+  assertEq(shouldSuppressWheel({ deltaX: 0, deltaY: 10 }, s, busy), false)
+  assertEq(shouldSuppressWheel({ deltaX: 0, deltaY: 10, altKey: true }, s, busy), true)
+  // инерция после отпускания клавиши гасится, если свайп уже сработал
+  assertEq(shouldSuppressWheel({ deltaX: 0, deltaY: 10 }, s, { twoFingers: false, momentumUntil: 500, now: 100, engaged: true }), true)
+  assertEq(shouldSuppressWheel({ deltaX: 0, deltaY: 10 }, s, { twoFingers: false, momentumUntil: 500, now: 100 }), false)
+})
+
+check('колесо: Shift переворачивает ось, но остаётся вертикальным жестом', () => {
+  const s = { vertical: 'arrows', horizontal: 'off', modifier: 'shift' }
+  const busy = { twoFingers: true, momentumUntil: 0, now: 100 }
+  assertEq(shouldSuppressWheel({ deltaX: 10, deltaY: 0, shiftKey: true }, s, busy), true)
+  assertEq(shouldSuppressWheel({ deltaX: 10, deltaY: 0 }, s, busy), false)
 })
 
 if (failed) process.exit(1)
