@@ -434,15 +434,6 @@ body.platform-darwin .window-controls {
   padding: 5px;
 }
 
-/* Анимация переливов для glow — медленный дрейф оттенка + яркости */
-@keyframes focus-glow-shimmer {
-  0%   { filter: hue-rotate(0deg)   brightness(0.85); }
-  25%  { filter: hue-rotate(22deg)  brightness(1.05); }
-  50%  { filter: hue-rotate(8deg)   brightness(1.12); }
-  75%  { filter: hue-rotate(-16deg) brightness(0.95); }
-  100% { filter: hue-rotate(0deg)   brightness(0.85); }
-}
-
 /* Индикатор фокуса — ::before overlay поверх canvas/редактора */
 [data-focus-style="glow"] #terminal-container.panel-focused::before,
 [data-focus-style="glow"] #editor-panel.panel-focused::before,
@@ -457,14 +448,10 @@ body.platform-darwin .window-controls {
   z-index: 999;
 }
 
-/* Glow — тонкая рамка + внутреннее свечение с плавными переливами цвета */
+/* Glow (ключ сохранён ради совместимости настроек) — плоская рамка 1px акцента без свечения и анимации */
 [data-focus-style="glow"] #terminal-container.panel-focused::before,
 [data-focus-style="glow"] #editor-panel.panel-focused::before {
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  box-shadow:
-    inset 0 0 18px color-mix(in srgb, var(--accent) 14%, transparent),
-    inset 0 0 55px color-mix(in srgb, var(--accent) 5%, transparent);
-  animation: focus-glow-shimmer 7s ease-in-out infinite;
+  border: 1px solid var(--accent);
 }
 
 /* Border — чёткая рамка */
@@ -1505,13 +1492,12 @@ body.platform-darwin .window-controls {
 .git-diff-skeleton-row {
   height: 12px;
   border-radius: 3px;
-  background: linear-gradient(90deg, var(--surface) 25%, var(--hover) 50%, var(--surface) 75%);
-  background-size: 200% 100%;
-  animation: git-skeleton-shimmer 1.2s ease-in-out infinite;
+  background: var(--active);
+  animation: git-skeleton-pulse 1.2s ease-in-out infinite;
 }
-@keyframes git-skeleton-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+@keyframes git-skeleton-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 
 .diff-row {

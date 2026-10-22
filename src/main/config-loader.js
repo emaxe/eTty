@@ -16,7 +16,13 @@ export function getConfigDefaults() {
     },
     appearance: {
       theme: 'dark',
-      focusIndicator: 'glow',
+      // manual — appearance.theme; auto — themeDark/themeLight по системной схеме.
+      // По умолчанию manual, чтобы не менять тему существующим пользователям;
+      // новый конфиг получает auto (см. loadConfig).
+      themeMode: 'manual',
+      themeDark: 'etty-dark',
+      themeLight: 'etty-light',
+      focusIndicator: 'line',
       statusBarSize: 'compact'
     },
     terminal: {
@@ -170,6 +176,9 @@ export async function loadConfig() {
   } catch (e) {
     if (e.code === 'ENOENT') {
       log.info('config: file not found, creating from defaults')
+      // Новая установка: фирменные темы eTty и следование системной схеме
+      defaults.appearance.theme = defaults.appearance.themeDark
+      defaults.appearance.themeMode = 'auto'
       await writeFile(CONFIG_FILE(), JSON.stringify(defaults, null, 2), 'utf-8')
       return { config: defaults, warnings: ['config.json created with default values'], wasCreated: true }
     }

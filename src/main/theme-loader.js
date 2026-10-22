@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { readdir, readFile, writeFile, mkdir, access } from 'fs/promises'
 import log from 'electron-log'
+import { ETTY_THEMES } from '../shared/etty-themes.js'
 
 const CONFIG_DIR = () => join(app.getPath('userData'), 'eTty')
 const THEMES_DIR = () => join(CONFIG_DIR(), 'themes')
@@ -923,6 +924,9 @@ async function initializeThemesDir() {
     throw e
   }
 }
+
+// Фирменные темы eTty — встроенные (не зависят от userData/themes)
+Object.assign(BUILT_IN_THEMES, ETTY_THEMES)
 
 export async function loadThemes() {
   const warnings = []

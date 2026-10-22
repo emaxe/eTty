@@ -2,7 +2,10 @@
  * Fallback themes built into the application.
  * These are always available even if external themes fail to load.
  */
+import { ETTY_THEMES } from '../shared/etty-themes.js'
+
 export const THEMES = {
+  ...ETTY_THEMES,
   dark: {
     name: 'Dark',
     ui: {

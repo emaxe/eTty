@@ -132,3 +132,40 @@ test('deriveUiTokens: все override-переменные существуют 
     assert.ok(cssVar in t, `${cssVar} не выводится`)
   }
 })
+
+// --- Режим темы -------------------------------------------------------------
+
+import { resolveThemeName } from '../../renderer/core/theme-mode.js'
+import { ETTY_THEMES } from '../../shared/etty-themes.js'
+
+test('etty-themes: id совпадает с ключом, тёмная тёмная, светлая светлая', async () => {
+  const { isLightColor } = await import('../../renderer/core/color-utils.js')
+  for (const [key, theme] of Object.entries(ETTY_THEMES)) assert.equal(theme.id, key)
+  assert.equal(isLightColor(ETTY_THEMES['etty-dark'].ui.bg), false)
+  assert.equal(isLightColor(ETTY_THEMES['etty-light'].ui.bg), true)
+})
+
+test('etty-themes: есть в наборе для проверки контраста', () => {
+  assert.ok(allUis['etty-dark'] && allUis['etty-light'])
+})
+
+test('resolveThemeName: manual использует appearance.theme', () => {
+  const themes = { dark: {}, nord: {}, 'etty-dark': {}, 'etty-light': {} }
+  const a = { theme: 'nord', themeMode: 'manual', themeDark: 'etty-dark', themeLight: 'etty-light' }
+  assert.equal(resolveThemeName(a, true, themes), 'nord')
+  assert.equal(resolveThemeName(a, false, themes), 'nord')
+})
+
+test('resolveThemeName: auto выбирает по системной схеме', () => {
+  const themes = { dark: {}, nord: {}, 'etty-dark': {}, 'etty-light': {} }
+  const a = { theme: 'nord', themeMode: 'auto', themeDark: 'etty-dark', themeLight: 'etty-light' }
+  assert.equal(resolveThemeName(a, true, themes), 'etty-dark')
+  assert.equal(resolveThemeName(a, false, themes), 'etty-light')
+})
+
+test('resolveThemeName: отсутствующая тема → appearance.theme → dark', () => {
+  const a = { theme: 'nord', themeMode: 'auto', themeDark: 'gone', themeLight: 'gone' }
+  assert.equal(resolveThemeName(a, true, { dark: {}, nord: {} }), 'nord')
+  assert.equal(resolveThemeName(a, true, { dark: {} }), 'dark')
+  assert.equal(resolveThemeName(undefined, false, { dark: {} }), 'dark')
+})

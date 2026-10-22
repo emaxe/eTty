@@ -151,19 +151,46 @@ export class SettingsPage {
 
     body.appendChild(this._buildCategory('Оформление', [
       {
+        label: 'Режим темы',
+        control: this._createSelect(
+          [
+            { key: 'manual', name: 'Выбрать вручную' },
+            { key: 'auto', name: 'Как в системе' }
+          ],
+          this._config.appearance?.themeMode || 'manual',
+          (val) => this._setAppearance('themeMode', val)
+        )
+      },
+      {
         label: 'Тема',
         control: this._buildThemeRow()
+      },
+      {
+        label: 'Тёмная тема (режим «Как в системе»)',
+        control: this._createSelect(
+          this._themeOptions(),
+          this._config.appearance?.themeDark || 'etty-dark',
+          (val) => this._setAppearance('themeDark', val)
+        )
+      },
+      {
+        label: 'Светлая тема (режим «Как в системе»)',
+        control: this._createSelect(
+          this._themeOptions(),
+          this._config.appearance?.themeLight || 'etty-light',
+          (val) => this._setAppearance('themeLight', val)
+        )
       },
       {
         label: 'Индикатор фокуса',
         control: this._createSelect(
           [
             { key: 'none', name: 'Нет' },
-            { key: 'glow', name: 'Свечение' },
-            { key: 'border', name: 'Рамка' },
+            { key: 'glow', name: 'Тонкая рамка' },
+            { key: 'border', name: 'Рамка 2px' },
             { key: 'line', name: 'Линия сверху' }
           ],
-          this._config.appearance?.focusIndicator || 'glow',
+          this._config.appearance?.focusIndicator || 'line',
           (val) => {
             if (!this._config.appearance) this._config.appearance = {}
             this._config.appearance.focusIndicator = val
@@ -1401,6 +1428,17 @@ export class SettingsPage {
     return input
   }
 
+  _themeOptions() {
+    return Object.entries(this._themes).map(([key, t]) => ({ key, name: t.name }))
+  }
+
+  _setAppearance(key, value) {
+    if (!this._config.appearance) this._config.appearance = {}
+    this._config.appearance[key] = value
+    this._bus.emit('settings.changed', { key: `appearance.${key}`, value })
+    this._scheduleSave()
+  }
+
   _buildThemeRow() {
     const wrapper = document.createElement('div')
     wrapper.className = 'settings-theme-row'
@@ -1422,7 +1460,7 @@ export class SettingsPage {
     }
     updateSwatch(this._config.appearance.theme)
 
-    const themeOptions = Object.entries(this._themes).map(([key, t]) => ({ key, name: t.name }))
+    const themeOptions = this._themeOptions()
     const select = this._createSelect(themeOptions, this._config.appearance.theme, (val) => {
       this._config.appearance.theme = val
       updateSwatch(val)

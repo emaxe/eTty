@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog } from 'electron'
+import { app, BrowserWindow, Menu, dialog, nativeTheme } from 'electron'
 import log from 'electron-log'
 import { autoUpdater } from 'electron-updater'
 import { join } from 'path'
@@ -39,6 +39,8 @@ export class AppService {
       minWidth: 400,
       minHeight: 300,
       frame: false,
+      // Фон до первой отрисовки: по системной схеме, чтобы не было белой вспышки на тёмной теме
+      backgroundColor: nativeTheme.shouldUseDarkColors ? '#161616' : '#ffffff',
       ...(isMac ? { titleBarStyle: 'hiddenInset' } : {}),
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),

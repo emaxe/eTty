@@ -53,6 +53,7 @@ import { createPathsService } from './core/paths.js'
 import { ScrollbarActivity } from './core/scrollbar-activity.js'
 import { isLightColor } from './core/color-utils.js'
 import { deriveUiTokens, applyTokens } from './core/theme-tokens.js'
+import { resolveThemeName, watchSystemScheme, isSystemDark } from './core/theme-mode.js'
 import { IS_MAC } from './core/platform.js'
 import { createShellCommands, dialectForShellKind, DIALECTS } from './core/shell-commands.js'
 import { diagnostics } from './core/diagnostics.js'
@@ -199,7 +200,7 @@ async function init() {
   // Initialize store with current settings
   appStore = new StateStore({
     ui: {
-      theme: config.appearance.theme || 'dark',
+      theme: resolveThemeName(config.appearance, isSystemDark(), loadedThemes),
       focusIndicator: config.appearance.focusIndicator || 'none',
       statusBarSize: config.appearance.statusBarSize || 'compact',
       sidebarVisible: true,
@@ -313,7 +314,12 @@ async function init() {
     }
   })
 
-  applyTheme(config.appearance.theme)
+  applyTheme(resolveThemeName(config.appearance, isSystemDark(), loadedThemes))
+  const reapplyThemeFromSettings = () =>
+    applyTheme(resolveThemeName(config.appearance, isSystemDark(), loadedThemes))
+  const unwatchSystemScheme = watchSystemScheme(() => {
+    if (config.appearance?.themeMode === 'auto') reapplyThemeFromSettings()
+  })
   applyFocusIndicator(config.appearance.focusIndicator)
   applyStatusBarSize(config.appearance.statusBarSize)
 
@@ -1288,7 +1294,9 @@ async function init() {
 
   // — Settings EventBus subscriber —
   bus.on('settings.changed', ({ key, value }) => {
-    if (key === 'appearance.theme') applyTheme(value)
+    if (['appearance.theme', 'appearance.themeMode', 'appearance.themeDark', 'appearance.themeLight'].includes(key)) {
+      reapplyThemeFromSettings()
+    }
     if (key === 'appearance.focusIndicator') applyFocusIndicator(value)
     if (key === 'appearance.statusBarSize') applyStatusBarSize(value)
     if (key === 'ssh.panelPosition') {
@@ -2432,6 +2440,7 @@ async function init() {
 
   // Cleanup function: disconnect observer, clear timer, remove global listeners, destroy container
   function cleanupRenderer() {
+    unwatchSystemScheme()
     clearTimeout(resizeDebounceTimer)
     resizeDebounceTimer = null
     if (resizeObserver) {

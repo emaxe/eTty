@@ -1,6 +1,7 @@
 import { EditorView } from '@codemirror/view'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
+import { isLightColor } from './core/color-utils.js'
 
 /**
  * Build a CodeMirror 6 Extension[] from an editor color map (from themes.js).
@@ -74,7 +75,7 @@ export function buildEditorTheme(colors) {
         color: colors.bg
       }
     },
-    { dark: true }
+    { dark: !isLightColor(colors.bg) }
   )
 
   const highlightStyle = syntaxHighlighting(
