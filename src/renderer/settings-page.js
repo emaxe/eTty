@@ -159,7 +159,7 @@ export class SettingsPage {
             { key: 'auto', name: 'Как в системе' }
           ],
           this._config.appearance?.themeMode || 'manual',
-          (val) => this._setAppearance('themeMode', val)
+          (val) => this.setAppearance('themeMode', val)
         )
       },
       {
@@ -171,7 +171,7 @@ export class SettingsPage {
         control: this._createSelect(
           this._themeOptions(),
           this._config.appearance?.themeDark || 'etty-dark',
-          (val) => this._setAppearance('themeDark', val)
+          (val) => this.setAppearance('themeDark', val)
         )
       },
       {
@@ -179,7 +179,7 @@ export class SettingsPage {
         control: this._createSelect(
           this._themeOptions(),
           this._config.appearance?.themeLight || 'etty-light',
-          (val) => this._setAppearance('themeLight', val)
+          (val) => this.setAppearance('themeLight', val)
         )
       },
       {
@@ -1447,7 +1447,8 @@ export class SettingsPage {
     return Object.entries(this._themes).map(([key, t]) => ({ key, name: t.name }))
   }
 
-  _setAppearance(key, value) {
+  /** Меняет настройку оформления (тема, режим темы…): сохраняет и уведомляет приложение. */
+  setAppearance(key, value) {
     if (!this._config.appearance) this._config.appearance = {}
     this._config.appearance[key] = value
     this._bus.emit('settings.changed', { key: `appearance.${key}`, value })

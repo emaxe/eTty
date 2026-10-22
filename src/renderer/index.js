@@ -14,6 +14,7 @@ import '@fontsource/roboto/500.css'
 import './styles/tokens.css'
 import './styles.css'
 import './styles/shell.css'
+import './styles/palette.css'
 import './components/base/context-menu/context-menu.css'
 import './components/base/button/button.css'
 import './components/base/modal/modal.css'
@@ -59,6 +60,9 @@ import { deriveUiTokens, applyTokens } from './core/theme-tokens.js'
 import { resolveThemeName, watchSystemScheme, isSystemDark } from './core/theme-mode.js'
 import { IS_MAC } from './core/platform.js'
 import { ActivityRail } from './features/shell/activity-rail.js'
+import { CommandRegistry } from './core/command-registry.js'
+import { CommandPalette } from './features/command-palette/command-palette.js'
+import { HOTKEYS, matchesHotkey } from './core/hotkeys.js'
 import { createShellCommands, dialectForShellKind, DIALECTS } from './core/shell-commands.js'
 import { diagnostics } from './core/diagnostics.js'
 import { GitStatusService } from './services/git-status-service.js'
@@ -1302,6 +1306,10 @@ async function init() {
 
   // — Settings EventBus subscriber —
   bus.on('settings.changed', ({ key, value }) => {
+    if (key.startsWith('appearance.')) {
+      if (!config.appearance) config.appearance = {}
+      config.appearance[key.slice('appearance.'.length)] = value
+    }
     if (['appearance.theme', 'appearance.themeMode', 'appearance.themeDark', 'appearance.themeLight'].includes(key)) {
       reapplyThemeFromSettings()
     }
@@ -2217,6 +2225,46 @@ async function init() {
     isBlocked: () => settingsPage.isVisible() || gitPanel.isVisible()
   })
 
+  // — Командная палитра: реестр команд приложения —
+  const commandRegistry = new CommandRegistry()
+  const overlayOpen = () => settingsPage.isVisible() || gitPanel.isVisible()
+  const toggleStore = (key) => () => appStore.set(key, !appStore.get(key))
+  const registerCommands = (commands) => commands.forEach(c => commandRegistry.register(c))
+
+  registerCommands([
+    { id: 'view.toggle-sidebar', group: 'Вид', title: 'Показать/скрыть файлы', keywords: ['дерево', 'боковая панель'], when: () => !overlayOpen(), run: toggleStore('ui.sidebarVisible') },
+    { id: 'view.toggle-editor', group: 'Вид', title: 'Показать/скрыть редактор', hotkey: HOTKEYS.toggleEditor, when: () => !overlayOpen(), run: toggleStore('ui.editorVisible') },
+    { id: 'view.toggle-ssh', group: 'Вид', title: 'Показать/скрыть SSH-подключения', when: () => !overlayOpen() && sshPanelPosition !== 'off', run: toggleStore('ui.sshPanelVisible') },
+    { id: 'view.toggle-git', group: 'Вид', title: 'Открыть/закрыть Git', hotkey: HOTKEYS.toggleGit, run: toggleStore('ui.gitPanelVisible') },
+    { id: 'view.search', group: 'Вид', title: 'Поиск по проекту', hotkey: HOTKEYS.searchProject, keywords: ['найти', 'grep'], when: () => !overlayOpen(), run: () => bus.emit('search.show') },
+    { id: 'app.settings', group: 'Приложение', title: 'Открыть настройки', hotkey: HOTKEYS.openSettings, run: () => btnSettings.click() },
+    { id: 'tab.new-local', group: 'Вкладки', title: 'Новая локальная вкладка', hotkey: HOTKEYS.newTab, when: () => !settingsPage.isVisible(), run: () => bus.emit('tab.add', { local: true }) },
+    {
+      id: 'tab.new-ssh', group: 'Вкладки', title: 'Новая вкладка SSH…', keywords: ['подключение', 'сервер'],
+      when: () => !settingsPage.isVisible() && sshPanel.getConnections().length > 0,
+      run: () => bus.emit('tab.add.menu', { x: window.innerWidth / 2 - 90, y: window.innerHeight / 3 })
+    },
+    { id: 'tab.next', group: 'Вкладки', title: 'Следующая вкладка', when: () => tabBar.tabs.length > 1 && !tabBar.disabled, run: () => tabBar.switchRelative(1) },
+    { id: 'tab.prev', group: 'Вкладки', title: 'Предыдущая вкладка', when: () => tabBar.tabs.length > 1 && !tabBar.disabled, run: () => tabBar.switchRelative(-1) },
+    {
+      id: 'tab.close', group: 'Вкладки', title: 'Закрыть вкладку', when: () => !tabBar.disabled && !!tabBar.getActive(),
+      run: () => bus.emit('tab.close.request', { tabs: [tabBar.getActive()] })
+    },
+    {
+      id: 'theme.auto', group: 'Оформление', title: 'Тема: как в системе', keywords: ['светлая', 'тёмная', 'авто'],
+      run: () => settingsPage.setAppearance('themeMode', 'auto')
+    },
+    ...Object.entries(loadedThemes).map(([id, theme]) => ({
+      id: `theme.set.${id}`, group: 'Оформление', title: `Тема: ${theme.name}`,
+      run: () => {
+        settingsPage.setAppearance('theme', id)
+        settingsPage.setAppearance('themeMode', 'manual')
+      }
+    }))
+  ])
+
+  const commandPalette = new CommandPalette({ registry: commandRegistry, isMac: IS_MAC })
+
   btnToggleSidebar.classList.add('active')
   btnToggleSidebar.addEventListener('click', () => {
     if (settingsPage.isVisible() || gitPanel.isVisible()) return
@@ -2236,6 +2284,18 @@ async function init() {
   // Горячая клавиша Cmd+E / Ctrl+E — toggle панели редактора
   // Cmd+F / Ctrl+F — открыть поиск по проекту
   function onKeyDown(e) {
+    // Командная палитра: Cmd/Ctrl+K и Cmd/Ctrl+Shift+P — из любого места, в том числе из терминала
+    if (matchesHotkey(e, HOTKEYS.commandPalette, IS_MAC) || matchesHotkey(e, HOTKEYS.commandPaletteAlt, IS_MAC)) {
+      e.preventDefault()
+      commandPalette.toggle()
+      return
+    }
+    // Cmd/Ctrl+, — настройки
+    if (matchesHotkey(e, HOTKEYS.openSettings, IS_MAC) && !commandPalette.isVisible()) {
+      e.preventDefault()
+      btnSettings.click()
+      return
+    }
     if ((e.metaKey || e.ctrlKey) && e.key === 'e' && !e.shiftKey && !e.altKey) {
       // Не перехватываем, если фокус в CodeMirror (он сам обработает)
       if (document.activeElement?.closest('#editor-body')) return
@@ -2458,6 +2518,7 @@ async function init() {
   function cleanupRenderer() {
     unwatchSystemScheme()
     activityRail.destroy()
+    commandPalette.destroy()
     clearTimeout(resizeDebounceTimer)
     resizeDebounceTimer = null
     if (resizeObserver) {
