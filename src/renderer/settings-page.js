@@ -258,7 +258,7 @@ export class SettingsPage {
             { key: 'default', name: this._api.platform === 'win32' ? 'По умолчанию (из профиля оболочки)' : 'По умолчанию (из ~/.zshrc)' },
             { key: 'short', name: 'Короткий — dirname %' },
             { key: 'minimal', name: 'Минимальный — >' },
-            { key: 'arrow', name: 'Стрелка — dirname ❯' }
+            { key: 'arrow', name: 'Стрелка — dirname ❯' } // taste-skill-ignore: реальный символ промпта
           ],
           this._config.terminal?.promptStyle || 'default',
           (val) => {

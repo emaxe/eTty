@@ -49,7 +49,7 @@ export class SshConnectionDialog {
     body.className = 'settings-dialog-body'
 
     const labelInput = this._field(body, 'Название', 'text', connection?.label || '', 'Например: prod-web')
-    const hostInput = this._field(body, 'Хост', 'text', connection?.host || '', 'example.com или IP')
+    const hostInput = this._field(body, 'Хост', 'text', connection?.host || '', 'Имя хоста или IP-адрес')
     const portInput = this._field(body, 'Порт', 'text', String(connection?.port || 22), '22')
     const userInput = this._field(body, 'Пользователь', 'text', connection?.user || '', 'root')
 
@@ -111,7 +111,7 @@ export class SshConnectionDialog {
     }
     body.appendChild(secretRow)
 
-    const extraArgsInput = this._field(body, 'Доп. аргументы ssh', 'text', connection?.extraArgs || '', 'например: -J bastion.example.com')
+    const extraArgsInput = this._field(body, 'Доп. аргументы ssh', 'text', connection?.extraArgs || '', 'например: -J jump-host')
 
     const hooksRow = document.createElement('div')
     hooksRow.className = 'settings-dialog-row'

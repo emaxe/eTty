@@ -8,7 +8,7 @@ const LIST_GAP = 10
 
 /**
  * Радиальное меню поверх терминала: первый уровень — кольцо секторов (по часовой с 12 часов,
- * в центре «✕»), вложенные уровни — обычный список рядом с выбранным сектором, где помещается
+ * в центре «×»), вложенные уровни — обычный список рядом с выбранным сектором, где помещается
  * полный текст. Хит-тест кольца считается по координатам, а не по SVG-элементам.
  *
  * Уровень: `{ items: [{ label, children?: Level, run?: () => Level | void }] }`.
@@ -267,7 +267,7 @@ export class RadialMenu {
     hubText.setAttribute('class', 'radial-menu-hub-label')
     hubText.setAttribute('x', String(R))
     hubText.setAttribute('y', String(R))
-    hubText.textContent = '✕'
+    hubText.textContent = '×'
     svg.append(hub, hubText)
 
     this._svg?.remove()

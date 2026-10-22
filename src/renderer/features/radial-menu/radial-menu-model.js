@@ -54,7 +54,7 @@ export function buildRadialLevel(snapshot, h) {
 function commandsLevel(snapshot, h) {
   const items = []
   if (snapshot.busyOptimistic) {
-    items.push({ label: '✕ Снять busy', run: () => h.clearBusy() })
+    items.push({ label: 'Снять busy', run: () => h.clearBusy() })
   }
   for (const node of snapshot.nodes) {
     if (node.kind === 'group') {

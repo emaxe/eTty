@@ -25,8 +25,8 @@
 
 ## Стили
 
-- [ ] Цвета — через CSS-переменные из тем (`var(--переменная)`)
-- [ ] Новые CSS-переменные добавлены в `src/renderer/styles.css :root` и во все темы в `themes.js`
+- [ ] Цвета — только через семантические токены (`var(--surface)`, `var(--text-secondary)`, `var(--accent)`…)
+- [ ] Новая роль цвета добавлена в `core/theme-tokens.js` (deriveUiTokens) с тестом контраста в `src/main/__tests__/theme-tokens.test.mjs`; новые команды — в `CommandRegistry` (палитра и хоткеи подхватят)
 
 ## Проверка
 

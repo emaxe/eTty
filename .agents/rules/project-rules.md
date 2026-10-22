@@ -107,8 +107,9 @@ src/
     services/
       git-status-service.js     — polling git-статуса (5с), пишет в StateStore (`git.*`)
     components/base/            — UI-kit
-      button/button.js
-      context-menu/context-menu.js
+      context-menu/context-menu.js — меню с клавиатурой (↑↓, Enter, Esc), hint хоткея, danger-пункты
+      modal/modal.js            — единый Modal + registerModal(): стек окон, Esc, фокус-трап, возврат фокуса
+      button/button.js          — единственный источник кнопок (primary/default/ghost/danger, sm/md/lg)
       tabs/draggable-tabs.js    — generic drag-and-drop для вкладок
     tab-bar.js                — вкладки терминала (на DraggableTabs); setTabTmux() — бейдж/класс
                                  tab-tmux для tmux-вкладок (persistence:'tmux')
@@ -123,8 +124,18 @@ src/
     node-version-dialog.js     — диалог менеджера версий Node (nvm/fnm/asdf)
     confirm-dialog.js          — универсальный диалог подтверждения (напр. закрытие занятой вкладки)
     icons.js                   — inline SVG-иконки
-    themes.js                  — 7 встроенных тем (Catppuccin Mocha, Monokai, Dracula, One Dark, Nord, Solarized, Gruvbox)
-    styles.css                 — CSS variables + стили всех компонентов
+    themes.js                  — fallback-темы (dark, light + eTty Dark/Light из shared/etty-themes.js)
+    styles/tokens.css          — токены, не зависящие от темы: отступы (--space-*), радиусы, типографика (--fs-*),
+                                 --z-*, --dur-*, глобальный :focus-visible
+    styles/*.css               — shell (титлбар, вкладки, activity rail), status-bar, settings, palette
+    styles.css                 — остальные стили компонентов (дерево, редактор, git, SSH, диалоги); переносить в styles/
+    core/theme-tokens.js       — deriveUiTokens(theme.ui): из 10 цветов темы выводит семантические роли
+                                 (--ground/--surface/--raised/--active, --text/--text-secondary/--text-tertiary,
+                                 --positive/--negative/--warning, --focus, --scrim, --shadow-float) с контрастом ≥ 4.5:1
+    core/theme-mode.js         — resolveThemeName(): manual / auto («как в системе») + подписка на prefers-color-scheme
+    core/command-registry.js   — реестр команд приложения (палитра, список хоткеев в настройках); core/hotkeys.js — HOTKEYS, formatHotkey
+    features/shell/            — activity-rail.js (вертикальная панель переключателей панелей)
+    features/command-palette/  — командная палитра (Cmd/Ctrl+K, Cmd/Ctrl+Shift+P)
     index.html                 — HTML-разметка
   shared/
     ipc-channels.js          — константы имён IPC каналов (единый источник истины)
@@ -478,7 +489,9 @@ electron-builder делает это автоматически через `"npm
 - Entitlements — только в `build/`
 - Изменения в нативных модулях требуют `npm run postinstall` (electron-rebuild)
 - Ветки по фичам: `feature/<slug>`, merge в `main`
-- CSS-переменные для тем определены в `styles.css :root` и переключаются через `themes.js`
+- Цвета — только семантические токены (`var(--surface)`, `var(--text-secondary)`, `var(--accent)`…), которые выводит `core/theme-tokens.js` из темы; размеры, радиусы, шрифты, слои — токены из `styles/tokens.css`. Хардкод цветов, `px` шрифтов/радиусов вне шкалы и произвольный `z-index` не допускаются
+- Выбранное состояние (вкладка, пункт рейла, раздел) отмечается линией акцента 2px, а не заливкой; акцент не используется для заливки хрома. Тени — только у парящих элементов (`--shadow-float`). Без градиентов, glow, uppercase-лейблов; моноширинный шрифт — только для кода и путей
+- Модальные окна — `components/base/modal/modal.js` (`Modal` или `registerModal`), кнопки — `Button`, уведомления — `showToast`; собственные overlay/кнопки/тосты не создавать
 - **Все IPC каналы** определяются в `shared/ipc-channels.js` — не используй строковые литералы
 - **Новые компоненты** используют DI Container + EventBus, не зависят напрямую от `window.electronAPI`
 - **Новые IPC handlers** добавляются в `main/ipc-handlers/` с `register*Handlers(ipcMain, deps)` сигнатурой

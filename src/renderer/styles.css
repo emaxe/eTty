@@ -536,7 +536,7 @@ body.platform-darwin .window-controls {
 }
 .git-branch-btn-chevron { display: inline-flex; color: var(--muted); width: 10px; }
 
-.git-header-stats { display: flex; align-items: center; gap: 8px; font-size: 12px; font-family: Menlo, 'SF Mono', Consolas, monospace; }
+.git-header-stats { display: flex; align-items: center; gap: 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
 .git-stat-ahead, .git-stat-behind { color: var(--muted); }
 .git-header-spacer { flex: 1; }
 
@@ -567,7 +567,7 @@ body.platform-darwin .window-controls {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-float);
   overflow: hidden;
 }
 .git-branch-search {
@@ -713,7 +713,8 @@ body.platform-darwin .window-controls {
   padding: 4px 10px;
   cursor: pointer;
   font-size: 12px;
-  font-family: Menlo, 'SF Mono', Consolas, monospace;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
   user-select: none;
   border-left: 2px solid transparent;
 }
@@ -729,14 +730,15 @@ body.platform-darwin .window-controls {
 .git-deletions { color: var(--red); flex-shrink: 0; }
 
 .git-list-message, .git-diff-placeholder {
+  font-family: var(--font-ui);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
   padding: 32px 16px;
-  color: var(--muted);
-  font-size: 12px;
+  color: var(--text-tertiary);
+  font-size: var(--fs-12);
   text-align: center;
 }
 .git-list-message-icon, .git-diff-placeholder-icon { color: var(--muted); opacity: 0.6; }
@@ -753,7 +755,8 @@ body.platform-darwin .window-controls {
   border-radius: 3px;
   font-size: 9px;
   font-weight: 700;
-  font-family: Menlo, 'SF Mono', Consolas, monospace;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 .git-status-badge-modified { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
@@ -1653,7 +1656,7 @@ button svg {
   border-radius: 5px;
   color: var(--bg);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-float);
   transition: opacity 0.1s, transform 0.1s;
   pointer-events: auto;
 }
@@ -1679,7 +1682,7 @@ button svg {
   border-radius: 50%;
   color: var(--bg);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-float);
   transition: opacity 0.15s ease, transform 0.15s ease;
   opacity: 0.9;
   pointer-events: auto;
@@ -2569,7 +2572,8 @@ button svg {
 
 .node-version-row-version {
   font-size: 13px;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
   color: var(--text);
 }
 
@@ -2765,7 +2769,7 @@ button svg {
   border-radius: 8px;
   background: color-mix(in srgb, var(--text) 8%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--text) 28%, var(--surface));
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--shadow-float);
   font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
   color: var(--text);

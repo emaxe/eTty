@@ -25,7 +25,7 @@
 ## Константы
 
 - [ ] Числовые значения (размеры, интервалы, лимиты) — в `src/renderer/core/config/` (`app-config.js`, `ui-dimensions.js`, `terminal-config.js`)
-- [ ] Не хардкодить цвета — использовать CSS-переменные из тем (`styles.css :root`)
+- [ ] Не хардкодить цвета — использовать семантические токены (`var(--surface)`, `var(--accent)`…; выводятся из темы в `core/theme-tokens.js`), размеры и радиусы — из `styles/tokens.css`
 
 ## Cleanup
 
@@ -38,4 +38,4 @@
 ## Регистрация
 
 - [ ] Компонент зарегистрирован в DI Container (`src/renderer/core/container.js`) если используется другими компонентами
-- [ ] Если нужны стили — добавлены в `src/renderer/styles.css` с CSS-переменными
+- [ ] Если нужны стили — добавлены в `src/renderer/styles/` (по компоненту) на токенах; диалоги — через `Modal`, кнопки — через `Button`, уведомления — `showToast`. Есть состояния: hover, focus-visible, disabled, empty, loading, error
