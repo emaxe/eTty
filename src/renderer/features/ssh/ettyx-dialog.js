@@ -1,3 +1,4 @@
+import { registerModal } from '../../components/base/modal/modal.js'
 /**
  * Модальный диалог переноса профилей (`*.ettyx`, задача #31, REQ-22/23). Два режима:
  *   - `openExport()` — парольная фраза + опциональный чекбокс «включить приватные ключи»
@@ -117,19 +118,17 @@ export class EttyxDialog {
     dialog.appendChild(footer)
     overlay.appendChild(dialog)
 
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) this._settle(null)
-    })
     this._onKeyDown = (e) => {
-      if (e.key === 'Escape') this._settle(null)
       if (e.key === 'Enter') confirmBtn.click()
     }
     document.addEventListener('keydown', this._onKeyDown)
 
     document.body.appendChild(overlay)
     this._overlay = overlay
-
-    setTimeout(() => passInput.focus(), 0)
+    this._releaseModal = registerModal(overlay, dialog, {
+      onClose: () => this._settle(null),
+      initialFocus: passInput
+    })
   }
 
   /** Тот же DOM/CSS, что `SshConnectionDialog._createToggle()`/`SettingsPage._createToggle()`. */
@@ -153,6 +152,8 @@ export class EttyxDialog {
   _settle(result) {
     if (!this._overlay) return
     document.removeEventListener('keydown', this._onKeyDown)
+    this._releaseModal?.()
+    this._releaseModal = null
     this._overlay.remove()
     this._overlay = null
     const resolve = this._resolve

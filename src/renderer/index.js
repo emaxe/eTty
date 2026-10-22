@@ -15,6 +15,7 @@ import './styles/tokens.css'
 import './styles.css'
 import './components/base/context-menu/context-menu.css'
 import './components/base/button/button.css'
+import './components/base/modal/modal.css'
 import { FileTree } from './file-tree.js'
 import { TabBar } from './tab-bar.js'
 import { THEMES } from './themes.js'
@@ -31,6 +32,7 @@ import { Icons } from './icons.js'
 import { ContextMenu } from './components/base/context-menu/context-menu.js'
 import { TERMINAL_CONFIG } from './core/config/terminal-config.js'
 import { APP_CONFIG } from './core/config/app-config.js'
+import { UI_DIMENSIONS } from './core/config/ui-dimensions.js'
 import { TerminalKeyboardHandler } from './features/terminal/terminal-keyboard-handler.js'
 import { TerminalImagePaste } from './features/terminal/terminal-image-paste.js'
 import { showToast } from './components/toast/toast.js'
@@ -311,6 +313,10 @@ async function init() {
       if (statusBar) {
         statusBar.dataset.size = state.ui.statusBarSize || 'compact'
       }
+      // Оверлеи (git, настройки) и тосты отсчитывают высоту статус-бара от этой переменной
+      const sizeKey = (state.ui.statusBarSize || 'compact').toUpperCase()
+      const dims = UI_DIMENSIONS.STATUS_BAR[sizeKey] || UI_DIMENSIONS.STATUS_BAR.COMPACT
+      document.documentElement.style.setProperty('--statusbar-h', `${dims.HEIGHT}px`)
     }
   })
 

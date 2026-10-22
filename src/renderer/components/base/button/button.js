@@ -14,13 +14,14 @@
 export class Button {
   /**
    * @param {Object} options
-   * @param {'default'|'primary'|'danger'|'ghost'} [options.variant='default']
+   * @param {'default'|'secondary'|'primary'|'danger'|'ghost'} [options.variant='default'] — default = secondary
    * @param {'sm'|'md'|'lg'} [options.size='md']
    * @param {string} [options.label='']
    * @param {string|null} [options.icon=null] — SVG string or null. Must be trusted/sanitized SVG.
    * @param {Function|null} [options.onClick=null]
    * @param {boolean} [options.disabled=false]
-   * @param {string} [options.title='']
+   * @param {string} [options.title=''] — подсказка; для кнопки только с иконкой также используется как aria-label
+   * @param {string} [options.type='button'] — 'submit' для кнопки формы
    */
   constructor(options = {}) {
     const {
@@ -31,14 +32,17 @@ export class Button {
       onClick = null,
       disabled = false,
       title = '',
+      type = 'button',
     } = options
 
     this._onClick = onClick
 
     this.element = document.createElement('button')
-    this.element.className = `btn btn--${variant} btn--${size}`
-    this.element.type = 'button'
+    const iconOnly = !!icon && !label
+    this.element.className = `btn btn--${variant === 'secondary' ? 'default' : variant} btn--${size}${iconOnly ? ' btn--icon' : ''}`
+    this.element.type = type
     if (title) this.element.title = title
+    if (iconOnly && title) this.element.setAttribute('aria-label', title)
 
     if (icon) {
       const iconWrap = document.createElement('span')

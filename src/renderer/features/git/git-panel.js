@@ -6,6 +6,7 @@
  * ElectronApiAdapter.
  */
 import { Icons } from '../../icons.js'
+import { showToast } from '../../components/toast/toast.js'
 import { ContextMenu } from '../../components/base/context-menu/context-menu.js'
 import { APP_CONFIG } from '../../core/config/app-config.js'
 import { GitFileList } from './git-file-list.js'
@@ -41,7 +42,6 @@ export class GitPanel {
     this._currentBranch = null
     this._lastStagedCount = 0
 
-    this._toastTimer = null
     this._statusUnsub = null
     this._branchPopoverEl = null
     this._branchPopoverOutsideHandler = null
@@ -66,7 +66,6 @@ export class GitPanel {
         <button class="git-close btn btn--ghost btn--sm" type="button" title="Close">${Icons.close}</button>
       </div>
       <div class="git-root-path"></div>
-      <div class="git-toast"></div>
       <div class="git-body">
         <div class="git-sidebar"></div>
         <div class="git-splitter"></div>
@@ -86,7 +85,6 @@ export class GitPanel {
     this._btnRefresh = this._overlayEl.querySelector('.git-btn-refresh')
     this._btnClose = this._overlayEl.querySelector('.git-close')
     this._rootPathEl = this._overlayEl.querySelector('.git-root-path')
-    this._toastEl = this._overlayEl.querySelector('.git-toast')
     this._sidebarEl = this._overlayEl.querySelector('.git-sidebar')
     this._splitterEl = this._overlayEl.querySelector('.git-splitter')
     this._detailEl = this._overlayEl.querySelector('.git-detail')
@@ -448,12 +446,7 @@ export class GitPanel {
   }
 
   _showToast(msg, type = 'error') {
-    clearTimeout(this._toastTimer)
-    this._toastEl.textContent = msg
-    this._toastEl.className = `git-toast visible ${type === 'success' ? 'success' : 'error'}`
-    this._toastTimer = setTimeout(() => {
-      this._toastEl.classList.remove('visible')
-    }, type === 'success' ? 2000 : 4000)
+    showToast(msg, type)
   }
 
   // — Branch popover —
@@ -612,7 +605,6 @@ export class GitPanel {
 
   destroy() {
     this._closeBranchPopover()
-    clearTimeout(this._toastTimer)
     this._statusUnsub?.()
     this._statusUnsub = null
     this._cleanupController?.abort()

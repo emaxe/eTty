@@ -1,0 +1,100 @@
+/* Modal — единое оформление модальных окон. Слой, scrim и тень — из tokens.css. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--scrim);
+}
+
+.modal-overlay.hidden {
+  display: none;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: calc(100vh - 2 * var(--space-6));
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-float);
+  font-size: var(--fs-13);
+  animation: modal-in var(--dur-base) var(--ease-out);
+}
+
+.modal:focus {
+  outline: none;
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.modal--sm { max-width: 360px; }
+.modal--md { max-width: 480px; }
+.modal--lg { max-width: 640px; }
+.modal--xl { max-width: 880px; }
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  flex-shrink: 0;
+}
+
+.modal__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-14);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-tight);
+}
+
+.modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-16);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal__close:hover {
+  background: var(--active);
+  color: var(--text);
+}
+
+.modal__body {
+  padding: var(--space-2) var(--space-4) var(--space-4);
+  overflow-y: auto;
+  color: var(--text-secondary);
+  line-height: var(--lh-ui);
+}
+
+.modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  flex-shrink: 0;
+}
+
+.modal__footer[hidden] {
+  display: none;
+}

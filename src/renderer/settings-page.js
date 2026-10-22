@@ -1,3 +1,4 @@
+import { registerModal } from './components/base/modal/modal.js'
 import { Icons } from './icons.js'
 import { buildQuickReplyTree, normalizeQuickReplies } from './features/quick-replies/quick-replies-model.js'
 import { APP_CONFIG } from './core/config/app-config.js'
@@ -589,6 +590,20 @@ export class SettingsPage {
     return row
   }
 
+  /**
+   * Показывает диалог и подключает его к общему стеку модальных окон (Esc, фокус-трап, возврат фокуса).
+   * Диалоги закрываются через overlay.remove(): снятие со стека привязано к нему.
+   */
+  _mountDialog(overlay, dialog) {
+    document.body.appendChild(overlay)
+    const release = registerModal(overlay, dialog, { onClose: () => overlay.remove() })
+    const remove = overlay.remove.bind(overlay)
+    overlay.remove = () => {
+      release()
+      remove()
+    }
+  }
+
   _openCustomAgentDialog(index, list) {
     const items = this._config.agents?.custom || []
     const item = index >= 0 ? items[index] : { id: crypto.randomUUID(), label: '', launchCommand: '', checkCommand: '', enabled: true }
@@ -719,7 +734,7 @@ export class SettingsPage {
     dialog.appendChild(body)
     dialog.appendChild(footer)
     overlay.appendChild(dialog)
-    document.body.appendChild(overlay)
+    this._mountDialog(overlay, dialog)
 
     setTimeout(() => labelInput.focus(), 0)
   }
@@ -1244,7 +1259,7 @@ export class SettingsPage {
     dialog.appendChild(body)
     dialog.appendChild(footer)
     overlay.appendChild(dialog)
-    document.body.appendChild(overlay)
+    this._mountDialog(overlay, dialog)
 
     setTimeout(() => labelInput.focus(), 0)
   }
@@ -1334,7 +1349,7 @@ export class SettingsPage {
     dialog.appendChild(body)
     dialog.appendChild(footer)
     overlay.appendChild(dialog)
-    document.body.appendChild(overlay)
+    this._mountDialog(overlay, dialog)
 
     setTimeout(() => labelInput.focus(), 0)
   }

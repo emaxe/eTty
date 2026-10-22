@@ -38,6 +38,8 @@ import { buildEditorTheme } from './editor-theme.js'
 import { getLanguageExtension } from './editor-languages.js'
 import { fileLinksExtension } from './editor-file-links.js'
 import { ContextMenu } from './components/base/context-menu/context-menu.js'
+import { Button } from './components/base/button/button.js'
+import { Modal, registerModal } from './components/base/modal/modal.js'
 
 // ── Diff Gutter Extension ────────────────────────────────────────────────────
 
@@ -863,15 +865,12 @@ export class EditorPanel {
   }
 
   _showLinkError(filePath, error) {
-    const overlay = document.createElement('div')
-    overlay.className = 'link-error-overlay'
-
-    const dialog = document.createElement('div')
-    dialog.className = 'link-error-dialog'
-
-    const title = document.createElement('div')
-    title.className = 'link-error-title'
-    title.textContent = 'Не удалось открыть файл'
+    const modal = new Modal({
+      title: 'Не удалось открыть файл',
+      size: 'sm',
+      showClose: false,
+      onClose: () => modal.destroy()
+    })
 
     const msg = document.createElement('div')
     msg.className = 'link-error-msg'
@@ -881,18 +880,10 @@ export class EditorPanel {
     detail.className = 'link-error-detail'
     detail.textContent = error
 
-    const btn = document.createElement('button')
-    btn.className = 'link-error-btn'
-    btn.textContent = 'OK'
-
-    const close = () => overlay.remove()
-    btn.addEventListener('click', close)
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
-
-    dialog.append(title, msg, detail, btn)
-    overlay.appendChild(dialog)
-    document.body.appendChild(overlay)
-    btn.focus()
+    const ok = new Button({ variant: 'primary', label: 'OK', onClick: () => modal.close('ok') })
+    modal.body.append(msg, detail)
+    modal.footer.appendChild(ok.element)
+    modal.open({ initialFocus: ok.element })
   }
 
   _showPlaceholder(msg) {
@@ -1014,17 +1005,11 @@ export class EditorPanel {
     const actions = document.createElement('div')
     actions.className = 'conflict-dialog-actions'
 
-    const btnKeep = document.createElement('button')
-    btnKeep.className = 'conflict-dialog-btn'
-    btnKeep.textContent = 'Оставить мои изменения'
+    const btnKeep = new Button({ variant: 'default', label: 'Оставить мои изменения' }).element
 
-    const btnReload = document.createElement('button')
-    btnReload.className = 'conflict-dialog-btn danger'
-    btnReload.textContent = 'Загрузить с диска'
+    const btnReload = new Button({ variant: 'danger', label: 'Загрузить с диска' }).element
 
-    const btnDiff = document.createElement('button')
-    btnDiff.className = 'conflict-dialog-btn primary'
-    btnDiff.textContent = 'Показать diff'
+    const btnDiff = new Button({ variant: 'primary', label: 'Показать diff' }).element
 
     const close = () => {
       this._closeConflictOverlay()
@@ -1052,6 +1037,7 @@ export class EditorPanel {
     document.body.appendChild(overlay)
     overlay._diffEditors = []
     this._conflictOverlay = overlay
+    overlay._release = registerModal(overlay, dialog, { onClose: () => this._closeConflictOverlay() })
     btnKeep.focus()
   }
 
@@ -1140,13 +1126,9 @@ export class EditorPanel {
     const actions = document.createElement('div')
     actions.className = 'conflict-dialog-actions'
 
-    const btnKeep = document.createElement('button')
-    btnKeep.className = 'conflict-dialog-btn'
-    btnKeep.textContent = 'Оставить мои изменения'
+    const btnKeep = new Button({ variant: 'default', label: 'Оставить мои изменения' }).element
 
-    const btnReload = document.createElement('button')
-    btnReload.className = 'conflict-dialog-btn danger'
-    btnReload.textContent = 'Загрузить с диска'
+    const btnReload = new Button({ variant: 'danger', label: 'Загрузить с диска' }).element
 
     const close = () => {
       currentEditor.destroy()
@@ -1187,17 +1169,11 @@ export class EditorPanel {
     const actions = document.createElement('div')
     actions.className = 'conflict-dialog-actions'
 
-    const btnOverwrite = document.createElement('button')
-    btnOverwrite.className = 'conflict-dialog-btn danger'
-    btnOverwrite.textContent = 'Перезаписать'
+    const btnOverwrite = new Button({ variant: 'danger', label: 'Перезаписать' }).element
 
-    const btnCancel = document.createElement('button')
-    btnCancel.className = 'conflict-dialog-btn'
-    btnCancel.textContent = 'Отменить'
+    const btnCancel = new Button({ variant: 'default', label: 'Отменить' }).element
 
-    const btnDiff = document.createElement('button')
-    btnDiff.className = 'conflict-dialog-btn primary'
-    btnDiff.textContent = 'Показать diff'
+    const btnDiff = new Button({ variant: 'primary', label: 'Показать diff' }).element
 
     const close = () => {
       this._closeConflictOverlay()
@@ -1222,6 +1198,7 @@ export class EditorPanel {
     document.body.appendChild(overlay)
     overlay._diffEditors = []
     this._conflictOverlay = overlay
+    overlay._release = registerModal(overlay, dialog, { onClose: () => this._closeConflictOverlay() })
     btnCancel.focus()
   }
 
@@ -1292,13 +1269,9 @@ export class EditorPanel {
     const actions = document.createElement('div')
     actions.className = 'conflict-dialog-actions'
 
-    const btnCancel = document.createElement('button')
-    btnCancel.className = 'conflict-dialog-btn'
-    btnCancel.textContent = 'Отменить'
+    const btnCancel = new Button({ variant: 'default', label: 'Отменить' }).element
 
-    const btnOverwrite = document.createElement('button')
-    btnOverwrite.className = 'conflict-dialog-btn danger'
-    btnOverwrite.textContent = 'Перезаписать'
+    const btnOverwrite = new Button({ variant: 'danger', label: 'Перезаписать' }).element
 
     const close = () => {
       currentEditor.destroy()
@@ -1383,6 +1356,7 @@ export class EditorPanel {
 
   _closeConflictOverlay() {
     if (this._conflictOverlay) {
+      this._conflictOverlay._release?.()
       if (this._conflictOverlay._diffScrollCleanups) {
         this._conflictOverlay._diffScrollCleanups.forEach((fn) => fn())
       }

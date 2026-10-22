@@ -1,32 +1,57 @@
-/* Context menu */
+/* Context menu — парящая поверхность: тень и слой из tokens.css */
 .context-menu {
   position: fixed;
-  z-index: 1000;
-  background: var(--bg);
+  z-index: var(--z-menu);
+  background: var(--raised);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 0;
+  border-radius: var(--radius-card);
+  padding: var(--space-1);
   min-width: 180px;
   max-height: calc(100vh - 16px);
   overflow-y: auto;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
+  box-shadow: var(--shadow-float);
+  font-family: var(--font-ui);
+  font-size: var(--fs-13);
   color: var(--text);
 }
 
+.context-menu:focus {
+  outline: none;
+}
+
 .context-menu-item {
-  padding: 5px 14px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: 0 var(--space-3);
+  height: var(--control-h);
+  border-radius: var(--radius-chip);
   cursor: pointer;
   white-space: nowrap;
 }
 
-.context-menu-item:hover {
-  background: var(--border);
+.context-menu-label {
+  flex: 1;
+}
+
+.context-menu-hint {
+  color: var(--text-tertiary);
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.context-menu-item:hover,
+.context-menu-item:focus {
+  background: var(--active);
+  outline: none;
+}
+
+.context-menu-item.danger {
+  color: var(--negative);
 }
 
 .context-menu-item.disabled {
-  opacity: 0.4;
+  color: var(--text-tertiary);
   cursor: default;
 }
 
@@ -36,6 +61,6 @@
 
 .context-menu-separator {
   height: 1px;
-  background: var(--border);
-  margin: 4px 0;
+  background: var(--rule);
+  margin: var(--space-1) 0;
 }

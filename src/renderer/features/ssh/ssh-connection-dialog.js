@@ -1,3 +1,4 @@
+import { registerModal } from '../../components/base/modal/modal.js'
 /**
  * Модальный диалог добавления/редактирования SSH-подключения.
  * Чистый UI-компонент (без IO): собирает данные формы и резолвит их вызывающей
@@ -205,18 +206,12 @@ export class SshConnectionDialog {
     dialog.appendChild(footer)
     overlay.appendChild(dialog)
 
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) this._settle(null)
-    })
-    this._onKeyDown = (e) => {
-      if (e.key === 'Escape') this._settle(null)
-    }
-    document.addEventListener('keydown', this._onKeyDown)
-
     document.body.appendChild(overlay)
     this._overlay = overlay
-
-    setTimeout(() => hostInput.focus(), 0)
+    this._releaseModal = registerModal(overlay, dialog, {
+      onClose: () => this._settle(null),
+      initialFocus: hostInput
+    })
   }
 
   /** Toggle-переключатель — тот же DOM/CSS, что и `SettingsPage._createToggle()`. */
@@ -260,7 +255,8 @@ export class SshConnectionDialog {
 
   _settle(result) {
     if (!this._overlay) return
-    document.removeEventListener('keydown', this._onKeyDown)
+    this._releaseModal?.()
+    this._releaseModal = null
     this._overlay.remove()
     this._overlay = null
     const resolve = this._resolve

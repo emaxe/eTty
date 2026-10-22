@@ -1,3 +1,4 @@
+import { registerModal } from './components/base/modal/modal.js'
 import { Icons } from './icons.js'
 
 /**
@@ -92,9 +93,6 @@ export class NodeVersionDialog {
     const closeBtn = overlay.querySelector('.node-version-close-btn')
     closeBtn.addEventListener('click', () => this.hide())
 
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) this.hide()
-    })
 
     // Tabs
     overlay.querySelectorAll('.node-version-tab').forEach(tab => {
@@ -113,6 +111,9 @@ export class NodeVersionDialog {
     this._isVisible = true
     this._overlay.classList.remove('hidden')
     document.addEventListener('keydown', this._boundKeyDown)
+    this._releaseModal = registerModal(this._overlay, this._overlay.querySelector('.node-version-dialog'), {
+      onClose: () => this.hide()
+    })
 
     // Reset remote cache so fresh data is fetched on every open
     this._remoteVersions = []
@@ -129,6 +130,8 @@ export class NodeVersionDialog {
     this._isVisible = false
     this._overlay.classList.add('hidden')
     document.removeEventListener('keydown', this._boundKeyDown)
+    this._releaseModal?.()
+    this._releaseModal = null
     this._onClose?.()
   }
 

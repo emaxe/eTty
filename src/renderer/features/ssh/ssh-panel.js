@@ -11,6 +11,7 @@
  * Паттерн построения DOM — как у GitPanel: пустой overlay-контейнер строится в конструкторе.
  */
 import { Icons } from '../../icons.js'
+import { showToast } from '../../components/toast/toast.js'
 import { ContextMenu } from '../../components/base/context-menu/context-menu.js'
 import { SshConnectionDialog } from './ssh-connection-dialog.js'
 import { EttyxDialog } from './ettyx-dialog.js'
@@ -94,7 +95,6 @@ export class SshPanel {
         <button class="ssh-mode-btn" type="button" data-mode="ssh" role="tab">SSH</button>
         <button class="ssh-mode-btn" type="button" data-mode="tmux" role="tab">tmux</button>
       </div>
-      <div class="ssh-panel-toast"></div>
       <div class="ssh-panel-list"></div>
     `
     this._btnAdd = this._panelEl.querySelector('.ssh-panel-add-btn')
@@ -103,7 +103,6 @@ export class SshPanel {
     this._btnExport = this._panelEl.querySelector('.ssh-panel-export-btn')
     this._btnClose = this._panelEl.querySelector('.ssh-panel-close-btn')
     this._listEl = this._panelEl.querySelector('.ssh-panel-list')
-    this._toastEl = this._panelEl.querySelector('.ssh-panel-toast')
     this._modeButtons = [...this._panelEl.querySelectorAll('.ssh-mode-btn')]
     this._applyModeButtons()
   }
@@ -654,12 +653,7 @@ export class SshPanel {
   // — Перенос профилей (*.ettyx, задача #31, REQ-22/23) —
 
   _showToast(msg, type = 'error') {
-    clearTimeout(this._toastTimer)
-    this._toastEl.textContent = msg
-    this._toastEl.className = `ssh-panel-toast visible ${type === 'success' ? 'success' : 'error'}`
-    this._toastTimer = setTimeout(() => {
-      this._toastEl.classList.remove('visible')
-    }, type === 'success' ? 3000 : 6000)
+    showToast(msg, type)
   }
 
   async _exportConnections() {
@@ -784,7 +778,6 @@ export class SshPanel {
     this._dialog = null
     this._ettyxDialog?.destroy()
     this._ettyxDialog = null
-    clearTimeout(this._toastTimer)
     if (this._panelEl) this._panelEl.innerHTML = ''
     this._panelEl = null
     this._resizeHandleEl = null

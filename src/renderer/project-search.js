@@ -1,3 +1,4 @@
+import { registerModal } from './components/base/modal/modal.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 import { Icons } from './icons.js'
 
@@ -110,10 +111,6 @@ export class ProjectSearchDialog {
     const closeBtn = overlay.querySelector('.search-close-btn')
     closeBtn.addEventListener('click', () => this.hide())
 
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) this.hide()
-    })
-
     this._input.addEventListener('input', () => this._scheduleSearch())
 
     // Options change triggers immediate search if query exists
@@ -131,8 +128,11 @@ export class ProjectSearchDialog {
     this._overlay.classList.remove('hidden')
     this._input.value = ''
     this._clearResults()
-    this._input.focus()
     document.addEventListener('keydown', this._boundKeyDown)
+    this._releaseModal = registerModal(this._overlay, this._overlay.querySelector('.search-dialog'), {
+      onClose: () => this.hide(),
+      initialFocus: this._input
+    })
   }
 
   hide() {
@@ -140,6 +140,8 @@ export class ProjectSearchDialog {
     this._isVisible = false
     this._overlay.classList.add('hidden')
     document.removeEventListener('keydown', this._boundKeyDown)
+    this._releaseModal?.()
+    this._releaseModal = null
     this._onClose?.()
   }
 
