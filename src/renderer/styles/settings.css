@@ -1,0 +1,460 @@
+/*
+ * Страница настроек: слева навигация по разделам, справа выбранный раздел.
+ * Строка настройки — подпись слева, контрол справа; выбранный раздел отмечен линией акцента.
+ */
+#settings-overlay {
+  position: fixed;
+  inset: var(--titlebar-h) 0 var(--statusbar-h) var(--rail-w); /* между титлбаром и статус-баром, правее рейла */
+  z-index: var(--z-overlay);
+  background: var(--ground);
+  display: flex;
+}
+
+#settings-overlay.hidden {
+  display: none;
+}
+
+/* ── Навигация ───────────────────────────────────────────────────── */
+
+.settings-nav {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-3);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.settings-search {
+  height: var(--control-h-lg);
+  padding: 0 var(--space-3);
+  background: var(--ground);
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: var(--fs-13);
+  outline: none;
+}
+
+.settings-search::placeholder {
+  color: var(--text-tertiary);
+}
+
+.settings-search:focus {
+  border-color: var(--focus);
+}
+
+.settings-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-nav-item {
+  position: relative;
+  height: var(--control-h-lg);
+  padding: 0 var(--space-3);
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  cursor: pointer;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+
+.settings-nav-item:hover {
+  background: var(--active);
+  color: var(--text);
+}
+
+.settings-nav-item.active {
+  color: var(--text);
+  font-weight: var(--fw-medium);
+}
+
+/* Выбранный раздел — линия акцента на краю */
+.settings-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: var(--space-2);
+  bottom: var(--space-2);
+  width: 2px;
+  background: var(--accent);
+}
+
+/* ── Содержимое ──────────────────────────────────────────────────── */
+
+.settings-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-8);
+  flex-shrink: 0;
+}
+
+.settings-title {
+  margin: 0;
+  flex: 1;
+  font-size: 20px;
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-tight);
+  color: var(--text);
+}
+
+.settings-saved {
+  color: var(--text-tertiary);
+  font-size: var(--fs-12);
+  opacity: 0;
+  transition: opacity var(--dur-base);
+}
+
+.settings-saved.visible {
+  opacity: 1;
+}
+
+.settings-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.settings-close-btn:hover {
+  color: var(--text);
+  background: var(--active);
+}
+
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--space-8) var(--space-8);
+  width: 100%;
+  max-width: 760px;
+}
+
+.settings-view[hidden] {
+  display: none;
+}
+
+.settings-category {
+  margin-bottom: var(--space-8);
+}
+
+.settings-category[hidden] {
+  display: none;
+}
+
+/* Заголовок категории дублирует название раздела — показываем только у дополнительных блоков */
+.settings-view > .settings-category:first-child > .settings-category-title {
+  display: none;
+}
+
+#settings-overlay.searching .settings-category-title {
+  display: block !important;
+}
+
+.settings-category-title {
+  font-size: var(--fs-14);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--rule);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--rule);
+  gap: var(--space-4);
+}
+
+.settings-row[hidden] {
+  display: none;
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row--stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.settings-label {
+  font-size: var(--fs-13);
+  color: var(--text);
+  flex: 1;
+}
+
+.settings-control {
+  flex-shrink: 0;
+}
+
+.settings-row--stack .settings-control {
+  flex-shrink: 1;
+}
+
+.settings-empty,
+.settings-hint {
+  color: var(--text-tertiary);
+  font-size: var(--fs-13);
+  padding: var(--space-3) 0;
+}
+
+.settings-kbd {
+  font-family: var(--font-ui);
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  padding: 2px var(--space-2);
+}
+
+/* ── Контролы ────────────────────────────────────────────────────── */
+
+/* Переключатель: включённое состояние — нейтральное (ink), не акцент бренда */
+.settings-toggle {
+  position: relative;
+  display: inline-block;
+  width: 32px;
+  height: 18px;
+}
+
+.settings-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.settings-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--control);
+  border-radius: var(--radius-round);
+  cursor: pointer;
+  transition: background var(--dur-base);
+}
+
+.settings-toggle input:checked + .settings-toggle-track {
+  background: var(--positive);
+}
+
+.settings-toggle input:focus-visible + .settings-toggle-track {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.settings-toggle-track::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--ground);
+  border-radius: 50%;
+  transition: transform var(--dur-base);
+}
+
+.settings-toggle input:checked + .settings-toggle-track::after {
+  transform: translateX(14px);
+}
+
+.settings-select,
+.settings-input {
+  height: var(--control-h);
+  background: var(--ground);
+  border: 1px solid var(--control);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-13);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-control);
+  outline: none;
+}
+
+.settings-select {
+  cursor: pointer;
+  min-width: 160px;
+}
+
+.settings-input {
+  min-width: 260px;
+}
+
+.settings-input::placeholder {
+  color: var(--text-tertiary);
+  opacity: 1;
+}
+
+.settings-select:hover,
+.settings-input:hover {
+  border-color: var(--text-tertiary);
+}
+
+.settings-select:focus,
+.settings-input:focus {
+  border-color: var(--focus);
+}
+
+/* ── Карточки тем ────────────────────────────────────────────────── */
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.theme-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  transition: border-color var(--dur-fast);
+}
+
+.theme-card:hover {
+  border-color: var(--control);
+}
+
+/* Выбранная карточка — линия акцента снизу по всей ширине */
+.theme-card.selected::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+.theme-card__preview {
+  position: relative;
+  width: 100%;
+  height: 64px;
+  padding: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: 1.3;
+}
+
+.theme-card__marks {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.theme-card__marks span {
+  width: 16px;
+  height: 6px;
+  border-radius: 1px;
+}
+
+.theme-card__cursor {
+  position: absolute;
+  left: var(--space-2);
+  bottom: var(--space-2);
+  width: 6px;
+  height: 11px;
+}
+
+.theme-card__bar {
+  width: 100%;
+  height: 4px;
+}
+
+.theme-card__name {
+  width: 100%;
+  padding: var(--space-2);
+  font-size: var(--fs-12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-theme-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.settings-theme-swatch {
+  width: 40px;
+  height: 24px;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.settings-theme-swatch-half {
+  flex: 1;
+}
+
+/* ── ИИ-агенты ───────────────────────────────────────────────────── */
+
+.settings-agent-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.settings-agent-badge {
+  font-size: var(--fs-11);
+  padding: 0 var(--space-2);
+  line-height: 18px;
+  border-radius: var(--radius-round);
+  white-space: nowrap;
+}
+
+.settings-agent-badge.detected {
+  background: var(--pill-positive-bg);
+  color: var(--pill-positive-ink);
+}
+
+.settings-agent-badge.missing {
+  background: var(--pill-negative-bg);
+  color: var(--pill-negative-ink);
+}
+
+.settings-agent-switch-label {
+  font-size: var(--fs-11);
+  color: var(--text-secondary);
+  min-width: 30px;
+  text-align: right;
+}

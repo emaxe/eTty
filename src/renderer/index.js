@@ -16,6 +16,7 @@ import './styles.css'
 import './styles/shell.css'
 import './styles/status-bar.css'
 import './styles/palette.css'
+import './styles/settings.css'
 import './components/base/context-menu/context-menu.css'
 import './components/base/button/button.css'
 import './components/base/modal/modal.css'
@@ -65,6 +66,7 @@ import { CommandRegistry } from './core/command-registry.js'
 import { CommandPalette } from './features/command-palette/command-palette.js'
 import { HOTKEYS, matchesHotkey } from './core/hotkeys.js'
 import { clampWidth, loadPanelWidths, savePanelWidth } from './core/panel-widths.js'
+import { resolveTerminalFont } from './core/terminal-font.js'
 import { createShellCommands, dialectForShellKind, DIALECTS } from './core/shell-commands.js'
 import { diagnostics } from './core/diagnostics.js'
 import { GitStatusService } from './services/git-status-service.js'
@@ -89,6 +91,7 @@ let resizeDebounceTimer = null
 let newTabPlacement = 'modifierAdjacent'
 let tabSwitchHotkey = 'none'
 let linkOpenMode = 'cmd-click'
+let terminalFont = resolveTerminalFont()
 let radialMenuSettings = normalizeRadialSettings(null)
 let swipeSettings = normalizeSwipeSettings(null)
 /** Сообщает main, нужны ли нативные касания тачпада (меню или свайпы). */
@@ -132,8 +135,9 @@ function handleTerminalLink(api, event, uri) {
 async function createTab(api, cwd, tabId, ssh) {
   const term = new Terminal({
     cursorBlink: TERMINAL_CONFIG.CURSOR_BLINK,
-    fontSize: TERMINAL_CONFIG.FONT_SIZE,
-    fontFamily: TERMINAL_CONFIG.FONT_FAMILY,
+    fontSize: terminalFont.fontSize,
+    fontFamily: terminalFont.fontFamily,
+    lineHeight: terminalFont.lineHeight,
     scrollback: TERMINAL_CONFIG.SCROLLBACK,
     allowProposedApi: TERMINAL_CONFIG.ALLOW_PROPOSED_API,
     linkHandler: { activate: (e, uri) => handleTerminalLink(api, e, uri) },
@@ -187,6 +191,7 @@ async function init() {
   newTabPlacement = config.terminal?.newTabPlacement || 'modifierAdjacent'
   tabSwitchHotkey = config.terminal?.tabSwitchHotkey || 'none'
   linkOpenMode = config.terminal?.linkOpenMode || 'cmd-click'
+  terminalFont = resolveTerminalFont(config.terminal)
   radialMenuSettings = normalizeRadialSettings(config.terminal?.radialMenu)
   swipeSettings = normalizeSwipeSettings(config.terminal)
   if (warnings && warnings.length > 0) {
@@ -1355,6 +1360,17 @@ async function init() {
     if (key === 'terminal.tabSwitchHotkey') {
       tabSwitchHotkey = value
     }
+    if (['terminal.fontSize', 'terminal.lineHeight', 'terminal.fontFamily'].includes(key)) {
+      if (!config.terminal) config.terminal = {}
+      config.terminal[key.slice('terminal.'.length)] = value
+      terminalFont = resolveTerminalFont(config.terminal)
+      for (const tab of tabBar.tabs) {
+        tab.term.options.fontSize = terminalFont.fontSize
+        tab.term.options.lineHeight = terminalFont.lineHeight
+        tab.term.options.fontFamily = terminalFont.fontFamily
+      }
+      tabBar.getActive()?.fitAddon.fit()
+    }
     if (key === 'terminal.linkOpenMode') {
       linkOpenMode = value
     }
@@ -2266,6 +2282,7 @@ async function init() {
   ])
 
   const commandPalette = new CommandPalette({ registry: commandRegistry, isMac: IS_MAC })
+  settingsPage.setCommandRegistry(commandRegistry, IS_MAC)
 
   btnToggleSidebar.classList.add('active')
   btnToggleSidebar.addEventListener('click', () => {

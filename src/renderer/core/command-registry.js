@@ -36,6 +36,11 @@ export class CommandRegistry {
     return () => this._commands.delete(command.id)
   }
 
+  /** Все зарегистрированные команды, включая сейчас недоступные (для справки по горячим клавишам). */
+  all() {
+    return [...this._commands.values()]
+  }
+
   /** Доступные сейчас команды в порядке регистрации. */
   list() {
     return [...this._commands.values()].filter(c => !c.when || c.when())

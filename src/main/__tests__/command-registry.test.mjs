@@ -97,3 +97,28 @@ test('clampWidth: ограничивает и отбрасывает не-чис
   assert.equal(clampWidth(undefined, 150, 600), null)
   assert.equal(clampWidth('abc', 150, 600), null)
 })
+
+import { resolveTerminalFont } from '../../renderer/core/terminal-font.js'
+
+test('resolveTerminalFont: дефолты, ограничения и запасной список шрифтов', () => {
+  const d = resolveTerminalFont({})
+  assert.equal(d.fontSize, 14)
+  assert.equal(d.lineHeight, 1)
+  assert.match(d.fontFamily, /Menlo/)
+  assert.equal(resolveTerminalFont({ fontSize: 99 }).fontSize, 24)
+  assert.equal(resolveTerminalFont({ fontSize: 2 }).fontSize, 10)
+  assert.equal(resolveTerminalFont({ lineHeight: 5 }).lineHeight, 1.6)
+  assert.equal(resolveTerminalFont({ fontSize: 'abc' }).fontSize, 14)
+  const custom = resolveTerminalFont({ fontFamily: '  JetBrains Mono ' }).fontFamily
+  assert.ok(custom.startsWith('JetBrains Mono, '))
+  assert.match(custom, /Menlo/)
+  assert.equal(resolveTerminalFont().fontSize, 14)
+})
+
+test('CommandRegistry.all: включает команды, скрытые через when', () => {
+  const reg = new CommandRegistry()
+  reg.register({ id: 'a', title: 'A', when: () => false, run() {} })
+  reg.register({ id: 'b', title: 'B', run() {} })
+  assert.equal(reg.list().length, 1)
+  assert.equal(reg.all().length, 2)
+})

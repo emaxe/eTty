@@ -1,4 +1,5 @@
-import { registerModal } from './components/base/modal/modal.js'
+import { registerModal, hasOpenModal } from './components/base/modal/modal.js'
+import { formatHotkey, HOTKEYS } from './core/hotkeys.js'
 import { Icons } from './icons.js'
 import { buildQuickReplyTree, normalizeQuickReplies } from './features/quick-replies/quick-replies-model.js'
 import { APP_CONFIG } from './core/config/app-config.js'
@@ -61,10 +62,13 @@ export class SettingsPage {
 
   show() {
     this._overlay.classList.remove('hidden')
+    document.addEventListener('keydown', this._onKeyDown)
+    if (this._currentSection === 'hotkeys') this._renderHotkeys()
   }
 
   hide() {
     this._overlay.classList.add('hidden')
+    document.removeEventListener('keydown', this._onKeyDown)
     this._onClose?.()
   }
 
@@ -102,26 +106,9 @@ export class SettingsPage {
     overlay.id = 'settings-overlay'
     overlay.classList.add('hidden')
 
-    const header = document.createElement('div')
-    header.className = 'settings-header'
+    const sec = {}
 
-    const title = document.createElement('div')
-    title.className = 'settings-title'
-    title.textContent = 'Настройки'
-
-    const closeBtn = document.createElement('button')
-    closeBtn.className = 'settings-close-btn'
-    closeBtn.title = 'Закрыть'
-    closeBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>'
-    closeBtn.addEventListener('click', () => this.hide())
-
-    header.appendChild(title)
-    header.appendChild(closeBtn)
-
-    const body = document.createElement('div')
-    body.className = 'settings-body'
-
-    body.appendChild(this._buildCategory('Дерево файлов', [
+    sec.files = (this._buildCategory('Дерево файлов', [
       {
         label: 'Сворачивать дочерние папки при закрытии родительской',
         control: this._createToggle(
@@ -150,7 +137,7 @@ export class SettingsPage {
       }
     ]))
 
-    body.appendChild(this._buildCategory('Оформление', [
+    sec.appearance = (this._buildCategory('Оформление', [
       {
         label: 'Режим темы',
         control: this._createSelect(
@@ -164,7 +151,8 @@ export class SettingsPage {
       },
       {
         label: 'Тема',
-        control: this._buildThemeRow()
+        stack: true,
+        control: this._buildThemeGrid()
       },
       {
         label: 'Тёмная тема (режим «Как в системе»)',
@@ -219,7 +207,31 @@ export class SettingsPage {
       }
     ]))
 
-    body.appendChild(this._buildCategory('Терминал', [
+    sec.terminal = (this._buildCategory('Терминал', [
+      {
+        label: 'Размер шрифта',
+        control: this._createSelect(
+          [10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24].map(n => ({ key: String(n), name: `${n} px` })),
+          String(this._config.terminal?.fontSize ?? 14),
+          (val) => this._setTerminal('fontSize', Number(val))
+        )
+      },
+      {
+        label: 'Межстрочный интервал',
+        control: this._createSelect(
+          [1, 1.1, 1.2, 1.3, 1.4, 1.5].map(n => ({ key: String(n), name: n.toFixed(1) })),
+          String(this._config.terminal?.lineHeight ?? 1),
+          (val) => this._setTerminal('lineHeight', Number(val))
+        )
+      },
+      {
+        label: 'Шрифт терминала (пусто — системный моно-шрифт)',
+        control: this._createTextInput(
+          this._config.terminal?.fontFamily || '',
+          'JetBrains Mono',
+          (val) => this._setTerminal('fontFamily', val)
+        )
+      },
       ...(this._api.platform === 'win32' ? [{
         label: 'Оболочка (для новых вкладок)',
         control: this._createSelect(
@@ -356,7 +368,7 @@ export class SettingsPage {
       }
     ]))
 
-    body.appendChild(this._buildCategory('Панель SSH', [
+    sec.ssh = (this._buildCategory('Панель SSH', [
       {
         label: 'Положение панели',
         control: this._createSelect(
@@ -377,18 +389,215 @@ export class SettingsPage {
     ]))
 
     this._agentsCategory = this._buildCategory('ИИ-агенты', this._buildAgentRows())
-    body.appendChild(this._agentsCategory)
 
     this._customAgentsCategory = this._buildCustomAgentsCategory()
-    body.appendChild(this._customAgentsCategory)
 
     this._quickRepliesCategory = this._buildQuickRepliesCategory()
-    body.appendChild(this._quickRepliesCategory)
 
-    overlay.appendChild(header)
-    overlay.appendChild(body)
+    this._hotkeysEl = document.createElement('div')
+    this._hotkeysEl.className = 'settings-category'
+
+    this._sections = [
+      { id: 'appearance', title: 'Оформление', nodes: [sec.appearance] },
+      { id: 'terminal', title: 'Терминал', nodes: [sec.terminal] },
+      { id: 'files', title: 'Дерево файлов', nodes: [sec.files] },
+      { id: 'ssh', title: 'Панель SSH', nodes: [sec.ssh] },
+      { id: 'agents', title: 'ИИ-агенты', nodes: [this._agentsCategory, this._customAgentsCategory] },
+      { id: 'quick-replies', title: 'Быстрые ответы', nodes: [this._quickRepliesCategory] },
+      { id: 'hotkeys', title: 'Горячие клавиши', nodes: [this._hotkeysEl] }
+    ]
+    this._buildShell(overlay)
     document.body.appendChild(overlay)
     this._overlay = overlay
+  }
+
+  /**
+   * Оболочка настроек: слева навигация по разделам и поиск, справа выбранный раздел.
+   * Каждый раздел — отдельное представление с собственным заголовком (h1); при поиске
+   * показываются все разделы, а строки без совпадения скрываются.
+   */
+  _buildShell(overlay) {
+    const nav = document.createElement('nav')
+    nav.className = 'settings-nav'
+    nav.setAttribute('aria-label', 'Разделы настроек')
+
+    const search = document.createElement('input')
+    search.type = 'search'
+    search.className = 'settings-search'
+    search.placeholder = 'Поиск настроек'
+    search.setAttribute('aria-label', 'Поиск настроек')
+    search.addEventListener('input', () => this._applySearch(search.value))
+    this._searchEl = search
+
+    const list = document.createElement('div')
+    list.className = 'settings-nav-list'
+    list.setAttribute('role', 'tablist')
+    list.setAttribute('aria-orientation', 'vertical')
+
+    const main = document.createElement('div')
+    main.className = 'settings-main'
+
+    const header = document.createElement('div')
+    header.className = 'settings-header'
+    this._sectionTitleEl = document.createElement('h1')
+    this._sectionTitleEl.className = 'settings-title'
+    this._savedEl = document.createElement('span')
+    this._savedEl.className = 'settings-saved'
+    this._savedEl.textContent = 'Сохранено'
+    this._savedEl.setAttribute('role', 'status')
+
+    const closeBtn = document.createElement('button')
+    closeBtn.type = 'button'
+    closeBtn.className = 'settings-close-btn'
+    closeBtn.title = 'Закрыть (Esc)'
+    closeBtn.setAttribute('aria-label', 'Закрыть настройки')
+    closeBtn.innerHTML = Icons.close
+    closeBtn.addEventListener('click', () => this.hide())
+    header.append(this._sectionTitleEl, this._savedEl, closeBtn)
+
+    const body = document.createElement('div')
+    body.className = 'settings-body'
+
+    this._navItems = new Map()
+    this._views = new Map()
+    for (const section of this._sections) {
+      const item = document.createElement('button')
+      item.type = 'button'
+      item.className = 'settings-nav-item'
+      item.setAttribute('role', 'tab')
+      item.textContent = section.title
+      item.addEventListener('click', () => this._selectSection(section.id))
+      this._navItems.set(section.id, item)
+      list.appendChild(item)
+
+      const view = document.createElement('section')
+      view.className = 'settings-view'
+      view.setAttribute('role', 'tabpanel')
+      view.hidden = true
+      for (const node of section.nodes) view.appendChild(node)
+      this._views.set(section.id, view)
+      body.appendChild(view)
+    }
+
+    this._noResultsEl = document.createElement('div')
+    this._noResultsEl.className = 'settings-empty'
+    this._noResultsEl.textContent = 'Ничего не найдено'
+    this._noResultsEl.hidden = true
+    body.appendChild(this._noResultsEl)
+
+    nav.append(search, list)
+    main.append(header, body)
+    overlay.append(nav, main)
+
+    this._onKeyDown = (e) => {
+      if (e.key === 'Escape' && this.isVisible() && !hasOpenModal()) {
+        e.preventDefault()
+        if (this._searchEl.value) {
+          this._searchEl.value = ''
+          this._applySearch('')
+        } else {
+          this.hide()
+        }
+      }
+    }
+    this._selectSection('appearance')
+  }
+
+  _selectSection(id) {
+    this._currentSection = id
+    if (this._searchEl.value) {
+      this._searchEl.value = ''
+      this._applySearch('')
+    }
+    for (const [key, view] of this._views) view.hidden = key !== id
+    for (const [key, item] of this._navItems) {
+      const on = key === id
+      item.classList.toggle('active', on)
+      item.setAttribute('aria-selected', String(on))
+    }
+    this._sectionTitleEl.textContent = this._sections.find(x => x.id === id).title
+    this._noResultsEl.hidden = true
+    if (id === 'hotkeys') this._renderHotkeys()
+  }
+
+  /** Поиск по подписям строк настроек: пустой запрос возвращает обычное представление раздела. */
+  _applySearch(query) {
+    const q = query.trim().toLowerCase()
+    this._overlay.classList.toggle('searching', !!q)
+    const rows = this._overlay.querySelectorAll('.settings-row')
+    if (!q) {
+      for (const row of rows) row.hidden = false
+      for (const cat of this._overlay.querySelectorAll('.settings-category')) cat.hidden = false
+      this._selectSectionViews(this._currentSection)
+      return
+    }
+    this._renderHotkeys()
+    let found = 0
+    for (const row of this._overlay.querySelectorAll('.settings-row')) {
+      const match = row.textContent.toLowerCase().includes(q)
+      row.hidden = !match
+      if (match) found++
+    }
+    for (const cat of this._overlay.querySelectorAll('.settings-category')) {
+      cat.hidden = !cat.querySelector('.settings-row:not([hidden])')
+    }
+    for (const view of this._views.values()) view.hidden = false
+    this._sectionTitleEl.textContent = 'Результаты поиска'
+    this._noResultsEl.hidden = found > 0
+  }
+
+  _selectSectionViews(id) {
+    for (const [key, view] of this._views) view.hidden = key !== id
+    this._sectionTitleEl.textContent = this._sections.find(x => x.id === id).title
+    this._noResultsEl.hidden = true
+  }
+
+  /** Реестр команд приложения — источник списка горячих клавиш. */
+  setCommandRegistry(registry, isMac) {
+    this._commandRegistry = registry
+    this._isMac = isMac
+  }
+
+  _renderHotkeys() {
+    const el = this._hotkeysEl
+    el.replaceChildren()
+    const title = document.createElement('div')
+    title.className = 'settings-category-title'
+    title.textContent = 'Горячие клавиши'
+    el.appendChild(title)
+
+    const commands = (this._commandRegistry?.all() || []).filter(c => c.hotkey)
+    if (commands.length === 0) {
+      const empty = document.createElement('div')
+      empty.className = 'settings-hint'
+      empty.textContent = 'Список горячих клавиш недоступен.'
+      el.appendChild(empty)
+      return
+    }
+    for (const command of commands) {
+      const row = document.createElement('div')
+      row.className = 'settings-row'
+      const label = document.createElement('div')
+      label.className = 'settings-label'
+      label.textContent = command.title
+      const key = document.createElement('kbd')
+      key.className = 'settings-kbd'
+      key.textContent = formatHotkey(command.hotkey, this._isMac)
+      row.append(label, key)
+      el.appendChild(row)
+    }
+    const hint = document.createElement('div')
+    hint.className = 'settings-hint'
+    hint.textContent = `Командная палитра — ${formatHotkey(HOTKEYS.commandPalette, this._isMac)}: найдёт любую команду по названию.`
+    el.appendChild(hint)
+  }
+
+  /** Отметка «Сохранено»: появляется после записи и гаснет сама. */
+  _flashSaved() {
+    if (!this._savedEl) return
+    this._savedEl.classList.add('visible')
+    clearTimeout(this._savedTimer)
+    this._savedTimer = setTimeout(() => this._savedEl?.classList.remove('visible'), 1800)
   }
 
   _buildAgentRows() {
@@ -1382,7 +1591,7 @@ export class SettingsPage {
 
     for (const row of rows) {
       const rowEl = document.createElement('div')
-      rowEl.className = 'settings-row'
+      rowEl.className = row.stack ? 'settings-row settings-row--stack' : 'settings-row'
 
       const label = document.createElement('div')
       label.className = 'settings-label'
@@ -1455,6 +1664,83 @@ export class SettingsPage {
     this._scheduleSave()
   }
 
+  _setTerminal(key, value) {
+    if (!this._config.terminal) this._config.terminal = {}
+    this._config.terminal[key] = value
+    this._bus.emit('settings.changed', { key: `terminal.${key}`, value })
+    this._scheduleSave()
+  }
+
+  /**
+   * Сетка карточек тем. Каждая карточка рисует мини-терминал в цветах темы:
+   * приглашение, цветные ANSI-метки и курсор — выбор по результату, а не по названию.
+   * Выбранная тема отмечена линией акцента, как любой выбранный элемент приложения.
+   */
+  _buildThemeGrid() {
+    const grid = document.createElement('div')
+    grid.className = 'theme-grid'
+    grid.setAttribute('role', 'radiogroup')
+    grid.setAttribute('aria-label', 'Тема оформления')
+
+    const cards = new Map()
+    const select = (id) => {
+      for (const [key, card] of cards) {
+        const on = key === id
+        card.classList.toggle('selected', on)
+        card.setAttribute('aria-checked', String(on))
+      }
+    }
+
+    for (const [id, theme] of Object.entries(this._themes)) {
+      const card = document.createElement('button')
+      card.type = 'button'
+      card.className = 'theme-card'
+      card.setAttribute('role', 'radio')
+      card.title = theme.name
+
+      const preview = document.createElement('div')
+      preview.className = 'theme-card__preview'
+      preview.style.background = theme.terminal.background
+      preview.style.color = theme.terminal.foreground
+
+      const prompt = document.createElement('div')
+      prompt.className = 'theme-card__prompt'
+      prompt.textContent = '$ ls'
+      const marks = document.createElement('div')
+      marks.className = 'theme-card__marks'
+      for (const c of ['red', 'green', 'yellow', 'blue']) {
+        const mark = document.createElement('span')
+        mark.style.background = theme.terminal[c]
+        marks.appendChild(mark)
+      }
+      const cursor = document.createElement('span')
+      cursor.className = 'theme-card__cursor'
+      cursor.style.background = theme.terminal.cursor
+      preview.append(prompt, marks, cursor)
+
+      const bar = document.createElement('div')
+      bar.className = 'theme-card__bar'
+      bar.style.background = theme.ui.surface
+      bar.style.borderTop = `1px solid ${theme.ui.border}`
+
+      const name = document.createElement('div')
+      name.className = 'theme-card__name'
+      name.textContent = theme.name
+
+      card.append(preview, bar, name)
+      card.addEventListener('click', () => {
+        select(id)
+        this.setAppearance('theme', id)
+        // Явный выбор темы — это ручной режим
+        if (this._config.appearance.themeMode === 'auto') this.setAppearance('themeMode', 'manual')
+      })
+      cards.set(id, card)
+      grid.appendChild(card)
+    }
+    select(this._config.appearance.theme)
+    return grid
+  }
+
   _buildThemeRow() {
     const wrapper = document.createElement('div')
     wrapper.className = 'settings-theme-row'
@@ -1490,6 +1776,8 @@ export class SettingsPage {
   }
 
   destroy() {
+    document.removeEventListener('keydown', this._onKeyDown)
+    clearTimeout(this._savedTimer)
     if (this._saveTimer) {
       clearTimeout(this._saveTimer)
       this._saveTimer = null
@@ -1531,8 +1819,9 @@ export class SettingsPage {
 
   _scheduleSave() {
     clearTimeout(this._saveTimer)
-    this._saveTimer = setTimeout(() => {
-      this._api.settingsSave(this._config)
+    this._saveTimer = setTimeout(async () => {
+      await this._api.settingsSave(this._config)
+      this._flashSaved()
     }, 300)
   }
 }

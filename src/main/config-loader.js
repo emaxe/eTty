@@ -39,7 +39,11 @@ export function getConfigDefaults() {
       // swipeHorizontal — off | arrows | tabs
       swipeVertical: 'off',
       swipeHorizontal: 'off',
-      defaultKeyboardMode: 'kitty'
+      defaultKeyboardMode: 'kitty',
+      // Шрифт терминала; fontFamily '' = системный моно-шрифт по умолчанию
+      fontSize: 14,
+      lineHeight: 1,
+      fontFamily: ''
     },
     agents: {
       forceDisabled: {
