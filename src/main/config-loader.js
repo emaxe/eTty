@@ -27,6 +27,12 @@ export function getConfigDefaults() {
       tabSwitchHotkey: 'none',
       // Открытие ссылок терминала в системном браузере: click | cmd-click (Cmd на macOS, Ctrl на остальных)
       linkOpenMode: 'cmd-click',
+      // Радиальное меню быстрых команд: gesture — two-finger-double-tap | three-finger-double-tap
+      radialMenu: { enabled: true, gesture: 'two-finger-double-tap' },
+      // Свайпы двумя пальцами по терминалу (тачпад macOS): swipeVertical — off | arrows;
+      // swipeHorizontal — off | arrows | tabs
+      swipeVertical: 'off',
+      swipeHorizontal: 'off',
       defaultKeyboardMode: 'kitty'
     },
     agents: {

@@ -49,6 +49,11 @@ export class ElectronApiAdapter {
   windowClose() { this._api.windowClose() }
   windowIsMaximized() { return this._api.windowIsMaximized() }
   onFullscreenChange(fn) { return this._on('fullscreenChange', fn) }
+
+  // — Trackpad (macOS: сырые касания через нативный аддон) —
+  trackpadSetEnabled(enabled) { this._api.trackpadSetEnabled(enabled) }
+  onTrackpadGesture(fn) { return this._on('trackpadGesture', fn) }
+  onTrackpadTouch(fn) { return this._on('trackpadTouch', fn) }
   onMaximizedChange(fn) { return this._on('maximizedChange', fn) }
 
   // — Settings —

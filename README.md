@@ -7,7 +7,7 @@
   <a href="https://github.com/emaxe/eTty/releases"><img src="https://img.shields.io/github/downloads/emaxe/eTty/total" alt="Downloads" /></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platforms: macOS, Windows, Linux" />
   <img src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white" alt="Electron 33" />
-  <img src="https://img.shields.io/badge/mobile-Flutter%20%7C%20Dart-02569A?logo=flutter&logoColor=white" alt="Mobile app: Flutter, Dart" />
+  <img src="https://img.shields.io/badge/mobile-Android%20%7C%20iOS%20%7C%20Flutter-02569A?logo=flutter&logoColor=white" alt="Mobile app: Flutter, Dart (Android, iOS)" />
   <a href="https://github.com/emaxe/eTty/commits"><img src="https://img.shields.io/github/last-commit/emaxe/eTty" alt="Last commit" /></a>
 </p>
 
@@ -143,6 +143,8 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 - **Proxy support** — configure HTTP proxy for all agent commands
 - **Customizable quick replies** — define agent-specific quick commands (e.g., `/clear`, `Ok`, `Продолжай`) via Settings; drag-and-drop to reorder
 - **Quick reply groups** — bundle related replies under a named group; the group collapses into a single status-bar button that opens a dropdown menu with the matching replies
+- **Radial quick-access menu** — a multi-level circular menu right on the terminal that mirrors the status-bar quick access (the active agent's quick replies with groups as sub-levels, or agent launch buttons); opened by a real touch gesture over the terminal — double tap with two fingers (default) or three; on/off and gesture in Settings → Terminal. On macOS raw trackpad touches are read by a small native addon (built on install, `npm run build:native`), so it works regardless of the "Tap to click" setting; touchscreens use Pointer Events
+- **Two-finger swipes on the terminal (macOS trackpad)** — swipe up/down sends the arrow keys; swipe left/right sends the arrow keys or switches tabs; each axis is configured separately in Settings → Terminal (off by default)
 - **Double-click or right-click to select active agent** — when the terminal is busy but the active agent wasn't auto-detected (e.g., launched manually or via another app), double-click any agent button in the status bar to manually assign it as active. Right-clicking an agent button opens a context menu to launch the agent or select it as already running (especially useful in remote/SSH tabs where busy state may not be reported).
 - **Per-agent Shift+Enter mode** — configure how Shift+Enter behaves for each AI agent (Kitty protocol, newline, or Ctrl+J). Qwen and Agento default to Ctrl+J mode; others fall back to the default mode below.
 

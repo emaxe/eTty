@@ -33,6 +33,13 @@ import { APP_CONFIG } from './core/config/app-config.js'
 import { TerminalKeyboardHandler } from './features/terminal/terminal-keyboard-handler.js'
 import { TerminalImagePaste } from './features/terminal/terminal-image-paste.js'
 import { showToast } from './components/toast/toast.js'
+import { RadialMenu } from './features/radial-menu/radial-menu.js'
+import { TouchGestureDetector } from './features/radial-menu/touch-gesture-detector.js'
+import { buildRadialLevel, normalizeRadialSettings } from './features/radial-menu/radial-menu-model.js'
+import { RADIAL_MENU_CONFIG } from './core/config/radial-menu-config.js'
+import { normalizeSwipeSettings, isSwipeGesture, hasActiveSwipe, swipeAction, shouldSuppressWheel } from './features/terminal/terminal-swipe.js'
+import { SWIPE_CONFIG } from './core/config/swipe-config.js'
+import { SwipeFlash } from './features/terminal/swipe-flash.js'
 import { TerminalOscHandler } from './features/terminal/terminal-osc-handler.js'
 import { TerminalWheelHandler } from './features/terminal/terminal-wheel-handler.js'
 import { TerminalScrollButton } from './features/terminal/terminal-scroll-button.js'
@@ -69,6 +76,12 @@ let resizeDebounceTimer = null
 let newTabPlacement = 'modifierAdjacent'
 let tabSwitchHotkey = 'none'
 let linkOpenMode = 'cmd-click'
+let radialMenuSettings = normalizeRadialSettings(null)
+let swipeSettings = normalizeSwipeSettings(null)
+/** Сообщает main, нужны ли нативные касания тачпада (меню или свайпы). */
+let syncTrackpadNative = () => {}
+/** @type {RadialMenu|null} */
+let radialMenu = null
 let isRestoringTabs = false
 
 /** Применяет стиль индикатора фокуса через data-атрибут на корневом элементе. */
@@ -161,6 +174,8 @@ async function init() {
   newTabPlacement = config.terminal?.newTabPlacement || 'modifierAdjacent'
   tabSwitchHotkey = config.terminal?.tabSwitchHotkey || 'none'
   linkOpenMode = config.terminal?.linkOpenMode || 'cmd-click'
+  radialMenuSettings = normalizeRadialSettings(config.terminal?.radialMenu)
+  swipeSettings = normalizeSwipeSettings(config.terminal)
   if (warnings && warnings.length > 0) {
     console.warn('Settings warnings:', ...warnings)
   }
@@ -541,6 +556,7 @@ async function init() {
 
   let _isSwitchingTab = false
   bus.on('tab.switch', async ({ tab, prevTab }) => {
+    radialMenu?.hide()
     if (_isSwitchingTab) return
     if (settingsPage.isVisible()) return
     _isSwitchingTab = true
@@ -777,6 +793,7 @@ async function init() {
       }
     }
     tab._sshOverlay?.destroy()
+    tab._radialGesture?.detach()
     tabBar.removeTab(index)
     if (tab.pid != null) api.ptyKill(tab.pid)
     // Закрытие tmux-вкладки = detach: панели не ждать полла, чтобы погасить индикатор «подключена».
@@ -1022,6 +1039,14 @@ async function init() {
     updateNavButtons()
   }
 
+  /** Быстрый ответ агента: вставка в активный терминал как bracketed paste (без Enter). */
+  const sendQuickReply = (cmd) => {
+    const tab = tabBar.getActive()
+    if (!tab) return
+    tab.term.focus()
+    api.ptyWrite(tab.pid, `\x1b[200~${cmd + ''}\x1b[201~`)
+  }
+
   container.register('statusBar', (r) => new StatusBar({
     paths: r('paths'),
     btnEl: document.getElementById('btn-git-diff'),
@@ -1033,13 +1058,7 @@ async function init() {
     onLaunchAgent: launchAgentInActiveTab,
     onSelectAgent: selectAgentAsActive,
     agentCommandsPanelEl: document.getElementById('agent-commands-panel'),
-    onAgentCommand: (cmd) => {
-      const tab = container.resolve('tabBar').getActive()
-      if (tab) {
-        tab.term.focus()
-        r('api').ptyWrite(tab.pid, `\x1b[200~${cmd + ''}\x1b[201~`)
-      }
-    },
+    onAgentCommand: sendQuickReply,
     onClearOptimisticBusy: clearOptimisticBusy,
     proxyToggleEl: document.getElementById('btn-proxy-toggle'),
     onToggleProxy: (enabled) => {
@@ -1051,6 +1070,87 @@ async function init() {
     store: r('store'),
   }))
   const statusBar = container.resolve('statusBar')
+
+  container.register('radialMenu', () => new RadialMenu({ containerEl: terminalContainerEl }))
+  radialMenu = container.resolve('radialMenu')
+  container.register('swipeFlash', () => new SwipeFlash({ containerEl: terminalContainerEl }))
+  const swipeFlash = container.resolve('swipeFlash')
+
+  /** Радиальное меню по жесту на терминале: повторяет быстрый доступ статусбара. */
+  const openRadialMenu = (x, y) => {
+    const level = buildRadialLevel(statusBar.getQuickAccessSnapshot(), {
+      sendCommand: sendQuickReply,
+      launchAgent: launchAgentInActiveTab,
+      selectAgent: selectAgentAsActive,
+      clearBusy: clearOptimisticBusy,
+      getSnapshot: () => statusBar.getQuickAccessSnapshot()
+    })
+    if (!level.items.length) {
+      showToast('Нет доступных агентов или быстрых команд')
+      setTimeout(() => showToast(null), RADIAL_MENU_CONFIG.EMPTY_TOAST_MS)
+      return
+    }
+    radialMenu.show(x, y, level)
+  }
+
+  /** Жест над терминалом активной вкладки (иначе null): вкладка, в координатах которой он выполнен. */
+  const terminalUnderGesture = ({ x, y }) => {
+    const tab = tabBar.getActive()
+    if (!tab || settingsPage.isVisible()) return null
+    const target = document.elementFromPoint(x, y)
+    return target && tab.term.element.contains(target) ? tab : null
+  }
+
+  /** Тап (радиальное меню): только жест, выбранный в настройках, над терминалом. */
+  const handleRadialGesture = (gesture, point) => {
+    if (!radialMenuSettings.enabled || gesture !== radialMenuSettings.gesture) return
+    if (!terminalUnderGesture(point)) return
+    // Системный тап мог успеть выделить слово под курсором
+    tabBar.getActive().term.clearSelection()
+    openRadialMenu(point.x, point.y)
+  }
+
+  /** Свайп двумя пальцами над терминалом: стрелки в PTY или переключение вкладки. */
+  const handleSwipeGesture = (gesture, point) => {
+    const tab = terminalUnderGesture(point)
+    if (!tab || radialMenu.isVisible()) return
+    const action = swipeAction(gesture, swipeSettings, {
+      appCursor: !!tab.term.modes?.applicationCursorKeysMode
+    })
+    if (!action) return
+    swipeFlash.show(gesture)
+    if (action.kind === 'arrow') {
+      if (tab.pid != null) api.ptyWrite(tab.pid, action.seq)
+    } else {
+      tabBar.switchRelative(action.delta)
+    }
+  }
+
+  /** Жесты тачпада (macOS, из main) и сенсорного экрана. */
+  const handleTerminalGesture = (gesture, point) => {
+    if (isSwipeGesture(gesture)) handleSwipeGesture(gesture, point)
+    else handleRadialGesture(gesture, point)
+  }
+  api.onTrackpadGesture((payload) => handleTerminalGesture(payload.gesture, payload))
+
+  // Нативные касания нужны, пока включено меню или любой свайп
+  syncTrackpadNative = () => api.trackpadSetEnabled(radialMenuSettings.enabled || hasActiveSwipe(swipeSettings))
+  syncTrackpadNative()
+
+  // Свайп двумя пальцами не должен ещё и прокручивать терминал: гасим колесо, пока пальцы на
+  // тачпаде и недолго после (инерция), для оси, на которой включён свайп
+  let twoFingers = false
+  let wheelMomentumUntil = 0
+  api.onTrackpadTouch(({ fingers }) => {
+    const active = fingers >= 2
+    if (twoFingers && !active) wheelMomentumUntil = performance.now() + SWIPE_CONFIG.WHEEL_MOMENTUM_MS
+    twoFingers = active
+  })
+  terminalContainerEl.addEventListener('wheel', (e) => {
+    if (!shouldSuppressWheel(e, swipeSettings, { twoFingers, momentumUntil: wheelMomentumUntil, now: performance.now() })) return
+    e.preventDefault()
+    e.stopPropagation()
+  }, { capture: true, passive: false })
 
   const agentResult = await refreshAgents()
   if (agentResult) statusBar.setAgentsStatus(agentResult)
@@ -1238,6 +1338,17 @@ async function init() {
     }
     if (key === 'terminal.linkOpenMode') {
       linkOpenMode = value
+    }
+    if (key === 'terminal.radialMenu') {
+      radialMenuSettings = normalizeRadialSettings(value)
+      if (!radialMenuSettings.enabled) radialMenu?.hide()
+      syncTrackpadNative()
+    }
+    if (key === 'terminal.swipeVertical' || key === 'terminal.swipeHorizontal') {
+      if (!config.terminal) config.terminal = {}
+      config.terminal[key.slice('terminal.'.length)] = value
+      swipeSettings = normalizeSwipeSettings(config.terminal)
+      syncTrackpadNative()
     }
     if (key === 'terminal.defaultKeyboardMode') {
       if (!config.terminal) config.terminal = {}
@@ -1580,6 +1691,16 @@ async function init() {
     const wheelHandler = new TerminalWheelHandler({ write: (pid, data) => api.ptyWrite(pid, data) })
     wheelHandler.attach(tab.term, tab.pid, { isTmux: !!tab._sshPersistent })
     tab._wheelHandler = wheelHandler
+
+    tab._radialGesture?.detach()
+    const radialGesture = new TouchGestureDetector({
+      getSettings: () => radialMenuSettings,
+      onGesture: (gesture, point) => {
+        if (tabBar.getActive() === tab) handleTerminalGesture(gesture, point)
+      }
+    })
+    radialGesture.attach(tab.term.element)
+    tab._radialGesture = radialGesture
 
     const oscHandler = new TerminalOscHandler({
       parseFileUrl: (url, pid) => {

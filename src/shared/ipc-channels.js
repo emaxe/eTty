@@ -31,6 +31,11 @@ export const IPC_CHANNELS = Object.freeze({
   FS_UNWATCH_DIR: 'fs:unwatch-dir',
   FS_DIR_CHANGED: 'fs:dir-changed',
 
+  // Trackpad gestures (macOS native multitouch)
+  TRACKPAD_SET_ENABLED: 'trackpad:set-enabled',
+  TRACKPAD_GESTURE: 'trackpad:gesture',
+  TRACKPAD_TOUCH: 'trackpad:touch',
+
   // Window
   WINDOW_GET_POSITION: 'window:get-position',
   WINDOW_MOVE: 'window:move',

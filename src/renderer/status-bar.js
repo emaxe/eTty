@@ -1,7 +1,7 @@
 import { Icons } from './icons.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 import { ContextMenu } from './components/base/context-menu/context-menu.js'
-import { buildQuickReplyTree } from './features/quick-replies/quick-replies-model.js'
+import { buildAgentCommandNodes } from './features/radial-menu/radial-menu-model.js'
 
 /**
  * Статус-бар. Показывает текущую директорию, версию Node.js и Git-статистику.
@@ -179,6 +179,36 @@ export class StatusBar {
     }
   }
 
+  /** Скрытый агент: disabled в настройках / not detected / занят другой агент. */
+  _isAgentHidden(agentId) {
+    const agentStatus = this._agentsById.get(agentId)
+    const notDetected = agentStatus && !agentStatus.detected
+    const isOtherBusy = this._activeTabBusy && this._activeAgentId && this._activeAgentId !== agentId
+    return !!(this._forceDisabled?.[agentId] || notDetected || isOtherBusy)
+  }
+
+  /**
+   * Что сейчас показывает статусбар, в виде данных для радиального меню:
+   * команды активного агента либо кнопки запуска доступных агентов.
+   */
+  getQuickAccessSnapshot() {
+    if (this._activeTabBusy && this._activeAgentId) {
+      return {
+        mode: 'commands',
+        busyOptimistic: this._busyOptimistic,
+        nodes: buildAgentCommandNodes(this._quickReplies, this._activeAgentId)
+      }
+    }
+    return {
+      mode: 'agents',
+      isBusy: this._activeTabBusy,
+      isRemote: this._isRemote,
+      agents: this._agentConfigs
+        .filter(a => !this._isAgentHidden(a.id))
+        .map(({ id, label }) => ({ id, label }))
+    }
+  }
+
   _updateAgentButtons() {
     for (const button of this._agentButtons) {
       const agentId = button.dataset.agentId
@@ -186,11 +216,8 @@ export class StatusBar {
       const disabledBySettings = !!this._forceDisabled?.[agentId]
 
       const isActive = this._activeTabBusy && this._activeAgentId === agentId
-      const isOtherBusy = this._activeTabBusy && this._activeAgentId && this._activeAgentId !== agentId
-      const notDetected = agentStatus && !agentStatus.detected
 
-      // Скрываем кнопки агентов: disabled / not detected / other busy
-      button.style.display = disabledBySettings || notDetected ? 'none' : (isOtherBusy ? 'none' : '')
+      button.style.display = this._isAgentHidden(agentId) ? 'none' : ''
 
       // Неактивные кнопки при занятой вкладке — busy class; активная — disabled + подсветка
       const isBusyState = this._activeTabBusy && !isActive
@@ -230,12 +257,7 @@ export class StatusBar {
     if (this._busyOptimistic) {
       this._agentCommandsPanelEl.appendChild(this._createClearOptimisticBusyButton())
     }
-    const nodes = buildQuickReplyTree({
-      items: this._quickReplies?.items || [],
-      groups: this._quickReplies?.groups || [],
-      filter: (i) => i.enabled && i.agents?.includes(this._activeAgentId)
-    })
-    for (const node of nodes) {
+    for (const node of buildAgentCommandNodes(this._quickReplies, this._activeAgentId)) {
       this._agentCommandsPanelEl.appendChild(
         node.kind === 'group' ? this._createGroupButton(node) : this._createQuickReplyButton(node.item)
       )

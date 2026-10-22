@@ -26,3 +26,4 @@ docs/
 .cursor/
 .codex/
 .agents/
+native/trackpad/build/

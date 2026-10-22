@@ -1,15 +1,16 @@
 {
   "name": "etty",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Modern Electron terminal emulator with a file tree, code editor, Git integration and AI agents",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "dist": "electron-builder --mac",
+    "dist": "node scripts/build-native.mjs --universal --strict && electron-builder --mac",
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux",
-    "postinstall": "electron-rebuild"
+    "postinstall": "electron-rebuild && node scripts/build-native.mjs",
+    "build:native": "node scripts/build-native.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",
@@ -46,7 +47,8 @@
     "electron": "^33.0.0",
     "electron-builder": "^26.8.1",
     "electron-rebuild": "^3.2.0",
-    "electron-vite": "^2.3.0"
+    "electron-vite": "^2.3.0",
+    "node-gyp": "^11.5.0"
   },
   "build": {
     "appId": "com.etty.app",
@@ -57,7 +59,8 @@
     },
     "files": [
       "out/**/*",
-      "package.json"
+      "package.json",
+      "native/trackpad/dist/trackpad.node"
     ],
     "npmRebuild": true,
     "mac": {
@@ -104,6 +107,9 @@
           ]
         }
       ]
-    }
+    },
+    "asarUnpack": [
+      "native/trackpad/dist/trackpad.node"
+    ]
   }
 }

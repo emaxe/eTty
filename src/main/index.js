@@ -24,6 +24,7 @@ import {
 import { loadSettings, saveSettings } from './settings-store'
 import * as sshStore from './ssh-store.js'
 import { AppService } from './services/app-service.js'
+import { TrackpadGestureService } from './services/trackpad-gesture-service.js'
 import {
   registerPtyHandlers,
   registerFsHandlers,
@@ -38,6 +39,7 @@ import {
   registerNodeVersionHandlers,
   registerSshHandlers,
   registerClipboardHandlers,
+  registerTrackpadHandlers,
 } from './ipc-handlers/index.js'
 import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 
@@ -64,6 +66,7 @@ const appService = new AppService({
   sshConnectionMasters,
 })
 
+let trackpadService = null
 let diagnosticsInterval = null
 let isQuitting = false
 
@@ -117,6 +120,8 @@ app.whenReady().then(async () => {
   registerNodeVersionHandlers(ipcMain, { nodeVersionManager })
   registerSshHandlers(ipcMain, { sshStore, sshSessionRegistry, sshConnectionMasters })
   registerClipboardHandlers(ipcMain, { sshSessionRegistry })
+  trackpadService = new TrackpadGestureService({ getWindow: () => appService.mainWindow })
+  registerTrackpadHandlers(ipcMain, { trackpadService })
 
   ipcMain.on(IPC_CHANNELS.TABS_STATE_CHANGED, () => appService.rebuildMenu())
 
@@ -135,6 +140,7 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
+  trackpadService?.dispose()
   if (diagnosticsInterval) {
     clearInterval(diagnosticsInterval)
     diagnosticsInterval = null

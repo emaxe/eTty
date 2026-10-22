@@ -3521,3 +3521,142 @@ button svg {
 }
 .app-toast.visible { opacity: 1; }
 .app-toast.error { color: var(--red); }
+
+/* Радиальное меню быстрых команд (features/radial-menu) */
+.radial-menu-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 900;
+}
+
+.radial-menu {
+  position: absolute;
+  pointer-events: none;
+  overflow: visible;
+  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.5));
+  animation: radial-menu-in 120ms ease-out;
+}
+
+@keyframes radial-menu-in {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.radial-menu-sector {
+  fill: color-mix(in srgb, var(--text) 12%, var(--surface));
+  stroke: color-mix(in srgb, var(--text) 28%, var(--surface));
+  stroke-width: 1;
+  transition: fill 80ms ease-out;
+}
+
+.radial-menu-sector.highlighted,
+.radial-menu-sector.selected {
+  fill: color-mix(in srgb, var(--accent) 60%, var(--surface));
+}
+
+.radial-menu-label,
+.radial-menu-hub-label {
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  fill: var(--text);
+  text-anchor: middle;
+  dominant-baseline: central;
+  /* Тёмный контур под буквами — читаемость на любой подсветке сектора */
+  paint-order: stroke;
+  stroke: color-mix(in srgb, var(--surface) 85%, transparent);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.radial-menu-label.highlighted,
+.radial-menu-label.selected {
+  fill: #fff;
+}
+
+.radial-menu-hub {
+  fill: var(--surface);
+  stroke: color-mix(in srgb, var(--text) 28%, var(--surface));
+  stroke-width: 1;
+}
+
+.radial-menu-hub-label {
+  font-size: 18px;
+  font-weight: 400;
+  fill: var(--subtext);
+  stroke: none;
+}
+
+/* Вложенный уровень — обычный список рядом с выбранным сектором */
+.radial-menu-list {
+  position: absolute;
+  min-width: 170px;
+  max-width: 300px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--text) 28%, var(--surface));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  animation: radial-menu-in 100ms ease-out;
+}
+
+.radial-menu-list-title {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--subtext);
+}
+
+.radial-menu-list-title.clickable {
+  cursor: pointer;
+}
+
+.radial-menu-list-title.clickable:hover {
+  color: var(--text);
+}
+
+.radial-menu-list-item {
+  padding: 7px 10px;
+  border-radius: 5px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.radial-menu-list-item:hover {
+  background: color-mix(in srgb, var(--accent) 45%, var(--surface));
+  color: #fff;
+}
+
+/* Вспышка стрелки при свайпе двумя пальцами (features/terminal/swipe-flash.js) */
+.swipe-flash {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 900;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 28%, transparent);
+  color: var(--text);
+  pointer-events: none;
+  animation: swipe-flash var(--swipe-ms, 450ms) ease-out forwards;
+}
+
+@keyframes swipe-flash {
+  from { opacity: 0.9; transform: translate(-50%, -50%); }
+  to { opacity: 0; transform: translate(calc(-50% + var(--swipe-dx, 0px)), calc(-50% + var(--swipe-dy, 0px))); }
+}

@@ -49,6 +49,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npx electron-vite build
+      - run: node scripts/build-native.mjs --universal --strict
       - run: npx electron-builder --mac --arm64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -68,6 +69,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npx electron-vite build
+      - run: node scripts/build-native.mjs --universal --strict
       - run: npx electron-builder --mac --x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

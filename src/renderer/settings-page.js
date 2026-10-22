@@ -1,6 +1,10 @@
 import { Icons } from './icons.js'
 import { buildQuickReplyTree, normalizeQuickReplies } from './features/quick-replies/quick-replies-model.js'
 import { APP_CONFIG } from './core/config/app-config.js'
+import { RADIAL_MENU_CONFIG } from './core/config/radial-menu-config.js'
+import { normalizeRadialSettings } from './features/radial-menu/radial-menu-model.js'
+import { SWIPE_CONFIG } from './core/config/swipe-config.js'
+import { normalizeSwipeSettings } from './features/terminal/terminal-swipe.js'
 
 function pluralizeReplies(n) {
   const mod10 = n % 10
@@ -255,6 +259,37 @@ export class SettingsPage {
             this._bus.emit('settings.changed', { key: 'terminal.linkOpenMode', value: val })
             this._scheduleSave()
           }
+        )
+      },
+      {
+        label: 'Радиальное меню быстрых команд',
+        control: this._createToggle(
+          normalizeRadialSettings(this._config.terminal?.radialMenu).enabled,
+          (val) => this._saveRadialMenu({ enabled: val })
+        )
+      },
+      {
+        label: 'Жест вызова радиального меню',
+        control: this._createSelect(
+          RADIAL_MENU_CONFIG.GESTURE_OPTIONS,
+          normalizeRadialSettings(this._config.terminal?.radialMenu).gesture,
+          (val) => this._saveRadialMenu({ gesture: val })
+        )
+      },
+      {
+        label: 'Свайп двумя пальцами вверх/вниз',
+        control: this._createSelect(
+          SWIPE_CONFIG.VERTICAL_OPTIONS,
+          normalizeSwipeSettings(this._config.terminal).vertical,
+          (val) => this._saveTerminalSetting('swipeVertical', val)
+        )
+      },
+      {
+        label: 'Свайп двумя пальцами влево/вправо',
+        control: this._createSelect(
+          SWIPE_CONFIG.HORIZONTAL_OPTIONS,
+          normalizeSwipeSettings(this._config.terminal).horizontal,
+          (val) => this._saveTerminalSetting('swipeHorizontal', val)
         )
       },
       {
@@ -1421,6 +1456,23 @@ export class SettingsPage {
     this._collapsedGroupIds = null
     this._dragState = null
     this._dropTarget = null
+  }
+
+  /** Сохраняет простую настройку раздела terminal и оповещает приложение. */
+  _saveTerminalSetting(key, value) {
+    if (!this._config.terminal) this._config.terminal = {}
+    this._config.terminal[key] = value
+    this._bus.emit('settings.changed', { key: `terminal.${key}`, value })
+    this._scheduleSave()
+  }
+
+  /** Сохраняет часть настройки terminal.radialMenu ({ enabled } или { gesture }). */
+  _saveRadialMenu(patch) {
+    if (!this._config.terminal) this._config.terminal = {}
+    const value = { ...normalizeRadialSettings(this._config.terminal.radialMenu), ...patch }
+    this._config.terminal.radialMenu = value
+    this._bus.emit('settings.changed', { key: 'terminal.radialMenu', value })
+    this._scheduleSave()
   }
 
   _scheduleSave() {
