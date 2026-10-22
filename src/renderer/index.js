@@ -11,6 +11,7 @@ import { SearchAddon } from '@xterm/addon-search'
 import '@xterm/xterm/css/xterm.css'
 import '@fontsource/roboto/400.css'
 import '@fontsource/roboto/500.css'
+import './styles/tokens.css'
 import './styles.css'
 import './components/base/context-menu/context-menu.css'
 import './components/base/button/button.css'
@@ -51,6 +52,7 @@ import { AppContainer } from './core/container.js'
 import { createPathsService } from './core/paths.js'
 import { ScrollbarActivity } from './core/scrollbar-activity.js'
 import { isLightColor } from './core/color-utils.js'
+import { deriveUiTokens, applyTokens } from './core/theme-tokens.js'
 import { IS_MAC } from './core/platform.js'
 import { createShellCommands, dialectForShellKind, DIALECTS } from './core/shell-commands.js'
 import { diagnostics } from './core/diagnostics.js'
@@ -259,16 +261,7 @@ async function init() {
       currentThemeName = themeName
 
       const root = document.documentElement.style
-      root.setProperty('--bg', theme.ui.bg)
-      root.setProperty('--surface', theme.ui.surface)
-      root.setProperty('--border', theme.ui.border)
-      root.setProperty('--muted', theme.ui.muted)
-      root.setProperty('--text', theme.ui.text)
-      root.setProperty('--subtext', theme.ui.subtext)
-      root.setProperty('--accent', theme.ui.accent)
-      root.setProperty('--green', theme.ui.green)
-      root.setProperty('--red', theme.ui.red)
-      root.setProperty('--hover', theme.ui.hover)
+      applyTokens(root, deriveUiTokens(theme.ui))
       // Нативные контролы (select, input, угол скроллбара) на Windows/Linux следуют теме
       root.colorScheme = isLightColor(theme.ui.bg) ? 'light' : 'dark'
 

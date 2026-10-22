@@ -1,0 +1,120 @@
+/*
+ * Дизайн-токены, не зависящие от темы. Цвета (--ground, --surface, --text-secondary, --accent, …)
+ * выводятся из темы в core/theme-tokens.js и выставляются на :root из index.js;
+ * значения ниже — запасные, пока тема не применена (eTty Dark).
+ */
+:root {
+  /* Цвет: запасные значения до применения темы */
+  --ground: #161616;
+  --surface: #0f0f0f;
+  --raised: #232323;
+  --active: #262626;
+  --border: #262626;
+  --rule: #1e1e1e;
+  --control: #3a3a3a;
+  --text: #ededed;
+  --text-secondary: #a8a8a8;
+  --text-tertiary: #8a8a8a;
+  --accent: #e8a33d;
+  --accent-ink: #000000;
+  --focus: #e8a33d;
+  --positive: #4fbf8b;
+  --negative: #f0626f;
+  --warning: #d9a441;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.45);
+
+  /* Старые имена — алиасы; выставляются темой, здесь — запасные */
+  --bg: var(--ground);
+  --subtext: var(--text-secondary);
+  --muted: var(--text-tertiary);
+  --green: var(--positive);
+  --red: var(--negative);
+  --hover: var(--active);
+
+  /* Шкала отступов, база 4px */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Радиусы: tight (4–8px), выбираются один раз и применяются везде */
+  --radius-chip: 4px;
+  --radius-control: 6px;
+  --radius-card: 8px;
+  --radius-round: 999px;
+
+  /* Типографика: одна гротеск-гарнитура, моно — только для кода, путей и идентификаторов */
+  --font-ui: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: Menlo, 'SF Mono', Consolas, 'Courier New', monospace;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --lh-tight: 1.25;
+  --lh-ui: 1.4;
+  --fw-regular: 400;
+  --fw-medium: 500;
+
+  /* Размеры контролов и оболочки */
+  --control-h: 28px;
+  --control-h-lg: 32px;
+  --titlebar-h: 38px;
+  --rail-w: 44px;
+  --statusbar-h: 22px; /* перезаписывается из настройки размера статус-бара */
+  --panel-header-h: 32px;
+  --row-h: 28px;
+
+  /* Слои: одна шкала вместо разрозненных 500…10000 */
+  --z-panel: 10;
+  --z-overlay: 500;
+  --z-dropdown: 600;
+  --z-modal: 700;
+  --z-menu: 800;
+  --z-toast: 900;
+  --z-tooltip: 1000;
+
+  /* Движение: только transform/opacity и цвет; есть reduced-motion ниже */
+  --dur-fast: 100ms;
+  --dur-base: 160ms;
+  --dur-slow: 240ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+
+  --scrollbar-size: 8px;
+  --scrollbar-thumb: color-mix(in srgb, var(--text) 28%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--text) 45%, transparent);
+}
+
+/* Одна гарнитура на всё приложение; контролы по умолчанию её не наследуют */
+body {
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* Видимый фокус с клавиатуры: единый для всех контролов, не зависит от темы */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

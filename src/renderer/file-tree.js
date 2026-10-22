@@ -1495,7 +1495,7 @@ export class FileTree {
       }
 
       if (result && result.success === false) {
-        input.style.borderColor = '#f38ba8'
+        input.style.borderColor = 'var(--negative)'
         return
       }
 
@@ -1538,7 +1538,7 @@ export class FileTree {
       const result = await this._api.fsRename(entry.path, newPath)
 
       if (result && result.success === false) {
-        input.style.borderColor = '#f38ba8'
+        input.style.borderColor = 'var(--negative)'
         return
       }
 
