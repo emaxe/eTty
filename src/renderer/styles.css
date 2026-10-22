@@ -219,22 +219,30 @@ body.platform-darwin .window-controls {
   z-index: 999;
 }
 
-/* Glow (ключ сохранён ради совместимости настроек) — плоская рамка 1px акцента без свечения и анимации */
+/* Индикатор фокуса: размытое свечение акцента (статичное, без анимации).
+   glow — тонкая рамка 1px, border — рамка 2px, line — линия сверху; у всех мягкие края. */
 [data-focus-style="glow"] #terminal-container.panel-focused::before,
 [data-focus-style="glow"] #editor-panel.panel-focused::before {
-  border: 1px solid var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow:
+    inset 0 0 10px color-mix(in srgb, var(--accent) 35%, transparent),
+    inset 0 0 28px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-/* Border — чёткая рамка */
 [data-focus-style="border"] #terminal-container.panel-focused::before,
 [data-focus-style="border"] #editor-panel.panel-focused::before {
-  border: 2px solid var(--accent);
+  border: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow:
+    inset 0 0 12px color-mix(in srgb, var(--accent) 40%, transparent),
+    inset 0 0 32px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
-/* Line — линия сверху */
 [data-focus-style="line"] #terminal-container.panel-focused::before,
 [data-focus-style="line"] #editor-panel.panel-focused::before {
-  border-top: 1px solid var(--accent);
+  border-top: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow:
+    inset 0 6px 10px -4px color-mix(in srgb, var(--accent) 45%, transparent),
+    inset 0 14px 24px -10px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 /* FileTree */

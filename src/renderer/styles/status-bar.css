@@ -155,3 +155,25 @@
 
 .stat-add { color: var(--positive); }
 .stat-del { color: var(--negative); }
+
+/* Скрытые блоки (класс .hidden ставит status-bar.js) */
+.status-item.hidden,
+.status-bar-btn.hidden {
+  display: none;
+}
+
+/* Разделители между блоками: контекст | node | прокси | агенты … git */
+.status-sep {
+  flex-shrink: 0;
+  width: 1px;
+  height: 14px;
+  margin: 0 var(--space-1);
+  background: var(--control);
+}
+
+/* Разделитель не рисуется рядом со скрытым блоком */
+.status-item.hidden + .status-sep,
+.status-sep:has(+ .status-proxy-btn.hidden),
+.status-sep:has(+ #btn-git-diff.hidden) {
+  display: none;
+}

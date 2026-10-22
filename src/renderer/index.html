@@ -68,7 +68,9 @@
   </div>
   <div id="status-bar">
     <span id="status-cwd" class="status-item hidden"></span>
+    <span class="status-sep" aria-hidden="true"></span>
     <button id="status-node" class="status-bar-btn status-node-btn" title="Выбрать версию Node.js"></button>
+    <span class="status-sep" aria-hidden="true"></span>
     <button id="btn-proxy-toggle" class="status-bar-btn status-proxy-btn hidden" title="Прокси для ИИ-агентов">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="8" cy="8" r="2.1"/>
@@ -76,10 +78,12 @@
         <circle cx="8" cy="8" r="7" opacity="0.65"/>
       </svg>
     </button>
+    <span class="status-sep" aria-hidden="true"></span>
     <div id="status-agents" class="status-agents">
       <div id="agent-commands-panel" class="hidden"></div>
     </div>
     <div class="status-spacer"></div>
+    <span class="status-sep" aria-hidden="true"></span>
     <button id="btn-git-diff" class="status-bar-btn hidden">± +0 -0</button>
   </div>
   <div id="git-overlay" class="hidden"></div>
