@@ -785,7 +785,7 @@ export class FileTree {
       const placeholder = document.createElement('li')
       placeholder.className = 'tree-empty-placeholder'
       placeholder.style.paddingLeft = `${depth * 16 + 8}px`
-      placeholder.textContent = '(empty)'
+      placeholder.textContent = 'Папка пуста'
       ul.appendChild(placeholder)
       return ul
     }
@@ -1652,7 +1652,7 @@ export class FileTree {
       const placeholder = document.createElement('li')
       placeholder.className = 'tree-empty-placeholder'
       placeholder.style.paddingLeft = `${depth * 16 + 8}px`
-      placeholder.textContent = '(empty)'
+      placeholder.textContent = 'Папка пуста'
       newUl.appendChild(placeholder)
     }
 

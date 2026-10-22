@@ -62,8 +62,8 @@ export class GitPanel {
         </button>
         <div class="git-header-stats"></div>
         <div class="git-header-spacer"></div>
-        <button class="git-btn-refresh btn btn--ghost btn--sm" type="button" title="Refresh">${Icons.refresh}</button>
-        <button class="git-close btn btn--ghost btn--sm" type="button" title="Close">${Icons.close}</button>
+        <button class="git-btn-refresh btn btn--ghost btn--sm" type="button" title="Обновить">${Icons.refresh}</button>
+        <button class="git-close btn btn--ghost btn--sm" type="button" title="Закрыть">${Icons.close}</button>
       </div>
       <div class="git-root-path"></div>
       <div class="git-body">
@@ -72,10 +72,10 @@ export class GitPanel {
         <div class="git-detail"></div>
       </div>
       <div class="git-commit-bar">
-        <textarea class="git-commit-msg" placeholder="Commit message…" rows="1"></textarea>
-        <button class="git-btn-commit btn btn--primary btn--sm" type="button">Commit</button>
-        <button class="git-btn-push btn btn--default btn--sm" type="button">Push</button>
-        <button class="git-btn-more btn btn--ghost btn--sm" type="button" title="More actions">⋯</button>
+        <textarea class="git-commit-msg" placeholder="Сообщение коммита…" rows="1"></textarea>
+        <button class="git-btn-commit btn btn--primary btn--sm" type="button">Закоммитить</button>
+        <button class="git-btn-push btn btn--default btn--sm" type="button">Отправить</button>
+        <button class="git-btn-more btn btn--ghost btn--sm" type="button" title="Ещё">⋯</button>
       </div>
     `
 
@@ -356,10 +356,10 @@ export class GitPanel {
   async _onDiscardFile(file) {
     if (!this._rootPath) return
     const confirmed = await this._confirmDialog.open({
-      title: 'Discard Changes',
-      message: `Discard changes to "${file.path}"? This cannot be undone.`,
-      confirmText: 'Discard',
-      cancelText: 'Cancel',
+      title: 'Отменить изменения',
+      message: `Отменить изменения в «${file.path}»? Это нельзя отменить.`,
+      confirmText: 'Отменить изменения',
+      cancelText: 'Отмена',
     })
     if (!confirmed) return
     const result = await this._api.gitDiscardFile(this._rootPath, [file.path], { untracked: !!file.untracked }, this._ctx)
@@ -375,9 +375,9 @@ export class GitPanel {
   async _copyPath(file) {
     try {
       await navigator.clipboard.writeText(file.path)
-      this._showToast('Path copied', 'success')
+      this._showToast('Путь скопирован', 'success')
     } catch {
-      this._showToast('Could not copy path', 'error')
+      this._showToast('Не удалось скопировать путь', 'error')
     }
   }
 
@@ -385,7 +385,7 @@ export class GitPanel {
     if (!this._rootPath) return
     const msg = this._commitMsgEl.value.trim()
     if (!msg) {
-      this._showToast('Commit message cannot be empty', 'error')
+      this._showToast('Сообщение коммита не может быть пустым', 'error')
       return
     }
     this._setActionsDisabled(true)
@@ -395,7 +395,7 @@ export class GitPanel {
       this._showToast(result.error, 'error')
     } else {
       this._commitMsgEl.value = ''
-      this._showToast('Committed', 'success')
+      this._showToast('Коммит создан', 'success')
       await this._refresh()
     }
     this._setActionsDisabled(false)
@@ -408,7 +408,7 @@ export class GitPanel {
     this._btnPush.textContent = '…'
     const result = await this._api.gitPush(this._rootPath, this._ctx)
     if (result?.error) this._showToast(result.error, 'error')
-    else this._showToast('Pushed successfully', 'success')
+    else this._showToast('Изменения отправлены', 'success')
     this._btnPush.textContent = originalLabel
     this._setActionsDisabled(false)
     await this._refresh()
@@ -422,17 +422,17 @@ export class GitPanel {
     e.stopPropagation()
     const rect = this._btnMore.getBoundingClientRect()
     this._menu.show([
-      { label: 'Discard All Changes', action: () => this._confirmDiscardAll() },
+      { label: 'Отменить все изменения', action: () => this._confirmDiscardAll() },
     ], Math.round(rect.left), Math.round(rect.bottom + 4))
   }
 
   async _confirmDiscardAll() {
     if (!this._rootPath) return
     const confirmed = await this._confirmDialog.open({
-      title: 'Discard All Changes',
-      message: 'This permanently discards all uncommitted changes and untracked files. This cannot be undone.',
-      confirmText: 'Discard All',
-      cancelText: 'Cancel',
+      title: 'Отменить все изменения',
+      message: 'Все незакоммиченные изменения и неотслеживаемые файлы будут удалены без возможности восстановления.',
+      confirmText: 'Отменить всё',
+      cancelText: 'Отмена',
     })
     if (!confirmed) return
     const result = await this._api.gitDiscard(this._rootPath, this._ctx)
@@ -440,7 +440,7 @@ export class GitPanel {
       this._showToast(result.error, 'error')
     } else {
       this._diffView.clear()
-      this._showToast('Changes discarded', 'success')
+      this._showToast('Изменения отменены', 'success')
       await this._refresh()
     }
   }
@@ -462,7 +462,7 @@ export class GitPanel {
     const pop = document.createElement('div')
     pop.className = 'git-branch-popover'
     pop.innerHTML = `
-      <input type="text" class="git-branch-search" placeholder="Search or create branch…" />
+      <input type="text" class="git-branch-search" placeholder="Найти или создать ветку…" />
       <div class="git-branch-list"></div>
     `
     document.body.appendChild(pop)
@@ -496,7 +496,7 @@ export class GitPanel {
           delBtn.type = 'button'
           delBtn.className = 'git-branch-item-delete'
           delBtn.innerHTML = Icons.trash
-          delBtn.title = 'Delete branch'
+          delBtn.title = 'Удалить ветку'
           delBtn.addEventListener('click', (e) => {
             e.stopPropagation()
             this._closeBranchPopover()
@@ -515,7 +515,7 @@ export class GitPanel {
       if (q && !this._branches.some(b => b.toLowerCase() === qLower)) {
         const createItem = document.createElement('div')
         createItem.className = 'git-branch-item git-branch-item-create'
-        createItem.textContent = `+ Create branch "${q}"`
+        createItem.textContent = `+ Создать ветку «${q}»`
         createItem.addEventListener('click', () => {
           this._closeBranchPopover()
           this._createBranch(q)
@@ -524,7 +524,7 @@ export class GitPanel {
       } else if (!filtered.length) {
         const empty = document.createElement('div')
         empty.className = 'git-branch-item-empty'
-        empty.textContent = 'No branches'
+        empty.textContent = 'Нет веток'
         listEl.appendChild(empty)
       }
     }
@@ -584,18 +584,18 @@ export class GitPanel {
   async _deleteBranch(name) {
     if (!this._rootPath) return
     if (name === 'main' || name === 'master') {
-      this._showToast('Cannot delete main/master branch', 'error')
+      this._showToast('Нельзя удалить ветку main/master', 'error')
       return
     }
     if (this._branches.length <= 1) {
-      this._showToast('Cannot delete the only branch', 'error')
+      this._showToast('Нельзя удалить единственную ветку', 'error')
       return
     }
     const confirmed = await this._confirmDialog.open({
-      title: 'Delete Branch',
-      message: `Delete branch "${name}"? This cannot be undone.`,
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
+      title: 'Удалить ветку',
+      message: `Удалить ветку «${name}»? Это нельзя отменить.`,
+      confirmText: 'Удалить',
+      cancelText: 'Отмена',
     })
     if (!confirmed) return
     const result = await this._api.gitDeleteBranch(this._rootPath, name, this._ctx)

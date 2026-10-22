@@ -14,6 +14,7 @@ import '@fontsource/roboto/500.css'
 import './styles/tokens.css'
 import './styles.css'
 import './styles/shell.css'
+import './styles/status-bar.css'
 import './styles/palette.css'
 import './components/base/context-menu/context-menu.css'
 import './components/base/button/button.css'
@@ -63,6 +64,7 @@ import { ActivityRail } from './features/shell/activity-rail.js'
 import { CommandRegistry } from './core/command-registry.js'
 import { CommandPalette } from './features/command-palette/command-palette.js'
 import { HOTKEYS, matchesHotkey } from './core/hotkeys.js'
+import { clampWidth, loadPanelWidths, savePanelWidth } from './core/panel-widths.js'
 import { createShellCommands, dialectForShellKind, DIALECTS } from './core/shell-commands.js'
 import { diagnostics } from './core/diagnostics.js'
 import { GitStatusService } from './services/git-status-service.js'
@@ -2429,6 +2431,18 @@ async function init() {
     }
   }, true)
 
+  // Ширины панелей из прошлого запуска (в пределах допустимых)
+  {
+    const saved = loadPanelWidths()
+    const apply = (el, name, min, max) => {
+      const width = clampWidth(saved[name], min, max)
+      if (el && width !== null) el.style.width = `${width}px`
+    }
+    apply(sidebar, 'sidebar', APP_CONFIG.SIDEBAR_MIN_WIDTH, APP_CONFIG.SIDEBAR_MAX_WIDTH)
+    apply(editorPanel._panelEl, 'editor', APP_CONFIG.EDITOR_MIN_WIDTH, window.innerWidth * APP_CONFIG.EDITOR_MAX_WIDTH_RATIO)
+    apply(sshPanel._panelEl, 'ssh', APP_CONFIG.SSH_PANEL_MIN_WIDTH, APP_CONFIG.SSH_PANEL_MAX_WIDTH)
+  }
+
   // Resize handle — изменение ширины сайдбара
   resizeHandle.addEventListener('mousedown', (e) => {
     e.preventDefault()
@@ -2445,6 +2459,7 @@ async function init() {
     }
     const onUp = () => {
       resizeHandle.classList.remove('dragging')
+      savePanelWidth('sidebar', sidebar.offsetWidth)
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
@@ -2470,6 +2485,7 @@ async function init() {
     }
     const onUp = () => {
       resizeHandleRight.classList.remove('dragging')
+      savePanelWidth('editor', editorPanel._panelEl.offsetWidth)
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
@@ -2495,6 +2511,7 @@ async function init() {
     }
     const onUp = () => {
       resizeHandleSsh.classList.remove('dragging')
+      savePanelWidth('ssh', sshPanel._panelEl.offsetWidth)
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }

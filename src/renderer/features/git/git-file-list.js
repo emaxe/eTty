@@ -9,10 +9,10 @@ import { APP_CONFIG } from '../../core/config/app-config.js'
 import { statusMeta } from './git-status.js'
 
 const GROUP_DEFS = [
-  { key: 'staged', label: 'Staged Changes', bulk: 'unstageAll', bulkLabel: 'Unstage all' },
-  { key: 'unstaged', label: 'Changes', bulk: 'stageAll', bulkLabel: 'Stage all' },
-  { key: 'untracked', label: 'Untracked', bulk: 'stageAll', bulkLabel: 'Stage all' },
-  { key: 'ignored', label: 'Ignored', bulk: null, bulkLabel: null },
+  { key: 'staged', label: 'В индексе', bulk: 'unstageAll', bulkLabel: 'Убрать все' },
+  { key: 'unstaged', label: 'Изменения', bulk: 'stageAll', bulkLabel: 'Добавить все' },
+  { key: 'untracked', label: 'Не отслеживается', bulk: 'stageAll', bulkLabel: 'Добавить все' },
+  { key: 'ignored', label: 'Игнорируется', bulk: null, bulkLabel: null },
 ]
 
 const DEFAULT_COLLAPSED = ['ignored']
@@ -70,8 +70,8 @@ export class GitFileList {
     this._containerEl.innerHTML = `
       <div class="git-filter-row">
         <span class="git-filter-icon">${Icons.search}</span>
-        <input type="text" class="git-filter-input" placeholder="Filter files…" />
-        <button class="git-filter-clear hidden" title="Clear filter">${Icons.close}</button>
+        <input type="text" class="git-filter-input" placeholder="Фильтр файлов…" />
+        <button class="git-filter-clear hidden" title="Сбросить фильтр">${Icons.close}</button>
       </div>
       <div class="git-groups"></div>
     `
@@ -158,7 +158,7 @@ export class GitFileList {
     this._flatVisible = []
 
     if (!this._isRepo) {
-      this._renderMessage('Not a git repository', Icons.hexagon)
+      this._renderMessage('Это не git-репозиторий', Icons.hexagon)
       return
     }
 
@@ -166,7 +166,7 @@ export class GitFileList {
     const totalFiles = GROUP_DEFS.reduce((n, g) => n + this._groups[g.key].length, 0)
 
     if (totalFiles === 0) {
-      this._renderMessage('Working tree clean', Icons.ok)
+      this._renderMessage('Изменений нет', Icons.ok)
       return
     }
 
@@ -192,7 +192,7 @@ export class GitFileList {
     }
 
     if (!anyVisible) {
-      this._renderMessage(`No files match "${this._filterInput.value.trim()}"`, Icons.search)
+      this._renderMessage(`Нет файлов по запросу «${this._filterInput.value.trim()}»`, Icons.search)
       return
     }
 
@@ -267,7 +267,7 @@ export class GitFileList {
       checkbox.type = 'checkbox'
       checkbox.className = 'git-file-checkbox'
       checkbox.checked = groupKey === 'staged'
-      checkbox.title = groupKey === 'staged' ? 'Unstage' : 'Stage'
+      checkbox.title = groupKey === 'staged' ? 'Убрать из индекса' : 'Добавить в индекс'
       checkbox.addEventListener('click', (e) => {
         e.stopPropagation()
         if (groupKey === 'staged') this._onUnstage?.([file])
@@ -325,17 +325,17 @@ export class GitFileList {
 
   _showContextMenu(file, groupKey, x, y) {
     const items = [
-      { label: 'Open in Editor', action: () => this._onOpenFile?.(file) },
-      { label: 'Copy Path', action: () => this._onCopyPath?.(file) },
+      { label: 'Открыть в редакторе', action: () => this._onOpenFile?.(file) },
+      { label: 'Копировать путь', action: () => this._onCopyPath?.(file) },
     ]
     if (groupKey !== 'ignored') {
       items.push({ separator: true })
       if (groupKey === 'staged') {
-        items.push({ label: 'Unstage', action: () => this._onUnstage?.([file]) })
+        items.push({ label: 'Убрать из индекса', action: () => this._onUnstage?.([file]) })
       } else {
-        items.push({ label: 'Stage', action: () => this._onStage?.([file]) })
+        items.push({ label: 'Добавить в индекс', action: () => this._onStage?.([file]) })
       }
-      items.push({ label: 'Discard Changes', action: () => this._onDiscard?.(file) })
+      items.push({ label: 'Отменить изменения', action: () => this._onDiscard?.(file) })
     }
     this._contextMenu.show(items, x, y)
   }

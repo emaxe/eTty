@@ -96,7 +96,7 @@ export class GitDiffView {
     this._requestId++
     this._headEl.classList.add('hidden')
     this._destroyButtons()
-    this._renderPlaceholder('Select a file to view its diff', Icons.file)
+    this._renderPlaceholder('Выберите файл, чтобы увидеть изменения', Icons.file)
   }
 
   _renderPlaceholder(text, icon) {
@@ -144,22 +144,22 @@ export class GitDiffView {
     }
 
     this._destroyButtons()
-    const openBtn = new Button({ variant: 'ghost', size: 'sm', icon: Icons.arrowRight, title: 'Open in editor', onClick: () => this._onOpenFile?.(file) })
+    const openBtn = new Button({ variant: 'ghost', size: 'sm', icon: Icons.arrowRight, title: 'Открыть в редакторе', onClick: () => this._onOpenFile?.(file) })
     this._buttons.push(openBtn)
     this._actionsEl.appendChild(openBtn.element)
 
     if (!file.isIgnored) {
       if (file.staged) {
-        const unstageBtn = new Button({ variant: 'ghost', size: 'sm', label: 'Unstage', onClick: () => this._onUnstage?.([file]) })
+        const unstageBtn = new Button({ variant: 'ghost', size: 'sm', label: 'Убрать из индекса', onClick: () => this._onUnstage?.([file]) })
         this._buttons.push(unstageBtn)
         this._actionsEl.appendChild(unstageBtn.element)
       } else {
-        const stageBtn = new Button({ variant: 'ghost', size: 'sm', label: 'Stage', onClick: () => this._onStage?.([file]) })
+        const stageBtn = new Button({ variant: 'ghost', size: 'sm', label: 'Добавить в индекс', onClick: () => this._onStage?.([file]) })
         this._buttons.push(stageBtn)
         this._actionsEl.appendChild(stageBtn.element)
       }
 
-      const discardBtn = new Button({ variant: 'ghost', size: 'sm', icon: Icons.trash, title: 'Discard changes', onClick: () => this._onDiscard?.(file) })
+      const discardBtn = new Button({ variant: 'ghost', size: 'sm', icon: Icons.trash, title: 'Отменить изменения', onClick: () => this._onDiscard?.(file) })
       this._buttons.push(discardBtn)
       this._actionsEl.appendChild(discardBtn.element)
     }
@@ -192,11 +192,11 @@ export class GitDiffView {
     const parsed = parseUnifiedDiff(diffStr)
 
     if (parsed.isBinary) {
-      this._renderPlaceholder('Binary file — diff not shown', Icons.file)
+      this._renderPlaceholder('Бинарный файл — diff не показывается', Icons.file)
       return
     }
     if (parsed.isEmpty) {
-      this._renderPlaceholder(opts.emptyMessage || 'No changes to display', Icons.ok)
+      this._renderPlaceholder(opts.emptyMessage || 'Нет изменений', Icons.ok)
       return
     }
 
@@ -206,9 +206,9 @@ export class GitDiffView {
       const wrap = document.createElement('div')
       wrap.className = 'git-diff-placeholder'
       const label = document.createElement('span')
-      label.textContent = `Diff is too large to render automatically (${totalLines} lines)`
+      label.textContent = `Diff слишком большой для автоматического показа (${totalLines} строк)`
       wrap.appendChild(label)
-      const showBtn = new Button({ variant: 'default', size: 'sm', label: 'Show anyway', onClick: async () => {
+      const showBtn = new Button({ variant: 'default', size: 'sm', label: 'Показать всё равно', onClick: async () => {
         showBtn.destroy()
         this._bodyEl.innerHTML = ''
         await this._renderHunks(parsed, file, reqId)

@@ -123,28 +123,30 @@ body.platform-darwin .window-controls {
 /* Sidebar nav buttons */
 #sidebar-nav {
   display: flex;
-  gap: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
+  gap: 2px;
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--rule);
   flex-shrink: 0;
 }
 
 #sidebar-nav button {
-  background: var(--border);
+  background: transparent;
   border: none;
-  color: var(--text);
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
+  color: var(--text-secondary);
+  width: var(--control-h);
+  height: var(--control-h);
+  border-radius: var(--radius-control);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--fs-14);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 
 #sidebar-nav button:hover {
-  background: var(--hover);
+  background: var(--active);
+  color: var(--text);
 }
 
 #sidebar-nav button:disabled {
@@ -161,7 +163,8 @@ body.platform-darwin .window-controls {
 }
 
 #btn-toggle-hidden.active {
-  color: var(--green);
+  background: var(--active);
+  color: var(--text);
 }
 
 #file-tree-container {
@@ -251,7 +254,7 @@ body.platform-darwin .window-controls {
 .tree-node-row {
   display: flex;
   align-items: center;
-  height: 22px;
+  height: 24px;
   white-space: nowrap;
   color: var(--text);
   position: relative;
@@ -260,12 +263,23 @@ body.platform-darwin .window-controls {
 
 .tree-node-row:hover,
 .tree-node-row.hovered {
-  background: var(--border);
+  background: color-mix(in srgb, var(--active) 60%, transparent);
 }
 
 .tree-node-row.selected,
 .tree-root-node-row.selected {
-  background: var(--hover);
+  background: var(--active);
+}
+
+/* Выбранная строка — линия акцента на левом краю */
+.tree-node-row.selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--accent);
 }
 
 /* Drag & Drop states */
@@ -276,13 +290,13 @@ body.platform-darwin .window-controls {
 .tree-node-row.drag-over,
 .tree-root-node-row.drag-over {
   background: var(--accent);
-  color: var(--bg);
-  border-radius: 3px;
+  color: var(--accent-ink);
+  border-radius: var(--radius-chip);
 }
 
 .tree-node-row.drag-over-invalid,
 .tree-root-node-row.drag-over-invalid {
-  background: var(--error);
+  background: var(--negative);
   opacity: 0.4;
 }
 
@@ -301,8 +315,8 @@ body.platform-darwin .window-controls {
   justify-content: center;
   width: 16px;
   flex-shrink: 0;
-  color: var(--muted);
-  transition: transform 0.1s;
+  color: var(--text-tertiary);
+  transition: transform var(--dur-fast);
 }
 
 .tree-arrow.expanded {
@@ -329,17 +343,17 @@ body.platform-darwin .window-controls {
   display: none;
   z-index: 100;
   pointer-events: auto;
-  height: 22px;
+  height: 24px;
 }
 
 .tree-hover-buttons {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 1px 3px;
+  gap: var(--space-1);
+  padding: 0 var(--space-1);
   z-index: 10;
-  border-left: 1px solid var(--muted);
-  background: var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--raised);
   height: 100%;
 }
 
@@ -350,32 +364,28 @@ body.platform-darwin .window-controls {
   font-size: 11px;
   line-height: 1;
   padding: 1px 3px;
-  border-radius: 2px;
-  color: var(--text);
+  border-radius: var(--radius-chip);
+  color: var(--text-secondary);
   width: 18px;
   height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.tree-hover-buttons button {
-  transition: transform 0.15s ease, background 0.15s ease;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 
 .tree-hover-buttons button:hover {
-  background: var(--hover);
-  transform: scale(1.15) translateY(-1px);
+  background: var(--active);
+  color: var(--text);
 }
 
 .tree-hover-buttons button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-  transform: none;
 }
 
 .tree-hover-buttons button.success {
-  color: var(--green);
+  color: var(--positive);
 }
 
 .tree-root {
@@ -391,12 +401,11 @@ body.platform-darwin .window-controls {
 }
 
 .tree-empty-placeholder {
-  height: 22px;
+  height: 24px;
   display: flex;
   align-items: center;
-  color: var(--muted);
-  font-style: italic;
-  font-size: 11px;
+  color: var(--text-tertiary);
+  font-size: var(--fs-12);
   white-space: nowrap;
 }
 
@@ -404,14 +413,12 @@ body.platform-darwin .window-controls {
 .tree-root-node-row {
   display: flex;
   align-items: center;
-  height: 26px;
-  padding: 0 8px;
+  height: 28px;
+  padding: 0 var(--space-2);
   cursor: pointer;
-  font-weight: 600;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--subtext);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
   white-space: nowrap;
   user-select: none;
   min-width: 100%;
@@ -419,7 +426,7 @@ body.platform-darwin .window-controls {
 
 .tree-root-node-row:hover,
 .tree-root-node-row.hovered {
-  background: var(--border);
+  background: color-mix(in srgb, var(--active) 60%, transparent);
 }
 
 .tree-root-label {
@@ -450,23 +457,23 @@ body.platform-darwin .window-controls {
   font-size: 11px;
   line-height: 1;
   padding: 1px 3px;
-  border-radius: 2px;
-  color: var(--text);
+  border-radius: var(--radius-chip);
+  color: var(--text-secondary);
   width: 18px;
   height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.15s ease, background 0.15s ease;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 
 .tree-root-action:hover {
-  background: var(--hover);
-  transform: scale(1.15) translateY(-1px);
+  background: var(--active);
+  color: var(--text);
 }
 
 .tree-root-action.success {
-  color: var(--green);
+  color: var(--positive);
 }
 
 #btn-refresh-tree.spinning svg {
@@ -489,14 +496,14 @@ body.platform-darwin .window-controls {
 /* Inline input */
 .tree-inline-input {
   width: calc(100% - 8px);
-  background: var(--bg);
+  background: var(--ground);
   border: 1px solid var(--accent);
   color: var(--text);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--fs-13);
   padding: 1px 4px;
   outline: none;
-  border-radius: 2px;
+  border-radius: var(--radius-chip);
 }
 
 /* ── Settings overlay ────────────────────────────────────────────── */
@@ -564,8 +571,6 @@ body.platform-darwin .window-controls {
 .settings-category-title {
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   color: var(--subtext);
   margin-bottom: 8px;
   padding-bottom: 8px;
@@ -739,204 +744,6 @@ body.platform-darwin .window-controls {
 }
 
 /* ─── Status Bar ─────────────────────────────────────────────────────────── */
-#status-bar {
-  height: 22px;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 6px;
-  gap: 4px;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-.status-spacer {
-  flex: 1;
-}
-.status-agents {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  margin-left: 6px;
-  min-width: 0;
-}
-
-.status-agents::-webkit-scrollbar {
-  height: 4px;
-}
-
-.status-agents::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 999px;
-}
-.status-item {
-  font-size: 11px;
-  padding: 1px 7px;
-  border-radius: 3px;
-  background: var(--hover);
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 260px;
-  flex-shrink: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-#status-node {
-  color: var(--green);
-  background: var(--hover);
-  border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
-  cursor: pointer;
-}
-.status-bar-btn {
-  font-size: 11px;
-  padding: 1px 7px;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  background: var(--hover);
-  color: var(--text);
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  transition: background 150ms, border-color 150ms, box-shadow 150ms;
-}
-.status-bar-btn:hover { background: var(--border); }
-
-/* Status bar size variants */
-#status-bar[data-size="standard"] {
-  height: 28px;
-}
-#status-bar[data-size="large"] {
-  height: 34px;
-}
-#status-bar[data-size="standard"] .status-item,
-#status-bar[data-size="standard"] .status-bar-btn,
-#status-bar[data-size="standard"] .agent-cmd-btn {
-  font-size: 13px;
-}
-#status-bar[data-size="large"] .status-item,
-#status-bar[data-size="large"] .status-bar-btn,
-#status-bar[data-size="large"] .agent-cmd-btn {
-  font-size: 15px;
-}
-
-.status-proxy-btn {
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1px 4px;
-  margin-left: 14px;
-  position: relative;
-}
-
-.status-proxy-btn::before {
-  content: '';
-  position: absolute;
-  left: -8px;
-  top: 50%;
-  width: 2px;
-  height: 14px;
-  transform: translateY(-50%);
-  background: var(--border);
-  border-radius: 999px;
-}
-
-.status-proxy-btn.active {
-  color: var(--green);
-  border: 1px solid color-mix(in srgb, var(--green) 70%, transparent);
-  background: color-mix(in srgb, var(--green) 14%, transparent);
-}
-
-.status-proxy-btn.hidden {
-  display: none;
-}
-
-.status-agent-btn:hover:not(.status-agent-active):not(.status-agent-busy):not(:disabled) {
-  border: 1px solid color-mix(in srgb, var(--text) 35%, transparent);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--text) 15%, transparent);
-}
-
-.status-agent-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-.status-agent-btn.status-agent-active {
-  color: var(--green);
-  font-weight: 700;
-  border: 1px solid var(--green);
-  background: color-mix(in srgb, var(--green) 18%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 30%, transparent), 0 0 12px color-mix(in srgb, var(--green) 20%, transparent);
-}
-
-/* status-agent-busy — кнопка агента при занятом терминале (busy).
- * Используется вместо :disabled, чтобы click-события доходили для double-click обработки.
- * Hover с opacity: 0.6 намекает, что кнопка интерактивна (double-click назначает агента активным).
- */
-.status-agent-btn.status-agent-busy {
-  opacity: 0.35;
-  cursor: default;
-}
-.status-agent-btn.status-agent-busy:hover {
-  opacity: 0.6;
-  cursor: pointer;
-}
-
-#agent-commands-panel {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 4px;
-}
-#agent-commands-panel.hidden { display: none; }
-
-.agent-cmd-btn {
-  font-size: 11px;
-  padding: 1px 7px;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  background: var(--hover);
-  color: var(--text);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 150ms, border-color 150ms, box-shadow 150ms;
-}
-.agent-cmd-btn:hover {
-  background: var(--border);
-  border-color: color-mix(in srgb, var(--text) 35%, transparent);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--text) 15%, transparent);
-}
-
-.agent-cmd-group-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-.agent-cmd-group-btn svg { width: 10px; height: 10px; }
-
-/* Снятие оптимистичного busy (SSH без честного OSC 133) — см. StatusBar._createClearOptimisticBusyButton */
-.agent-cmd-clear-busy-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 5px;
-  color: var(--red);
-}
-.agent-cmd-clear-busy-btn:hover {
-  background: color-mix(in srgb, var(--red) 18%, transparent);
-  border-color: color-mix(in srgb, var(--red) 45%, transparent);
-}
-.agent-cmd-clear-busy-btn svg { width: 10px; height: 10px; display: block; }
-
-.stat-add { color: var(--green); }
-.stat-del { color: var(--red); }
-
 /* ─── Git Overlay ────────────────────────────────────────────────────────── */
 #git-overlay {
   position: fixed;
@@ -1109,8 +916,6 @@ body.platform-darwin .window-controls {
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
   color: var(--muted);
   user-select: none;
 }
@@ -1127,8 +932,6 @@ body.platform-darwin .window-controls {
 }
 .git-group-bulk {
   font-size: 10px;
-  text-transform: none;
-  letter-spacing: normal;
   font-weight: 400;
   background: none;
   border: 1px solid var(--border);
@@ -1442,35 +1245,39 @@ button svg {
 .ssh-panel-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: var(--space-1);
+  height: var(--panel-header-h);
+  padding: 0 var(--space-2) 0 var(--space-3);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .ssh-panel-title {
-  font-weight: 600;
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-13);
   flex: 1;
 }
 
 .ssh-panel-add-btn,
 .ssh-panel-refresh-btn,
 .ssh-panel-close-btn {
-  background: var(--border);
+  background: transparent;
   border: none;
-  color: var(--text);
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
+  color: var(--text-secondary);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-chip);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 .ssh-panel-add-btn:hover,
 .ssh-panel-refresh-btn:hover,
 .ssh-panel-close-btn:hover {
-  background: var(--hover);
+  background: var(--active);
+  color: var(--text);
 }
 .ssh-panel-refresh-btn[hidden] {
   display: none;
@@ -1479,29 +1286,36 @@ button svg {
 /* Сегмент SSH/tmux — переключает режим клика по строке подключения (см. ssh-panel.js) */
 .ssh-panel-mode {
   display: flex;
-  gap: 2px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
+  gap: var(--space-4);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--rule);
   flex-shrink: 0;
 }
 .ssh-mode-btn {
-  flex: 1;
+  position: relative;
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--subtext);
-  font-size: 11px;
-  font-weight: 500;
-  padding: 4px 0;
-  border-radius: 4px;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  height: 30px;
+  padding: 0;
   cursor: pointer;
 }
 .ssh-mode-btn:hover {
   color: var(--text);
 }
 .ssh-mode-btn.active {
+  color: var(--text);
+}
+.ssh-mode-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
   background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg);
 }
 
 .ssh-panel-list {
@@ -1510,9 +1324,9 @@ button svg {
 }
 
 .ssh-panel-empty {
-  padding: 16px 10px;
-  color: var(--subtext);
-  font-size: 12px;
+  padding: var(--space-4) var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
   text-align: center;
 }
 
@@ -1525,7 +1339,7 @@ button svg {
   border-bottom: 1px solid transparent;
 }
 .ssh-row:hover {
-  background: var(--hover);
+  background: var(--active);
 }
 .ssh-row.dragging,
 .ssh-sessions.dragging {
@@ -1533,7 +1347,7 @@ button svg {
 }
 
 .ssh-row-icon {
-  color: var(--green);
+  color: var(--text-tertiary);
   flex-shrink: 0;
   display: flex;
 }
@@ -1580,7 +1394,7 @@ button svg {
   cursor: pointer;
 }
 .ssh-session-row:hover {
-  background: var(--hover);
+  background: var(--active);
 }
 
 .ssh-session-dot {
@@ -1591,7 +1405,7 @@ button svg {
   background: var(--subtext);
 }
 .ssh-session-dot.attached {
-  background: var(--green);
+  background: var(--positive);
 }
 
 .ssh-session-info {
@@ -1693,7 +1507,7 @@ button svg {
   height: 28px;
   border-radius: 50%;
   border: 2.5px solid var(--border);
-  border-top-color: var(--green);
+  border-top-color: var(--text-secondary);
   animation: ssh-spin 0.8s linear infinite;
 }
 @keyframes ssh-spin {
@@ -1710,23 +1524,25 @@ button svg {
 }
 
 .ssh-tab-overlay-btn {
-  background: var(--border);
-  border: none;
+  background: transparent;
+  border: 1px solid var(--control);
   color: var(--text);
-  padding: 6px 14px;
-  border-radius: 4px;
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-control);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-medium);
 }
 .ssh-tab-overlay-btn:hover {
-  background: var(--hover);
+  background: var(--active);
 }
 
 /* Editor header with tabs */
 #editor-header {
   display: flex;
   align-items: stretch;
-  height: 32px;
+  height: var(--panel-header-h);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -1747,25 +1563,37 @@ button svg {
 }
 
 .editor-tab {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   height: 100%;
-  padding: 0 10px 0 12px;
+  padding: 0 var(--space-2) 0 var(--space-3);
   cursor: grab;
-  font-size: 11px;
-  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: var(--muted);
-  border-right: 1px solid var(--border);
+  font-size: var(--fs-12);
+  color: var(--text-tertiary);
   flex-shrink: 0;
   user-select: none;
   max-width: 180px;
   white-space: nowrap;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.editor-tab:hover {
+  background: var(--active);
+  color: var(--text-secondary);
 }
 .editor-tab.active {
-  background: var(--bg);
+  background: var(--ground);
   color: var(--text);
-  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.editor-tab.active::after {
+  content: '';
+  position: absolute;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
 }
 .editor-tab-name {
   overflow: hidden;
@@ -1797,8 +1625,8 @@ button svg {
   opacity: 0.7;
 }
 .editor-tab-close:hover {
-  background: var(--red) !important;
-  color: var(--bg) !important;
+  background: var(--raised) !important;
+  color: var(--negative) !important;
   opacity: 1 !important;
 }
 
@@ -1822,17 +1650,17 @@ button svg {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0 6px;
+  padding: 0 var(--space-2);
   flex-shrink: 0;
-  border-left: 1px solid var(--border);
 }
 #editor-toolbar button {
   background: none;
   border: none;
-  color: var(--muted);
+  color: var(--text-tertiary);
   cursor: pointer;
-  padding: 3px 5px;
-  border-radius: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-chip);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1840,7 +1668,7 @@ button svg {
 }
 #editor-toolbar button:hover {
   color: var(--text);
-  background: var(--border);
+  background: var(--active);
 }
 #editor-toolbar button:disabled {
   opacity: 0.3;
@@ -1916,14 +1744,14 @@ button svg {
 
 /* Editor status bar */
 #editor-status {
-  height: 20px;
+  height: 22px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 10px;
-  font-size: 10px;
-  font-family: Menlo, 'SF Mono', Consolas, monospace;
-  color: var(--muted);
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
   background: var(--surface);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
@@ -1939,18 +1767,16 @@ button svg {
 .editor-sync-btn {
   background: none;
   border: none;
-  color: var(--muted);
+  color: var(--text-tertiary);
   cursor: pointer;
   padding: 0 2px;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.6;
-  transition: opacity 0.15s, color 0.15s;
+  transition: color var(--dur-fast);
   line-height: 1;
 }
 .editor-sync-btn:hover {
-  opacity: 1;
   color: var(--text);
 }
 .editor-sync-btn.sync-outdated {
@@ -2178,8 +2004,6 @@ button svg {
   margin-left: 8px;
   font-size: 10px;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
 }
 
 .settings-quick-replies-actions {
@@ -3140,7 +2964,6 @@ button svg {
   font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
   font-weight: 500;
-  letter-spacing: 0.01em;
   fill: var(--text);
   text-anchor: middle;
   dominant-baseline: central;
@@ -3190,8 +3013,6 @@ button svg {
   padding: 6px 10px 4px;
   font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--subtext);
 }
 

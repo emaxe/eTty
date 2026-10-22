@@ -1,0 +1,157 @@
+/*
+ * Статус-бар. Плоские кнопки на тоне поверхности; цвет — только у статусов
+ * (прокси включён, +/− в git). Активный агент отмечен линией акцента 2px по ширине кнопки.
+ * Высота задаётся --statusbar-h (настройка размера: 22 / 28 / 34 px).
+ */
+#status-bar {
+  height: var(--statusbar-h);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  gap: var(--space-1);
+  flex-shrink: 0;
+  overflow: hidden;
+  font-size: var(--fs-11);
+}
+
+#status-bar[data-size="standard"] { font-size: var(--fs-13); }
+#status-bar[data-size="large"] { font-size: 15px; }
+
+.status-spacer {
+  flex: 1;
+}
+
+.status-agents {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-left: var(--space-2);
+  min-width: 0;
+}
+
+.status-agents::-webkit-scrollbar {
+  height: 4px;
+}
+
+.status-agents::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-round);
+}
+
+.status-item,
+.status-bar-btn,
+.agent-cmd-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: calc(var(--statusbar-h) - 6px);
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+
+.status-item {
+  max-width: 260px;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-bar-btn,
+.agent-cmd-btn {
+  cursor: pointer;
+}
+
+.status-bar-btn:hover,
+.agent-cmd-btn:hover {
+  background: var(--active);
+  color: var(--text);
+}
+
+#status-node {
+  cursor: pointer;
+}
+
+.status-proxy-btn {
+  justify-content: center;
+}
+
+.status-proxy-btn.active {
+  color: var(--positive);
+}
+
+.status-proxy-btn.hidden {
+  display: none;
+}
+
+.status-agent-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Активный агент: текст в полную яркость + линия акцента по ширине кнопки */
+.status-agent-btn.status-agent-active {
+  color: var(--text);
+  font-weight: var(--fw-medium);
+}
+
+.status-agent-btn.status-agent-active::after {
+  content: '';
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+/* status-agent-busy — кнопка агента при занятом терминале (busy).
+ * Используется вместо :disabled, чтобы click-события доходили для double-click обработки.
+ * Hover с opacity: 0.6 намекает, что кнопка интерактивна (double-click назначает агента активным).
+ */
+.status-agent-btn.status-agent-busy {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.status-agent-btn.status-agent-busy:hover {
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+#agent-commands-panel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: var(--space-1);
+}
+
+#agent-commands-panel.hidden { display: none; }
+
+.agent-cmd-group-btn svg { width: 10px; height: 10px; }
+
+/* Снятие оптимистичного busy (SSH без честного OSC 133) — см. StatusBar._createClearOptimisticBusyButton */
+.agent-cmd-clear-busy-btn {
+  color: var(--negative);
+}
+
+.agent-cmd-clear-busy-btn:hover {
+  background: var(--pill-negative-bg);
+  color: var(--negative);
+}
+
+.agent-cmd-clear-busy-btn svg { width: 10px; height: 10px; display: block; }
+
+.stat-add { color: var(--positive); }
+.stat-del { color: var(--negative); }

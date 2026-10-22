@@ -86,3 +86,14 @@ test('matchesHotkey: точное сравнение модификаторов'
   assert.equal(matchesHotkey(ev({ ctrlKey: true }), spec, false), true)
   assert.equal(matchesHotkey(ev({ metaKey: true, key: 'K' }), spec, true), true)
 })
+
+import { clampWidth } from '../../renderer/core/panel-widths.js'
+
+test('clampWidth: ограничивает и отбрасывает не-числа', () => {
+  assert.equal(clampWidth(300, 150, 600), 300)
+  assert.equal(clampWidth(50, 150, 600), 150)
+  assert.equal(clampWidth(9000, 150, 600), 600)
+  assert.equal(clampWidth('260', 150, 600), 260)
+  assert.equal(clampWidth(undefined, 150, 600), null)
+  assert.equal(clampWidth('abc', 150, 600), null)
+})
