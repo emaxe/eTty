@@ -92,6 +92,18 @@ export class TabBar {
       _isActive: false,
     }
 
+    // isBusy выставляется из разных мест index.js: геттер/сеттер синхронизирует индикатор
+    // занятости на вкладке (класс tab-busy) без правок в каждом месте присваивания.
+    let busy = false
+    Object.defineProperty(tab, 'isBusy', {
+      enumerable: true,
+      get: () => busy,
+      set: (value) => {
+        busy = !!value
+        element.classList.toggle('tab-busy', busy)
+      }
+    })
+
     if (insertIndex >= 0 && insertIndex < this.tabs.length) {
       const refEl = this.tabs[insertIndex].element
       this._tabListEl.insertBefore(element, refEl)
@@ -195,6 +207,11 @@ export class TabBar {
     handle.innerHTML = '<svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="6" r="1.2"/><circle cx="6" cy="6" r="1.2"/><circle cx="2" cy="10" r="1.2"/><circle cx="6" cy="10" r="1.2"/></svg>'
 
     el.appendChild(handle)
+
+    const status = document.createElement('span')
+    status.className = 'tab-status'
+    status.setAttribute('aria-hidden', 'true')
+    el.appendChild(status)
 
     if (isSsh) {
       const icon = document.createElement('span')

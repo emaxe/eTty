@@ -13,6 +13,7 @@ import '@fontsource/roboto/400.css'
 import '@fontsource/roboto/500.css'
 import './styles/tokens.css'
 import './styles.css'
+import './styles/shell.css'
 import './components/base/context-menu/context-menu.css'
 import './components/base/button/button.css'
 import './components/base/modal/modal.css'
@@ -57,6 +58,7 @@ import { isLightColor } from './core/color-utils.js'
 import { deriveUiTokens, applyTokens } from './core/theme-tokens.js'
 import { resolveThemeName, watchSystemScheme, isSystemDark } from './core/theme-mode.js'
 import { IS_MAC } from './core/platform.js'
+import { ActivityRail } from './features/shell/activity-rail.js'
 import { createShellCommands, dialectForShellKind, DIALECTS } from './core/shell-commands.js'
 import { diagnostics } from './core/diagnostics.js'
 import { GitStatusService } from './services/git-status-service.js'
@@ -2207,6 +2209,14 @@ async function init() {
   btnUp.addEventListener('click', () => shellCmdToPtyActive(c => c.up()))
   btnHome.addEventListener('click', () => shellCmdToPtyActive(c => c.home()))
 
+  const activityRail = new ActivityRail({
+    railEl: document.getElementById('activity-rail'),
+    eventBus: bus,
+    store: appStore,
+    isMac: IS_MAC,
+    isBlocked: () => settingsPage.isVisible() || gitPanel.isVisible()
+  })
+
   btnToggleSidebar.classList.add('active')
   btnToggleSidebar.addEventListener('click', () => {
     if (settingsPage.isVisible() || gitPanel.isVisible()) return
@@ -2447,6 +2457,7 @@ async function init() {
   // Cleanup function: disconnect observer, clear timer, remove global listeners, destroy container
   function cleanupRenderer() {
     unwatchSystemScheme()
+    activityRail.destroy()
     clearTimeout(resizeDebounceTimer)
     resizeDebounceTimer = null
     if (resizeObserver) {

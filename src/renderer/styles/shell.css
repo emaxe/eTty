@@ -1,0 +1,298 @@
+/*
+ * Оболочка: титлбар с вкладками и activity rail.
+ * Ход стиля — выделение одной линией акцента: активная вкладка и активная кнопка рейла
+ * отмечены линией 2px, остальное — тоном. Акцент больше нигде в хроме не заливается.
+ */
+
+/* ── Titlebar и вкладки ─────────────────────────────────────────── */
+
+#tab-bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+#tab-list {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 100%;
+  min-width: 0;
+}
+
+#tab-list::-webkit-scrollbar {
+  height: 0;
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 120px;
+  max-width: 220px;
+  height: 100%;
+  padding: 0 var(--space-3) 0 var(--space-2);
+  cursor: pointer;
+  font-size: var(--fs-12);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  user-select: none;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+
+.tab:hover {
+  background: var(--active);
+  color: var(--text-secondary);
+}
+
+/* Активная вкладка сливается с областью терминала; линия 2px по ширине подписи */
+.tab.active {
+  background: var(--ground);
+  color: var(--text);
+  margin-bottom: -1px; /* перекрывает нижнюю границу титлбара */
+}
+
+.tab.active::after {
+  content: '';
+  position: absolute;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+/* Индикатор занятости: пульсирует, пока в терминале выполняется команда */
+.tab-status {
+  display: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-round);
+  background: var(--accent);
+  flex-shrink: 0;
+  animation: tab-busy-pulse 1.4s ease-in-out infinite;
+}
+
+.tab.tab-busy .tab-status {
+  display: block;
+}
+
+@keyframes tab-busy-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* SSH-вкладка отличается иконкой, не цветом */
+.tab .tab-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.tab.active .tab-icon {
+  color: var(--text-secondary);
+}
+
+.tab-badge {
+  font-size: var(--fs-11);
+  font-weight: var(--fw-medium);
+  padding: 0 var(--space-1);
+  line-height: 16px;
+  border-radius: var(--radius-chip);
+  background: var(--pill-neutral-bg);
+  color: var(--pill-neutral-ink);
+  flex-shrink: 0;
+  /* «tmux · <имя сессии>» — пользовательское имя не должно раздувать вкладку */
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-folder {
+  font-weight: var(--fw-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-title {
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.tab-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  border-radius: var(--radius-chip);
+  opacity: 0;
+  line-height: 1;
+}
+
+.tab:hover .tab-close,
+.tab.active .tab-close,
+.tab-close:focus-visible {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: var(--active);
+  color: var(--negative);
+}
+
+.tab.active .tab-close:hover {
+  background: var(--raised);
+}
+
+/* Ручка перетаскивания: видна при наведении на вкладку */
+.tab-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--dur-fast);
+}
+
+.tab:hover .tab-drag-handle {
+  opacity: 0.7;
+}
+
+.tab-drag-handle:hover {
+  opacity: 1 !important;
+  color: var(--text);
+}
+
+.fullscreen .tab {
+  cursor: grab;
+}
+
+.tab.dragging {
+  opacity: 0.35;
+}
+
+/* Место вставки при перетаскивании: линия акцента между вкладками */
+.tab-drop-indicator {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: var(--z-panel);
+}
+
+#tab-add {
+  flex-shrink: 0;
+  width: var(--control-h);
+  height: var(--control-h);
+  margin: 0 var(--space-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-control);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#tab-add:hover {
+  color: var(--text);
+  background: var(--active);
+}
+
+/* ── Activity rail ───────────────────────────────────────────────── */
+
+#activity-rail {
+  width: var(--rail-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--space-2) 0;
+  gap: 2px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  user-select: none;
+}
+
+.rail-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  margin-bottom: var(--space-2);
+  color: var(--accent);
+}
+
+.rail-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color var(--dur-fast), background var(--dur-fast);
+}
+
+.rail-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.5;
+}
+
+.rail-btn:hover {
+  color: var(--text);
+  background: var(--active);
+}
+
+.rail-btn.active {
+  color: var(--text);
+}
+
+/* Единая линия акцента на краю: так же отмечены все выбранные элементы */
+.rail-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: var(--space-2);
+  bottom: var(--space-2);
+  width: 2px;
+  background: var(--accent);
+}
+
+.rail-btn.hidden {
+  display: none;
+}
+
+.rail-spacer {
+  flex: 1;
+}

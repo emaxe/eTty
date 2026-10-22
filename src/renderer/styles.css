@@ -99,238 +99,6 @@ body.platform-darwin .window-controls {
   color: #fff;
 }
 
-/* Toolbar */
-#toolbar {
-  display: flex;
-  align-items: center;
-  padding: 0 4px;
-  flex-shrink: 0;
-  height: 100%;
-}
-
-#btn-toggle-sidebar,
-#btn-settings,
-#btn-toggle-editor,
-#btn-toggle-ssh {
-  background: none;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#btn-toggle-sidebar:hover,
-#btn-settings:hover,
-#btn-toggle-editor:hover,
-#btn-toggle-ssh:hover {
-  color: var(--text);
-  background: var(--border);
-}
-
-#btn-settings.active,
-#btn-toggle-editor.active,
-#btn-toggle-sidebar.active,
-#btn-toggle-ssh.active {
-  color: var(--accent);
-}
-
-#btn-toggle-ssh.hidden {
-  display: none;
-}
-
-.toolbar-separator {
-  width: 1px;
-  height: 16px;
-  background: var(--border);
-  align-self: center;
-  flex-shrink: 0;
-}
-
-/* Tab bar */
-#tab-bar {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  height: 100%;
-  position: relative;
-  overflow: hidden;
-}
-
-#tab-list {
-  flex: 0 1 auto;
-  display: flex;
-  align-items: center;
-  overflow-x: auto;
-  overflow-y: hidden;
-  height: 100%;
-  min-width: 0;
-}
-
-#tab-list::-webkit-scrollbar {
-  height: 0;
-}
-
-.tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 120px;
-  max-width: 200px;
-  height: 100%;
-  padding: 0 10px;
-  cursor: pointer;
-  font-size: 12px;
-  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: var(--muted);
-  border-right: 1px solid var(--border);
-  flex-shrink: 0;
-  user-select: none;
-}
-
-.tab.active {
-  background: var(--bg);
-  color: var(--text);
-  border-bottom: 2px solid var(--accent);
-  margin-bottom: -1px; /* перекрываем border-bottom тайтлбара */
-}
-
-/* SSH-вкладка — отличается цветом акцента (иконка + нижняя граница при активности) */
-.tab.tab-ssh .tab-icon {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  color: var(--green);
-}
-
-.tab.tab-ssh.active {
-  border-bottom-color: var(--green);
-}
-
-/* tmux-вкладка (persistence:'tmux') — отдельный акцент, чтобы отличать от обычной SSH-сессии;
-   селектор с обоими классами — специфичнее .tab.tab-ssh.active, чтобы точно победить его */
-.tab.tab-ssh.tab-tmux .tab-icon {
-  color: var(--accent);
-}
-.tab.tab-ssh.tab-tmux.active {
-  border-bottom-color: var(--accent);
-}
-.tab-badge {
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  padding: 1px 4px;
-  border-radius: 3px;
-  background: var(--border);
-  color: var(--subtext);
-  flex-shrink: 0;
-  /* «tmux · <имя сессии>» — пользовательское имя не должно раздувать вкладку */
-  max-width: 90px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tab-folder {
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tab-title {
-  opacity: 0.6;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-
-.tab-close {
-  margin-left: auto;
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  font-size: 11px;
-  padding: 2px 4px;
-  border-radius: 3px;
-  opacity: 0;
-  line-height: 1;
-}
-
-.tab:hover .tab-close,
-.tab.active .tab-close {
-  opacity: 1;
-}
-
-.tab-close:hover {
-  background: var(--red);
-  color: var(--bg);
-}
-
-/* Drag handle — grip icon, always visible */
-.tab-drag-handle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: grab;
-  color: var(--muted);
-  flex-shrink: 0;
-  opacity: 0.5;
-  transition: opacity 0.15s;
-  padding: 0 1px;
-}
-.tab-drag-handle:hover {
-  opacity: 1;
-  color: var(--text);
-}
-.fullscreen .tab {
-  cursor: grab;
-}
-
-/* Tab drag state */
-.tab.dragging {
-  opacity: 0.35;
-}
-
-/* Drop indicator — vertical accent line between tabs */
-.tab-drop-indicator {
-  position: absolute;
-  top: 6px;
-  bottom: 6px;
-  width: 2px;
-  background: var(--accent);
-  border-radius: 1px;
-  pointer-events: none;
-  z-index: 10;
-}
-
-#tab-add {
-  flex-shrink: 0;
-  height: 100%;
-  margin: 0;
-  background: var(--surface);
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 0 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 5;
-}
-
-#tab-add:hover {
-  color: var(--text);
-  background: var(--border);
-}
-
 #workspace {
   display: flex;
   flex-direction: row;
@@ -463,7 +231,7 @@ body.platform-darwin .window-controls {
 /* Line — линия сверху */
 [data-focus-style="line"] #terminal-container.panel-focused::before,
 [data-focus-style="line"] #editor-panel.panel-focused::before {
-  border-top: 2px solid var(--accent);
+  border-top: 1px solid var(--accent);
 }
 
 /* FileTree */
@@ -735,7 +503,7 @@ body.platform-darwin .window-controls {
 
 #settings-overlay {
   position: fixed;
-  inset: var(--titlebar-h) 0 0 0; /* под titlebar */
+  inset: var(--titlebar-h) 0 0 var(--rail-w); /* под titlebar, правее рейла */
   z-index: 500;
   background: var(--bg);
   display: flex;
@@ -1172,7 +940,7 @@ body.platform-darwin .window-controls {
 /* ─── Git Overlay ────────────────────────────────────────────────────────── */
 #git-overlay {
   position: fixed;
-  inset: var(--titlebar-h) 0 var(--statusbar-h) 0;
+  inset: var(--titlebar-h) 0 var(--statusbar-h) var(--rail-w);
   background: var(--bg);
   z-index: 500;
   display: flex;
