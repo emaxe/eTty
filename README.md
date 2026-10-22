@@ -9,6 +9,8 @@
   <img src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white" alt="Electron 33" />
   <img src="https://img.shields.io/badge/mobile-Android%20%7C%20iOS%20%7C%20Flutter-02569A?logo=flutter&logoColor=white" alt="Mobile app: Flutter, Dart (Android, iOS)" />
   <a href="https://github.com/emaxe/eTty/commits"><img src="https://img.shields.io/github/last-commit/emaxe/eTty" alt="Last commit" /></a>
+  <a href="https://github.com/emaxe/eTty/actions/workflows/mobile.yml"><img src="https://github.com/emaxe/eTty/actions/workflows/mobile.yml/badge.svg" alt="Mobile CI" /></a>
+  <a href="https://github.com/emaxe/eTty/actions/workflows/release.yml"><img src="https://github.com/emaxe/eTty/actions/workflows/release.yml/badge.svg" alt="Release build" /></a>
 </p>
 
 Modern terminal emulator built with Electron — file tree, code editor, Git integration and AI agents. Lightweight, fast, and feature-rich.
@@ -148,10 +150,22 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 - **Double-click or right-click to select active agent** — when the terminal is busy but the active agent wasn't auto-detected (e.g., launched manually or via another app), double-click any agent button in the status bar to manually assign it as active. Right-clicking an agent button opens a context menu to launch the agent or select it as already running (especially useful in remote/SSH tabs where busy state may not be reported).
 - **Per-agent Shift+Enter mode** — configure how Shift+Enter behaves for each AI agent (Kitty protocol, newline, or Ctrl+J). Qwen and Agento default to Ctrl+J mode; others fall back to the default mode below.
 
+### Interface
+
+- **Activity rail** on the left — files, project search, Git, editor, SSH panel and settings; the active item is marked with a single accent line
+- **Command palette** — `Cmd+K` / `Ctrl+K` (or `Cmd+Shift+P`): fuzzy search over every app command (panels, tabs, themes, settings) with shortcuts shown next to each
+- **Flat, consistent UI** — one set of design tokens, a single modal/button/toast implementation, visible keyboard focus, context menus operable from the keyboard
+- **Busy indicator on tabs** — a pulsing dot while a command or agent is running
+- **Panel widths are remembered** between launches
+
 ### Settings
 
-- **7 built-in themes:** Catppuccin Mocha (default), Monokai, Dracula, One Dark, Nord, Solarized Dark, Gruvbox Dark
-- **Focus indicator** — glow, border, top-line, or none
+- **14 built-in themes** — **eTty Dark** and **eTty Light** (default), Dark, Light, Catppuccin Mocha/Latte, Monokai Pro, Dracula, One Dark, Nord, Solarized Dark/Light, Gruvbox Dark, GitHub Light, Tokyo Night, Night Owl; every theme gets readable text contrast (≥ 4.5:1) automatically
+- **Light, dark or "follow the system"** — Settings → Appearance; theme picker with live mini-terminal previews
+- **Terminal font** — size, line height and font family, applied on the fly (Settings → Terminal)
+- **Settings sections** — navigation by section, search across all settings, "Saved" stamp, Esc to close, and a read-only list of keyboard shortcuts
+- **Focus indicator** — soft glow frame, 2px frame, top line, or none
+- **Swipe modifier** — vertical two-finger swipes can require Shift, Option or Cmd/Ctrl so they never fight with scrolling (Settings → Terminal)
 - **File tree behavior** — collapse children on close, single/double-click to open
 - **Prompt style** — default (from `~/.zshrc`), short, minimal, arrow (for new tabs)
 - **Status bar size** — compact, standard, or large; adjustable in Settings → Appearance
@@ -199,6 +213,9 @@ Build and run instructions: [mobile/README.md](mobile/README.md).
 
 | Shortcut | Action |
 |----------|--------|
+| `Cmd+K` / `Ctrl+K`, `Cmd+Shift+P` | Command palette |
+| `Cmd+,` / `Ctrl+,` | Open settings |
+| `Cmd+Shift+G` / `Ctrl+Shift+G` | Toggle Git panel |
 | `Cmd+F` / `Ctrl+F` | Open project search dialog |
 | `Cmd+E` / `Ctrl+E` | Toggle editor panel |
 | `Cmd+S` / `Ctrl+S` | Save file in editor |
@@ -349,7 +366,7 @@ All user data is stored in `~/.config/eTty/` (Electron `userData`):
 | File | Purpose |
 |------|---------|
 | `config.json` | App settings (theme, focus indicator, file tree behavior, prompt style, agent proxy, force-disabled agents, custom agents, quick replies, SSH panel position and mode); versioned, deep-merged with defaults on load |
-| `themes/*.json` | User-defined custom themes, loaded alongside the 7 built-ins |
+| `themes/*.json` | User-defined custom themes, loaded alongside the 14 built-ins |
 | `ssh-connections.json` | Saved SSH connections; passwords/passphrases encrypted via `safeStorage` |
 | `tabs-state.json` | Saved tab state for session restore |
 | `history/global.zsh_history` | Shared command history (5000 lines) |
