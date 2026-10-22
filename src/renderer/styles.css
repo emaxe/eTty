@@ -2752,6 +2752,8 @@ button svg {
 .radial-menu-label.highlighted,
 .radial-menu-label.selected {
   fill: var(--accent-ink);
+  /* Обводка нужна для читаемости на тёмных секторах; на акцентной заливке она мешает */
+  stroke: none;
 }
 
 .radial-menu-hub {
