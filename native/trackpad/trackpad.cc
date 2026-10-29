@@ -168,9 +168,23 @@ Napi::Value Stop(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+// Сколько мультитач-устройств видит система сейчас. Нужен для диагностики: после сна список
+// бывает пуст, и start() возвращает false. Побочных эффектов нет — только чтение.
+Napi::Value DeviceCount(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  std::lock_guard<std::mutex> lock(g_mutex);
+  if (!LoadFramework()) return Napi::Number::New(env, 0);
+  CFArrayRef devices = MTDeviceCreateList();
+  if (!devices) return Napi::Number::New(env, 0);
+  CFIndex n = CFArrayGetCount(devices);
+  CFRelease(devices);
+  return Napi::Number::New(env, static_cast<double>(n));
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("start", Napi::Function::New(env, Start));
   exports.Set("stop", Napi::Function::New(env, Stop));
+  exports.Set("deviceCount", Napi::Function::New(env, DeviceCount));
   return exports;
 }
 

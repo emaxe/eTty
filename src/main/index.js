@@ -3,7 +3,7 @@
  * Creates services, wires all IPC handlers via domain modules, instantiates AppService.
  * All application lifecycle logic lives in AppService (window, menu, updater, state save).
  */
-import { app, ipcMain } from 'electron'
+import { app, ipcMain, powerMonitor, screen } from 'electron'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -120,7 +120,7 @@ app.whenReady().then(async () => {
   registerNodeVersionHandlers(ipcMain, { nodeVersionManager })
   registerSshHandlers(ipcMain, { sshStore, sshSessionRegistry, sshConnectionMasters })
   registerClipboardHandlers(ipcMain, { sshSessionRegistry })
-  trackpadService = new TrackpadGestureService({ getWindow: () => appService.mainWindow })
+  trackpadService = new TrackpadGestureService({ getWindow: () => appService.mainWindow, app, powerMonitor, screen, log })
   registerTrackpadHandlers(ipcMain, { trackpadService })
 
   ipcMain.on(IPC_CHANNELS.TABS_STATE_CHANGED, () => appService.rebuildMenu())
