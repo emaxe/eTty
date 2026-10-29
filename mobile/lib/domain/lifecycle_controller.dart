@@ -72,7 +72,7 @@ class LifecycleController {
     required this.exec,
     this.socketName = SshSessionConfig.defaultSocket,
     Duration graceDuration = const Duration(milliseconds: backgroundGraceMs),
-  }) : _graceDuration = graceDuration;
+  }) : _graceDuration = graceDuration; // ignore: prefer_initializing_formals
 
   /// Канал для одноразовых ресинк-exec'ов (`ExecChannel` на общем `SshConnection` страницы
   /// терминала) — не связан ни с одной конкретной вкладкой.

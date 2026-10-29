@@ -74,7 +74,7 @@ class SshFsProvider {
     required this.statFlavorGnu,
     required this.find0,
     String Function(String dirPath, String name)? joinFn,
-  }) : _root = root,
+  }) : _root = root, // ignore: prefer_initializing_formals
        _joinFn = joinFn ?? ((dir, name) => PathUtils.posix.join(dir, [name]));
 
   final RemoteExec exec;

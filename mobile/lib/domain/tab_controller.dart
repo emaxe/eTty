@@ -68,8 +68,8 @@ class TabController {
     this.onBusyChange,
     this.onClipboardWrite,
   }) : assert(persistence == 'off' || persistence == 'tmux'),
-       _cols = cols,
-       _rows = rows,
+       _cols = cols, // ignore: prefer_initializing_formals
+       _rows = rows, // ignore: prefer_initializing_formals
        sessionName = persistence == 'tmux'
            ? (sessionName ??
                  pickFreeSessionName(

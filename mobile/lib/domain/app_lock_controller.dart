@@ -25,7 +25,7 @@ enum AppLockState {
 /// цикл ОС, ни про хранилище настроек.
 class AppLockController {
   AppLockController({required this.gate, bool enabled = false})
-    : _enabled = enabled;
+    : _enabled = enabled; // ignore: prefer_initializing_formals
 
   final BiometricGate gate;
   bool _enabled;
