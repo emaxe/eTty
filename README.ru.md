@@ -11,7 +11,7 @@
   <a href="https://github.com/emaxe/eTty/commits"><img src="https://img.shields.io/github/last-commit/emaxe/eTty" alt="Последний коммит" /></a>
   <a href="https://github.com/emaxe/eTty/actions/workflows/mobile.yml"><img src="https://github.com/emaxe/eTty/actions/workflows/mobile.yml/badge.svg" alt="CI мобильного приложения" /></a>
   <a href="https://github.com/emaxe/eTty/actions/workflows/release.yml"><img src="https://github.com/emaxe/eTty/actions/workflows/release.yml/badge.svg" alt="Релизная сборка" /></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-0.9.1-blue" alt="Changelog" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-0.9.2-blue" alt="Changelog" /></a>
 </p>
 
 Современный эмулятор терминала на базе Electron — дерево файлов, редактор кода, Git-интеграция и ИИ-агенты. Лёгкий, быстрый и функциональный.
@@ -25,7 +25,7 @@
 ### Терминал
 
 - **Несколько вкладок** с независимыми сессиями шелла (zsh на macOS/Linux; PowerShell 7 / Windows PowerShell 5.1 / Git Bash / `cmd.exe` на Windows, выбор в Настройки → Терминал)
-- **Рендеринг с ускорением WebGL** (резерв — canvas)
+- **Выбор движка рендеринга терминала** — Canvas 2D (по умолчанию, стабильный), WebGL (ускорение на GPU) или DOM, переключается в Настройки → Терминал; автоматическое восстановление после потери контекста GPU и ремонт атласа текстур
 - **Протокол клавиатуры Kitty** — Shift+Enter, Ctrl+Enter, Ctrl+Shift+Enter
 - **Полная поддержка Unicode** — кириллица, диакритика, эмодзи
 - **Отслеживание директории оболочки** через OSC 7 — дерево файлов синхронизируется автоматически
@@ -235,7 +235,7 @@
 |-----------|-----------|
 | Desktop shell | Electron 33 |
 | Сборка | electron-vite (на базе Vite) |
-| UI терминала | xterm.js 5.5 + WebGL, Fit, WebLinks, Search addons |
+| UI терминала | xterm.js 5.5 + Canvas/WebGL/DOM, Fit, WebLinks, Search addons |
 | PTY backend | node-pty 1.1 (нативный модуль) |
 | Редактор кода | CodeMirror 6 с 13 языковыми пакетами (JS/TS, Python, Go, Rust, HTML, CSS, JSON, YAML, Markdown, Vue, C#) |
 | Git-операции | simple-git |

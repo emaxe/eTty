@@ -232,6 +232,23 @@ export class SettingsPage {
           (val) => this._setTerminal('fontFamily', val)
         )
       },
+      {
+        label: 'Движок рендеринга терминала',
+        control: this._createSelect(
+          [
+            { key: 'canvas', name: 'Canvas 2D (рекомендуется — стабильный, без артефактов)' },
+            { key: 'webgl', name: 'WebGL (аппаратное ускорение на GPU)' },
+            { key: 'dom', name: 'DOM (без Canvas/GPU, чистый HTML)' }
+          ],
+          this._config.terminal?.renderer || 'canvas',
+          (val) => {
+            if (!this._config.terminal) this._config.terminal = {}
+            this._config.terminal.renderer = val
+            this._bus.emit('settings.changed', { key: 'terminal.renderer', value: val })
+            this._scheduleSave()
+          }
+        )
+      },
       ...(this._api.platform === 'win32' ? [{
         label: 'Оболочка (для новых вкладок)',
         control: this._createSelect(

@@ -11,7 +11,7 @@
   <a href="https://github.com/emaxe/eTty/commits"><img src="https://img.shields.io/github/last-commit/emaxe/eTty" alt="Last commit" /></a>
   <a href="https://github.com/emaxe/eTty/actions/workflows/mobile.yml"><img src="https://github.com/emaxe/eTty/actions/workflows/mobile.yml/badge.svg" alt="Mobile CI" /></a>
   <a href="https://github.com/emaxe/eTty/actions/workflows/release.yml"><img src="https://github.com/emaxe/eTty/actions/workflows/release.yml/badge.svg" alt="Release build" /></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-0.9.1-blue" alt="Changelog" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-0.9.2-blue" alt="Changelog" /></a>
 </p>
 
 Modern terminal emulator built with Electron — file tree, code editor, Git integration and AI agents. Lightweight, fast, and feature-rich.
@@ -25,7 +25,7 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 ### Terminal
 
 - **Multiple tabs** with independent shell sessions (zsh on macOS/Linux; PowerShell 7 / Windows PowerShell 5.1 / Git Bash / `cmd.exe` on Windows, selectable in Settings → Terminal)
-- **WebGL-accelerated** rendering (canvas fallback)
+- **Configurable terminal renderer** — Canvas 2D (default, stable), WebGL (GPU-accelerated) or DOM, switchable in Settings → Terminal; automatic WebGL context-loss recovery and texture-atlas repair
 - **Kitty keyboard protocol** — Shift+Enter, Ctrl+Enter, Ctrl+Shift+Enter sequences
 - **Full Unicode support** — Cyrillic, accented characters, emoji
 - **Shell directory tracking** via OSC 7 — file tree syncs automatically
@@ -235,7 +235,7 @@ Build and run instructions: [mobile/README.md](mobile/README.md).
 |-----------|-----------|
 | Desktop shell | Electron 33 |
 | Build tooling | electron-vite (Vite-based) |
-| Terminal UI | xterm.js 5.5 + WebGL, Fit, WebLinks, Search addons |
+| Terminal UI | xterm.js 5.5 + Canvas/WebGL/DOM, Fit, WebLinks, Search addons |
 | PTY backend | node-pty 1.1 (native module) |
 | Code editor | CodeMirror 6 with 13 language packages (JS/TS, Python, Go, Rust, HTML, CSS, JSON, YAML, Markdown, Vue, C#) |
 | Git operations | simple-git |

@@ -29,6 +29,7 @@ export function getConfigDefaults() {
       promptStyle: 'default',
       // Windows: auto | pwsh | powershell | cmd | gitbash | <путь к exe>; на macOS/Linux не используется
       shell: 'auto',
+      renderer: 'canvas', // canvas | webgl | dom
       newTabPlacement: 'modifierAdjacent',
       tabSwitchHotkey: 'none',
       // Открытие ссылок терминала в системном браузере: click | cmd-click (Cmd на macOS, Ctrl на остальных)
@@ -137,6 +138,9 @@ function deepMergeConfig(defaults, saved, warnings, path = '') {
     } else if (typeof defaultValue === 'string') {
       if (typeof savedValue !== 'string') {
         warnings.push(`Invalid type for ${currentPath}: expected string, got ${typeof savedValue}. Using default.`)
+        result[key] = defaultValue
+      } else if (currentPath === 'terminal.renderer' && !['canvas', 'webgl', 'dom'].includes(savedValue)) {
+        warnings.push(`Invalid value for ${currentPath}: "${savedValue}". Expected "canvas", "webgl", or "dom". Using default.`)
         result[key] = defaultValue
       } else {
         result[key] = savedValue

@@ -16,4 +16,14 @@ export const TERMINAL_CONFIG = Object.freeze({
   // постраничный deltaMode колеса перед накоплением.
   WHEEL_PX_PER_TICK: 50,
   WHEEL_PX_PER_LINE: 34,
+  // Terminal renderer options
+  DEFAULT_RENDERER: 'canvas',
+  RENDERERS: Object.freeze({
+    CANVAS: 'canvas',
+    WEBGL: 'webgl',
+    DOM: 'dom'
+  }),
+  // WebGL safety & auto-recovery thresholds
+  WEBGL_MAX_ATLAS_PAGES: 3,
+  WEBGL_ATLAS_CLEAR_DEBOUNCE_MS: 1000,
 })

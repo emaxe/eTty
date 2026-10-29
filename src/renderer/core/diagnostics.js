@@ -111,9 +111,9 @@ class Diagnostics {
   }
 
   /** Track xterm.js buffer state per tab. */
-  recordXtermState(pid, bufferLength, cursorY, isWebGL) {
+  recordXtermState(pid, bufferLength, cursorY, rendererType = 'canvas') {
     this._xtermStates = this._xtermStates || new Map()
-    this._xtermStates.set(pid, { bufferLength, cursorY, isWebGL })
+    this._xtermStates.set(pid, { bufferLength, cursorY, rendererType })
   }
 
   _ptyStats() {
@@ -129,8 +129,8 @@ class Diagnostics {
     if (!this._xtermStates) return {}
     const result = {}
     for (const [pid, state] of this._xtermStates) {
-      // C = Canvas renderer (WebGL disabled due to GPU texture leaks with AI agents)
-      result[pid] = `${state.bufferLength}L@${state.cursorY}yC`
+      const typeCode = state.rendererType === 'webgl' ? 'W' : (state.rendererType === 'dom' ? 'D' : 'C')
+      result[pid] = `${state.bufferLength}L@${state.cursorY}y${typeCode}`
     }
     return result
   }

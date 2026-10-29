@@ -5,9 +5,9 @@
  */
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { SearchAddon } from '@xterm/addon-search'
+import { TerminalRendererService } from './features/terminal/terminal-renderer.js'
 import '@xterm/xterm/css/xterm.css'
 import '@fontsource/roboto/400.css'
 import '@fontsource/roboto/500.css'
@@ -376,6 +376,11 @@ async function init() {
     eventBus: r('bus'),
     store: r('store'),
   }))
+  container.register('terminalRendererService', (r) => new TerminalRendererService({
+    eventBus: r('bus'),
+    store: r('store'),
+  }))
+  const terminalRenderer = container.resolve('terminalRendererService')
   const agentCommands = new Map()
 
   const applyAgentCommands = (statusPayload) => {
@@ -626,6 +631,7 @@ async function init() {
     document.title = tab.termTitle || 'eTty'
     updateNavButtons()
     syncStatusBarTerminalState()
+    terminalRenderer.onTabActivated(tab)
     statusBar.updateNow()
     retargetGit(tab)
     // Первый ресинк при attach мог не сработать — пока агент не опознан, спрашиваем ещё раз
@@ -1381,6 +1387,11 @@ async function init() {
     if (key === 'terminal.tabSwitchHotkey') {
       tabSwitchHotkey = value
     }
+    if (key === 'terminal.renderer') {
+      if (!config.terminal) config.terminal = {}
+      config.terminal.renderer = value
+      terminalRenderer.setRendererTypeForAll(value)
+    }
     if (['terminal.fontSize', 'terminal.lineHeight', 'terminal.fontFamily'].includes(key)) {
       if (!config.terminal) config.terminal = {}
       config.terminal[key.slice('terminal.'.length)] = value
@@ -1480,7 +1491,7 @@ async function init() {
     // Track xterm.js buffer state for diagnostics
     try {
       const buffer = tab.term.buffer?.active
-      diagnostics.recordXtermState(pid, buffer?.length || 0, buffer?.cursorY || 0, false)
+      diagnostics.recordXtermState(pid, buffer?.length || 0, buffer?.cursorY || 0, tab._rendererType || 'canvas')
     } catch (e) { /* ignore */ }
   })
 
@@ -1853,12 +1864,8 @@ async function init() {
       }
     })
 
-    // WebGL addon — try to load for better rendering performance, fallback to canvas
-    try {
-      tab.term.loadAddon(new WebglAddon())
-    } catch (e) {
-      console.warn('WebGL addon failed, using canvas renderer:', e)
-    }
+    // Terminal renderer (Canvas 2D / WebGL / DOM) with safety & auto-recovery
+    terminalRenderer.attach(tab, config.terminal?.renderer || TERMINAL_CONFIG.DEFAULT_RENDERER)
   }
 
   /**
@@ -2101,6 +2108,7 @@ async function init() {
       for (let i = oldCount - 1; i >= 0; i--) {
         const tab = tabBar.tabs[i]
         tab._sshOverlay?.destroy()
+        terminalRenderer.detach(tab)
         if (tab.pid != null) api.ptyKill(tab.pid)
         tab.term.dispose()
         tab.container.remove()
@@ -2288,6 +2296,17 @@ async function init() {
     {
       id: 'tab.close', group: 'Вкладки', title: 'Закрыть вкладку', when: () => !tabBar.disabled && !!tabBar.getActive(),
       run: () => bus.emit('tab.close.request', { tabs: [tabBar.getActive()] })
+    },
+    {
+      id: 'terminal.recover-renderer',
+      group: 'Терминал',
+      title: 'Восстановить рендерер терминала',
+      keywords: ['артефакты', 'глитч', 'webgl', 'текстуры', 'очистить', 'восстановление'],
+      when: () => !tabBar.disabled && !!tabBar.getActive(),
+      run: () => {
+        const activeTab = tabBar.getActive()
+        if (activeTab) terminalRenderer.recover(activeTab)
+      }
     },
     {
       id: 'theme.auto', group: 'Оформление', title: 'Тема: как в системе', keywords: ['светлая', 'тёмная', 'авто'],

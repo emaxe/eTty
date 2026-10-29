@@ -128,6 +128,7 @@ export class TabBar {
 
   removeTab(index) {
     const tab = this.tabs[index]
+    tab._rendererCleanup?.()
     tab.term.dispose()
     tab.container.remove()
     tab.element.remove()
@@ -331,6 +332,7 @@ export class TabBar {
 
   destroy() {
     for (const tab of this.tabs) {
+      tab._rendererCleanup?.()
       tab.term.dispose()
       tab.container.remove()
       tab.element.remove()
