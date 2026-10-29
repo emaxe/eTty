@@ -78,8 +78,41 @@ jobs:
           name: app-mac-x64
           path: dist/*.dmg
 
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: 'stable'
+          cache: true
+
+      - name: flutter pub get
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: flutter build apk --release
+        working-directory: mobile
+        # Подпись релизного APK сейчас debug-ключом (mobile/android/app/build.gradle.kts):
+        # для сайдлоада годится, для Google Play нужен свой keystore и secrets.
+        run: flutter build apk --release
+
+      - name: Rename APK
+        working-directory: mobile
+        run: |
+          VERSION=$(sed -n 's/^version: *\([^+]*\).*/\1/p' pubspec.yaml)
+          mv build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/eTty-mobile-${VERSION}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-android
+          path: mobile/build/app/outputs/flutter-apk/*.apk
+
   release:
-    needs: [build-win-x64, build-mac-arm64, build-mac-x64]
+    needs: [build-win-x64, build-mac-arm64, build-mac-x64, build-android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,6 +129,10 @@ jobs:
         with:
           name: app-mac-x64
           path: dist/mac-x64
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-android
+          path: dist/android
 
       - name: Resolve version
         id: version
@@ -126,6 +163,7 @@ jobs:
             dist/win-x64/*
             dist/mac-arm64/*
             dist/mac-x64/*
+            dist/android/*
 
       - name: Create or update release
         if: github.event_name == 'workflow_dispatch'
@@ -138,3 +176,4 @@ jobs:
             dist/win-x64/*
             dist/mac-arm64/*
             dist/mac-x64/*
+            dist/android/*
