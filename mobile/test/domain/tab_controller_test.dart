@@ -210,6 +210,57 @@ void main() {
     );
   });
 
+  group('TabController — OSC 52: буфер обмена', () {
+    /// Прогоняет [chunk] через вывод сессии; возвращает (записи в буфер, декодированный output).
+    Future<(List<String>, String)> run(String chunk) async {
+      final stdoutController = StreamController<Uint8List>();
+      when(session.stdout).thenAnswer((_) => stdoutController.stream);
+      final clipboard = <String>[];
+      final controller = TabController(
+        clientSource: clientSource,
+        connectionId: 'c1',
+        cols: 80,
+        rows: 24,
+        persistence: 'off',
+        onClipboardWrite: clipboard.add,
+      );
+      final outputBytes = <int>[];
+      controller.output.listen(outputBytes.addAll);
+
+      await controller.connect();
+      await _settle();
+      stdoutController.add(_bytes(chunk));
+      await stdoutController.close();
+      await _settle();
+
+      return (clipboard, utf8.decode(outputBytes));
+    }
+
+    test('OSC 52 из вывода вызывает onClipboardWrite и не попадает в output', () async {
+      final b64 = base64.encode(utf8.encode('copy me'));
+      final (clipboard, output) = await run('a\x1b]52;c;$b64\x07b');
+      expect(clipboard, ['copy me']);
+      expect(output, 'ab');
+    });
+
+    test('OSC 52 с пустым payload очищает буфер (колбэк с пустой строкой)', () async {
+      final (clipboard, output) = await run('\x1b]52;c;\x07');
+      expect(clipboard, ['']);
+      expect(output, '');
+    });
+
+    test('OSC 52 с запросом чтения (?) колбэк не вызывает', () async {
+      final (clipboard, _) = await run('\x1b]52;c;?\x07');
+      expect(clipboard, isEmpty);
+    });
+
+    test('OSC 52 с битым base64 игнорируется', () async {
+      final (clipboard, output) = await run('a\x1b]52;c;%%%\x07b');
+      expect(clipboard, isEmpty);
+      expect(output, 'ab');
+    });
+  });
+
   group('TabController — REQ-12: перехват tmux-сессии', () {
     test(
       'persistence=tmux, exitCode 0 после успешного connect -> intercepted',

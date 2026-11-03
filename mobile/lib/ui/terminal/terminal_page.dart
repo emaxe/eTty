@@ -21,6 +21,7 @@ import 'package:mobile/domain/lifecycle_controller.dart';
 import 'package:mobile/domain/quick_commands.dart';
 import 'package:mobile/domain/tab_controller.dart' as domain;
 import 'package:mobile/platform/foreground_service.dart';
+import 'package:mobile/platform/system_clipboard.dart';
 import 'package:mobile/domain/tmux_sessions.dart';
 import 'package:mobile/transport/exec_channel.dart';
 import 'package:mobile/transport/ssh_connection.dart';
@@ -260,6 +261,8 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
       takenSessionNames: takenSessionNames,
       sessionName: sessionName,
       startDir: startDir,
+      // OSC 52 из TUI-приложения (tmux copy-mode, vim и т.п.) → системный буфер обмена.
+      onClipboardWrite: writeSystemClipboard,
     );
     final tab = _TerminalTab(controller: controller);
     _lifecycleController?.register(tab);
@@ -527,7 +530,9 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
                           theme: terminalTheme,
                           brightness: brightness,
                           quickActions: quickActions,
-                          commandGroups: commandGroups,
+                          commandGroups: QuickCommandsDefaults.withClipboard(
+                            commandGroups,
+                          ),
                           onAttach: _attachFile,
                         ),
                     ],
