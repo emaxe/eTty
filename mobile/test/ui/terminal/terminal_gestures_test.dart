@@ -302,10 +302,12 @@ void main() {
     final viewKey = GlobalKey<xterm.TerminalViewState>();
 
     String? clipboardText;
+    bool clipboardWriteFails = false;
     late List<String> clipboardWrites;
 
     void mockClipboard() {
       clipboardText = null;
+      clipboardWriteFails = false;
       clipboardWrites = [];
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(SystemChannels.platform, (call) async {
@@ -313,6 +315,7 @@ void main() {
           case 'Clipboard.getData':
             return clipboardText == null ? null : {'text': clipboardText};
           case 'Clipboard.setData':
+            if (clipboardWriteFails) throw PlatformException(code: 'boom');
             clipboardWrites.add((call.arguments as Map)['text'] as String);
             return null;
         }
@@ -603,6 +606,27 @@ void main() {
       expect(clipboardWrites.single, contains('\n'));
       expect(clipboardWrites.single, contains('one'));
       expect(clipboardWrites.single, contains('two'));
+    });
+
+    testWidgets('ошибка записи в буфер — снек, выделение остаётся', (tester) async {
+      await pump(
+        tester,
+        isTmux: false,
+        groups: QuickCommandsDefaults.withClipboard(const []),
+      );
+      terminal.write('hello world');
+      controller.setSelection(
+        terminal.buffer.createAnchor(0, 0),
+        terminal.buffer.createAnchor(11, 0),
+      );
+      clipboardWriteFails = true;
+      await openCommands(tester);
+      await tester.tapAt(const Offset(400, 375));
+      await tester.pumpAndSettle();
+      expect(clipboardWrites, isEmpty);
+      expect(controller.selection, isNotNull);
+      expect(find.text('Не удалось записать в буфер обмена'), findsOneWidget);
+      expect(find.textContaining('Скопировано'), findsNothing);
     });
 
     testWidgets('нет выделения — снек, буфер не тронут', (tester) async {

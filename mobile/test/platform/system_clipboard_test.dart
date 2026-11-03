@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/platform/system_clipboard.dart';
@@ -42,6 +43,22 @@ void main() {
   test('writeSystemClipboard: PlatformException не пробрасывается', () async {
     mockPlatform((call) async => throw PlatformException(code: 'boom'));
     await expectLater(writeSystemClipboard('x'), completes);
+  });
+
+  test('writeSystemClipboard возвращает true при успешной записи', () async {
+    mockPlatform((call) async => null);
+    expect(await writeSystemClipboard('x'), isTrue);
+  });
+
+  test('writeSystemClipboard возвращает false при ошибке платформы и пишет лог', () async {
+    final logs = <String>[];
+    final original = debugPrint;
+    debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
+    addTearDown(() => debugPrint = original);
+    mockPlatform((call) async => throw PlatformException(code: 'boom'));
+
+    expect(await writeSystemClipboard('x'), isFalse);
+    expect(logs.single, contains('буфер'));
   });
 
   test('readSystemClipboard: PlatformException — null', () async {

@@ -633,7 +633,8 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
   }
 
   /// «⧉ Копировать»: выделение xterm → системный буфер. Без выделения — снек, буфер не трогаем.
-  /// Выделение снимается после успешной записи: дальше оно не нужно и мешает чтению вывода.
+  /// Выделение снимается только после успешной записи: при отказе платформы оно остаётся, чтобы
+  /// пользователь мог повторить, а вместо ложного «Скопировано» показывается ошибка.
   Future<void> _copySelectionToClipboard() async {
     final selection = widget.controller.selection;
     final text = selection == null ? '' : widget.terminal.buffer.getText(selection);
@@ -641,8 +642,12 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
       _snack('Нет выделения: выделите текст long-press');
       return;
     }
-    await writeSystemClipboard(text);
+    final written = await writeSystemClipboard(text);
     if (!mounted) return;
+    if (!written) {
+      _snack('Не удалось записать в буфер обмена');
+      return;
+    }
     widget.controller.clearSelection();
     _snack('Скопировано: ${text.length} симв.');
   }
