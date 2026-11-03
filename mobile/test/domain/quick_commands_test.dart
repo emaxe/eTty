@@ -60,4 +60,44 @@ void main() {
       }
     });
   });
+
+  group('встроенная группа «Буфер»', () {
+    test('withClipboard ставит «Буфер» первым сектором и не теряет группы', () {
+      final composed = QuickCommandsDefaults.withClipboard(
+        QuickCommandsDefaults.groups,
+      );
+      expect(composed.first.id, 'g-clipboard');
+      expect(composed.first.label, 'Буфер');
+      expect(composed.length, QuickCommandsDefaults.groups.length + 1);
+      expect(composed.sublist(1), QuickCommandsDefaults.groups);
+    });
+
+    test('«Буфер»: подписи и действия paste/copy', () {
+      final commands = QuickCommandsDefaults.clipboardGroup.commands;
+      expect(commands.map((c) => c.label), ['📋 Вставить', '⧉ Копировать']);
+      expect(commands.map((c) => c.kind), [
+        QuickCommandKind.paste,
+        QuickCommandKind.copy,
+      ]);
+    });
+
+    test('copyWith сохраняет kind', () {
+      const c = QuickCommand(
+        id: 'x',
+        label: 'A',
+        text: '',
+        kind: QuickCommandKind.copy,
+      );
+      expect(c.copyWith(label: 'B').kind, QuickCommandKind.copy);
+    });
+
+    test('kind не попадает в JSON и читается как text', () {
+      final json = encodeQuickCommands(
+        QuickCommandsDefaults.withClipboard(const []),
+      );
+      expect(json.contains('"kind"'), isFalse);
+      final decoded = decodeQuickCommands(json)!;
+      expect(decoded.single.commands.first.kind, QuickCommandKind.text);
+    });
+  });
 }

@@ -117,4 +117,13 @@ void main() {
     expect(find.text('Своя'), findsNothing);
     expect(find.text('Ответы'), findsOneWidget);
   });
+
+  testWidgets('встроенная группа «Буфер» в настройках не показывается', (
+    tester,
+  ) async {
+    await pump(tester);
+
+    expect(find.text('Буфер'), findsNothing);
+    expect(find.text('📋 Вставить'), findsNothing);
+  });
 }

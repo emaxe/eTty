@@ -2,16 +2,38 @@ import 'dart:convert';
 
 import 'package:mobile/core/config/quick_actions_config.dart';
 
+/// Что делает команда колеса при выборе сектора. Задаётся только кодом: в JSON поле `kind`
+/// не сохраняется и не читается, поэтому подсунуть действие через конфиг нельзя — пользовательские
+/// команды всегда [text].
+enum QuickCommandKind {
+  /// Записать [QuickCommand.text] в канал (`terminal.paste`).
+  text,
+
+  /// Скопировать текущее выделение xterm в системный буфер обмена.
+  copy,
+
+  /// Вставить текст из системного буфера обмена в канал.
+  paste,
+}
+
 /// Пользовательская команда второго колеса: [text] вставляется в терминал без Enter.
 class QuickCommand {
-  const QuickCommand({required this.id, required this.label, required this.text});
+  const QuickCommand({
+    required this.id,
+    required this.label,
+    required this.text,
+    this.kind = QuickCommandKind.text,
+  });
 
   final String id;
   final String label;
   final String text;
 
+  /// Вид действия; для пользовательских команд всегда [QuickCommandKind.text].
+  final QuickCommandKind kind;
+
   QuickCommand copyWith({String? label, String? text}) =>
-      QuickCommand(id: id, label: label ?? this.label, text: text ?? this.text);
+      QuickCommand(id: id, label: label ?? this.label, text: text ?? this.text, kind: kind);
 
   Map<String, Object?> toJson() => {'id': id, 'label': label, 'text': text};
 }
@@ -43,6 +65,34 @@ class QuickCommandGroup {
 
 /// Примеры по умолчанию — для Claude Code (на десктопе аналог: плоский список quickReplies).
 abstract final class QuickCommandsDefaults {
+  /// Встроенная группа буфера обмена — всегда первый сектор колеса команд. В настройках не
+  /// показывается и в `AppSettingsStore` не хранится: её состав задаёт код (см. [withClipboard]).
+  static const QuickCommandGroup clipboardGroup = QuickCommandGroup(
+    id: 'g-clipboard',
+    label: 'Буфер',
+    commands: [
+      QuickCommand(
+        id: 'c-clipboard-paste',
+        label: '📋 Вставить',
+        text: '',
+        kind: QuickCommandKind.paste,
+      ),
+      QuickCommand(
+        id: 'c-clipboard-copy',
+        label: '⧉ Копировать',
+        text: '',
+        kind: QuickCommandKind.copy,
+      ),
+    ],
+  );
+
+  /// Группы для колеса терминала: встроенный «Буфер» + пользовательские группы в их порядке.
+  /// Вход не мутируется. Редактор настроек читает провайдер напрямую и этой функции не использует.
+  static List<QuickCommandGroup> withClipboard(List<QuickCommandGroup> groups) => [
+    clipboardGroup,
+    ...groups,
+  ];
+
   static const List<QuickCommandGroup> groups = [
     QuickCommandGroup(
       id: 'g-answers',
