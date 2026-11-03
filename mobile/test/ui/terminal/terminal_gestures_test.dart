@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/config/ssh_session_config.dart';
 import 'package:mobile/core/config/terminal_gesture_config.dart';
@@ -295,9 +296,35 @@ void main() {
 
   group('TerminalGestureLayer', () {
     late xterm.Terminal terminal;
+    late xterm.TerminalController controller;
     late List<String> out;
     late List<String> raw;
     final viewKey = GlobalKey<xterm.TerminalViewState>();
+
+    String? clipboardText;
+    late List<String> clipboardWrites;
+
+    void mockClipboard() {
+      clipboardText = null;
+      clipboardWrites = [];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        switch (call.method) {
+          case 'Clipboard.getData':
+            return clipboardText == null ? null : {'text': clipboardText};
+          case 'Clipboard.setData':
+            clipboardWrites.add((call.arguments as Map)['text'] as String);
+            return null;
+        }
+        return null;
+      });
+    }
+
+    setUp(mockClipboard);
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
 
     Future<void> pump(
       WidgetTester tester, {
@@ -308,7 +335,7 @@ void main() {
       out = [];
       raw = [];
       terminal = xterm.Terminal()..onOutput = out.add;
-      final controller = xterm.TerminalController();
+      controller = xterm.TerminalController();
       final scroll = ScrollController();
       addTearDown(controller.dispose);
       addTearDown(scroll.dispose);
@@ -511,6 +538,147 @@ void main() {
       expect(find.byType(QuickActionWheel), findsNothing);
       expect(find.textContaining('Нет быстрых команд'), findsOneWidget);
       await tester.pumpAndSettle(const Duration(seconds: 5));
+    });
+
+
+    testWidgets('«Вставить» шлёт текст из системного буфера в канал', (tester) async {
+      await pump(
+        tester,
+        isTmux: false,
+        groups: QuickCommandsDefaults.withClipboard(const []),
+      );
+      clipboardText = 'ls -la';
+      await openCommands(tester);
+      await tester.tapAt(const Offset(400, 225)); // «Вставить» — сектор 0 из 2
+      await tester.pumpAndSettle();
+      expect(out, ['ls -la']);
+    });
+
+    testWidgets('пустой буфер — снек и ничего в канал', (tester) async {
+      await pump(
+        tester,
+        isTmux: false,
+        groups: QuickCommandsDefaults.withClipboard(const []),
+      );
+      await openCommands(tester);
+      await tester.tapAt(const Offset(400, 225));
+      await tester.pumpAndSettle();
+      expect(out, isEmpty);
+      expect(find.text('Буфер обмена пуст'), findsOneWidget);
+    });
+
+    testWidgets('«Копировать» пишет выделение в буфер и снимает его', (tester) async {
+      await pump(
+        tester,
+        isTmux: false,
+        groups: QuickCommandsDefaults.withClipboard(const []),
+      );
+      terminal.write('hello world');
+      controller.setSelection(
+        terminal.buffer.createAnchor(0, 0),
+        terminal.buffer.createAnchor(11, 0),
+      );
+      await openCommands(tester);
+      await tester.tapAt(const Offset(400, 375)); // «Копировать» — сектор 1 из 2
+      await tester.pumpAndSettle();
+      expect(clipboardWrites.single, contains('hello world'));
+      expect(controller.selection, isNull);
+      expect(out, isEmpty);
+    });
+
+    testWidgets('многострочное выделение копируется с переводами строк', (tester) async {
+      await pump(
+        tester,
+        isTmux: false,
+        groups: QuickCommandsDefaults.withClipboard(const []),
+      );
+      terminal.write('one\r\ntwo');
+      controller.setSelection(
+        terminal.buffer.createAnchor(0, 0),
+        terminal.buffer.createAnchor(3, 1),
+      );
+      await openCommands(tester);
+      await tester.tapAt(const Offset(400, 375));
+      await tester.pumpAndSettle();
+      expect(clipboardWrites.single, contains('\n'));
+      expect(clipboardWrites.single, contains('one'));
+      expect(clipboardWrites.single, contains('two'));
+    });
+
+    testWidgets('нет выделения — снек, буфер не тронут', (tester) async {
+      await pump(
+        tester,
+        isTmux: false,
+        groups: QuickCommandsDefaults.withClipboard(const []),
+      );
+      await openCommands(tester);
+      await tester.tapAt(const Offset(400, 375));
+      await tester.pumpAndSettle();
+      expect(clipboardWrites, isEmpty);
+      expect(
+        find.text('Нет выделения: выделите текст long-press'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('«Буфер» — первый сектор корня при пользовательских группах', (tester) async {
+      await pump(
+        tester,
+        isTmux: false,
+        groups: QuickCommandsDefaults.withClipboard(
+          QuickCommandsDefaults.groups,
+        ),
+      );
+      clipboardText = 'pwd';
+      await openCommands(tester);
+      await tester.tapAt(const Offset(400, 225)); // сектор 0 из 4 — «Буфер»
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(400, 225)); // «Вставить» внутри группы
+      await tester.pumpAndSettle();
+      expect(out, ['pwd']);
+    });
+
+    testWidgets('открытие колеса команд не сбрасывает выделение', (tester) async {
+      await pump(
+        tester,
+        isTmux: false,
+        groups: QuickCommandsDefaults.withClipboard(const []),
+      );
+      terminal.write('hello world');
+      controller.setSelection(
+        terminal.buffer.createAnchor(0, 0),
+        terminal.buffer.createAnchor(11, 0),
+      );
+      await openCommands(tester);
+      expect(controller.selection, isNotNull);
+    });
+
+    testWidgets('вставка сохраняет переводы строк и не режет большой текст', (tester) async {
+      final big = '${'x' * 10000}\r\nsecond line\r\n';
+      await pump(
+        tester,
+        isTmux: false,
+        groups: QuickCommandsDefaults.withClipboard(const []),
+      );
+      clipboardText = big;
+      await openCommands(tester);
+      await tester.tapAt(const Offset(400, 225));
+      await tester.pumpAndSettle();
+      expect(out, [big]);
+    });
+
+    testWidgets('вставка оборачивается в bracketed paste, если режим включён', (tester) async {
+      await pump(
+        tester,
+        isTmux: false,
+        groups: QuickCommandsDefaults.withClipboard(const []),
+      );
+      terminal.write('\x1b[?2004h');
+      clipboardText = 'a\rb';
+      await openCommands(tester);
+      await tester.tapAt(const Offset(400, 225));
+      await tester.pumpAndSettle();
+      expect(out, ['\x1b[200~a\rb\x1b[201~']);
     });
 
     testWidgets('тап при включённом mouse mode шлёт клик и не открывает клавиатуру',

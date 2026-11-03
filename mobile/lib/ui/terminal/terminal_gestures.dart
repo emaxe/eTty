@@ -8,6 +8,7 @@ import 'package:xterm/xterm.dart' as xterm;
 import 'package:mobile/core/config/quick_actions_config.dart';
 import 'package:mobile/core/config/terminal_gesture_config.dart';
 import 'package:mobile/domain/quick_commands.dart';
+import 'package:mobile/platform/system_clipboard.dart';
 import 'package:mobile/ui/terminal/quick_action_wheel.dart';
 import 'package:mobile/ui/terminal/scroll_bridge.dart';
 
@@ -565,9 +566,16 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
       return;
     }
     HapticFeedback.lightImpact();
-    final text = widget.commandGroups[group].commands[sector].text;
+    final command = widget.commandGroups[group].commands[sector];
     _closeWheel();
-    widget.terminal.paste(text);
+    switch (command.kind) {
+      case QuickCommandKind.text:
+        widget.terminal.paste(command.text);
+      case QuickCommandKind.paste:
+        unawaited(_pasteFromClipboard());
+      case QuickCommandKind.copy:
+        unawaited(_copySelectionToClipboard());
+    }
   }
 
   void _enterGroup(int index) {
@@ -585,7 +593,8 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
       _snack('Нет быстрых команд — добавьте их в настройках');
       return;
     }
-    if (widget.controller.selection != null) widget.controller.clearSelection();
+    // Выделение НЕ сбрасываем (в отличие от колеса быстрых действий): «Буфер» → «Копировать»
+    // должен увидеть выделение, сделанное long-press до открытия колеса.
     HapticFeedback.mediumImpact();
     setState(() {
       _wheelCenter = _clampWheelCenter(p);
@@ -609,6 +618,33 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
       case QuickActionKind.attach:
         widget.onAttach?.call();
     }
+  }
+
+  /// «📋 Вставить»: текст из системного буфера → канал через `terminal.paste` (bracketed paste,
+  /// если приложение его включило). Пустой/недоступный буфер — снек, в канал ничего.
+  Future<void> _pasteFromClipboard() async {
+    final text = await readSystemClipboard();
+    if (!mounted) return;
+    if (text == null || text.isEmpty) {
+      _snack('Буфер обмена пуст');
+      return;
+    }
+    widget.terminal.paste(text);
+  }
+
+  /// «⧉ Копировать»: выделение xterm → системный буфер. Без выделения — снек, буфер не трогаем.
+  /// Выделение снимается после успешной записи: дальше оно не нужно и мешает чтению вывода.
+  Future<void> _copySelectionToClipboard() async {
+    final selection = widget.controller.selection;
+    final text = selection == null ? '' : widget.terminal.buffer.getText(selection);
+    if (text.isEmpty) {
+      _snack('Нет выделения: выделите текст long-press');
+      return;
+    }
+    await writeSystemClipboard(text);
+    if (!mounted) return;
+    widget.controller.clearSelection();
+    _snack('Скопировано: ${text.length} симв.');
   }
 
   void _closeWheel() {
