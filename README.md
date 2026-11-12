@@ -11,7 +11,7 @@
   <a href="https://github.com/emaxe/eTty/commits"><img src="https://img.shields.io/github/last-commit/emaxe/eTty" alt="Last commit" /></a>
   <a href="https://github.com/emaxe/eTty/actions/workflows/mobile.yml"><img src="https://github.com/emaxe/eTty/actions/workflows/mobile.yml/badge.svg" alt="Mobile CI" /></a>
   <a href="https://github.com/emaxe/eTty/actions/workflows/release.yml"><img src="https://github.com/emaxe/eTty/actions/workflows/release.yml/badge.svg" alt="Release build" /></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-0.9.2-blue" alt="Changelog" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-0.9.3-blue" alt="Changelog" /></a>
 </p>
 
 Modern terminal emulator built with Electron — file tree, code editor, Git integration and AI agents. Lightweight, fast, and feature-rich.
@@ -138,11 +138,12 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 ### AI Agents
 
 - **Status-bar launcher** — one-click launch of detected CLI agents
-- **Auto-detection** — Claude, Codex, Copilot, Cursor Agent, OpenCode, Qwen, Agento
+- **Auto-detection & PATH resolver** — Claude, Codex, Copilot, Cursor Agent, OpenCode, Qwen, Agento; automatic scanning of common CLI paths (`~/.local/bin`, `~/.cargo/bin`, pnpm, nvm, fnm, brew) and shell profiles (`~/.zprofile`, `~/.zshrc`, `~/.bash_profile`), with dynamic Zsh PATH sync (`_etty_sync_path` with `rehash`) and instant status bar updates when terminal commands complete
+- **Custom launch commands** — override default launch commands or binary paths for built-in agents in Settings → AI Agents (e.g. custom executable path or flags)
 - **Custom agents** — add your own CLI agent (label, launch command, optional detect command) alongside the built-ins; available in quick replies too
 - **Busy lock** — agent buttons disabled while terminal is busy
 - **Active agent highlight** — launched agent button glows while running
-- **Force-disable** — toggle agents on/off in Settings
+- **Force-disable** — toggle agents on/off in Settings; disabled agents are cleanly hidden from the status bar
 - **Proxy support** — configure HTTP proxy for all agent commands
 - **Customizable quick replies** — define agent-specific quick commands (e.g., `/clear`, `Ok`, `Продолжай`) via Settings; drag-and-drop to reorder
 - **Quick reply groups** — bundle related replies under a named group; the group collapses into a single status-bar button that opens a dropdown menu with the matching replies
@@ -205,6 +206,7 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 - **SSH + tmux** — pure-Dart client (`dartssh2`), several tabs per connection, sessions survive app restarts and are shared with the desktop app (same protocol and tmux socket)
 - **Session picker** — list and open the server's tmux sessions, or start a new one in a folder chosen in the file tree
 - **Remote file tree and editor** — browse (including hidden files), edit and share files over SFTP
+- **Bidirectional clipboard** — TUI apps copy to system clipboard via OSC 52; radial command wheel features a built-in "Clipboard" group with `Paste` (bracketed paste) and `Copy` (terminal selection to clipboard)
 - **Touch gestures in the terminal** — one-finger scroll (tmux history, mouse wheel for TUI apps — Page Up/Down on full-screen TUIs, local scrollback), two-finger swipe sends an arrow key, tap clicks in mouse-aware TUIs (htop, mc, vim), long-press selects text, a plain three-finger tap opens the quick-action wheel (Ctrl+C, Esc, Shift+Tab, Ctrl+O, Ctrl+D, Ctrl+L, attach a photo/file — pick a sector with a tap), two-finger double-tap opens a two-level wheel of your own commands (Settings → Quick commands); a key row above the keyboard has Esc, Tab, arrows, modifiers and Shift+Enter
 - **Security** — biometric lock (Android `FlutterFragmentActivity` / iOS Face ID/Touch ID); secrets in the OS secure storage; import of desktop connections via `.ettyx`
 
