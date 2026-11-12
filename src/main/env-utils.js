@@ -1,4 +1,5 @@
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
 
 /**
@@ -42,22 +43,56 @@ export function getPathValue(env = process.env, { platform = process.platform } 
 export function findExecutable(name, pathValue, {
   platform = process.platform,
   exists = fileExists,
-  pathExt = process.env.PATHEXT
+  pathExt = process.env.PATHEXT,
+  homedir = os.homedir()
 } = {}) {
+  if (!name || typeof name !== 'string') return null
+  const trimmed = name.trim()
+  if (!trimmed) return null
+
   const win = platform === 'win32'
   const sep = win ? ';' : ':'
   const join = win ? path.win32.join : path.posix.join
-  const hasExt = win && path.win32.extname(name) !== ''
+  const expanded = (trimmed.startsWith('~/') || (win && trimmed.startsWith('~\\')))
+    ? join(homedir, trimmed.slice(2))
+    : trimmed
+  const hasExt = win && path.win32.extname(expanded) !== ''
   const exts = win
     ? (hasExt ? [''] : ['', ...(pathExt || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)])
     : ['']
+
+  if (expanded.includes('/') || (win && expanded.includes('\\'))) {
+    for (const ext of exts) {
+      const candidate = expanded + ext
+      if (exists(candidate)) return candidate
+    }
+    return null
+  }
+
   for (const dir of (pathValue || '').split(sep).filter(Boolean)) {
     for (const ext of exts) {
-      const candidate = join(dir, name + ext)
+      const candidate = join(dir, expanded + ext)
       if (exists(candidate)) return candidate
     }
   }
   return null
+}
+
+/**
+ * Извлекает имя или путь исполняемого бинарника из командной строки запуска
+ * (пропускает ведущие присваивания вида KEY=VAL и снимает кавычки).
+ * @param {string} cmdLine
+ * @returns {string}
+ */
+export function extractCommandBinary(cmdLine) {
+  if (!cmdLine || typeof cmdLine !== 'string') return ''
+  const tokens = cmdLine.trim().match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || []
+  for (const raw of tokens) {
+    const unquoted = raw.replace(/^["']|["']$/g, '')
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(unquoted)) continue
+    return unquoted
+  }
+  return ''
 }
 
 export function fileExists(p) {

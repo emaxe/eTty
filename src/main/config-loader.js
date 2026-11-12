@@ -68,6 +68,15 @@ export function getConfigDefaults() {
         qwen: 'ctrl-j',
         agento: 'ctrl-j'
       },
+      launchCommands: {
+        claude: '',
+        codex: '',
+        copilot: '',
+        agent: '',
+        opencode: '',
+        qwen: '',
+        agento: ''
+      },
       custom: [],
       lastDetected: {},
       proxy: '',
@@ -94,6 +103,7 @@ export function getConfigDefaults() {
 const DYNAMIC_KEY_PATHS = [
   'agents.keyboardModes',
   'agents.forceDisabled',
+  'agents.launchCommands',
   'agents.lastDetected'
 ]
 

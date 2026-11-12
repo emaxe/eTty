@@ -198,12 +198,17 @@ async function init() {
     console.warn('Settings warnings:', ...warnings)
   }
   if (!config.agents) config.agents = {}
+  if (!config.agents.forceDisabled || typeof config.agents.forceDisabled !== 'object') config.agents.forceDisabled = {}
+  if (!config.agents.launchCommands || typeof config.agents.launchCommands !== 'object') config.agents.launchCommands = {}
   if (typeof config.agents.proxy !== 'string') config.agents.proxy = ''
   if (typeof config.agents.proxyEnabled !== 'boolean') config.agents.proxyEnabled = false
   if (!config.agents.keyboardModes || typeof config.agents.keyboardModes !== 'object') config.agents.keyboardModes = {}
   for (const agent of SUPPORTED_AGENTS) {
     if (!(agent.id in config.agents.keyboardModes)) {
       config.agents.keyboardModes[agent.id] = (agent.id === 'qwen' || agent.id === 'agento') ? 'ctrl-j' : 'kitty'
+    }
+    if (typeof config.agents.launchCommands[agent.id] !== 'string') {
+      config.agents.launchCommands[agent.id] = ''
     }
   }
   for (const agent of config.agents?.custom || []) {
@@ -233,6 +238,7 @@ async function init() {
     agents: {
       keyboardModes: config.agents?.keyboardModes || {},
       forceDisabled: config.agents?.forceDisabled || {},
+      launchCommands: config.agents?.launchCommands || {},
       custom: config.agents?.custom || [],
       proxy: config.agents?.proxy || '',
       proxyEnabled: config.agents?.proxyEnabled ?? false,
@@ -382,20 +388,40 @@ async function init() {
   }))
   const terminalRenderer = container.resolve('terminalRendererService')
   const agentCommands = new Map()
+  let lastAgentStatusPayload = null
+  let statusBarInstance = null
 
-  const applyAgentCommands = (statusPayload) => {
-    const agents = statusPayload?.agents || []
+  const applyAgentCommands = (statusPayload = lastAgentStatusPayload) => {
+    if (statusPayload) lastAgentStatusPayload = statusPayload
+    for (const agent of SUPPORTED_AGENTS) {
+      if (agent.defaultCommand) agentCommands.set(agent.id, agent.defaultCommand)
+    }
+    const agents = lastAgentStatusPayload?.agents || []
     for (const agent of agents) {
       if (agent?.id && agent?.launchCommand) {
         agentCommands.set(agent.id, agent.launchCommand)
+      }
+    }
+    for (const agent of config.agents?.custom || []) {
+      if (agent?.id && agent?.launchCommand) {
+        agentCommands.set(agent.id, agent.launchCommand)
+      }
+    }
+    const overrides = config.agents?.launchCommands || {}
+    for (const [id, cmd] of Object.entries(overrides)) {
+      if (typeof cmd === 'string' && cmd.trim()) {
+        agentCommands.set(id, cmd.trim())
       }
     }
   }
 
   const refreshAgents = async () => {
     try {
-      const result = await api.agentsRefresh(config.agents?.custom)
+      const result = await api.agentsRefresh(config.agents?.custom, config.agents?.launchCommands)
       applyAgentCommands(result)
+      if (result && statusBarInstance) {
+        statusBarInstance.setAgentsStatus(result)
+      }
       return result
     } catch {
       return null
@@ -445,7 +471,11 @@ async function init() {
     for (const agent of SUPPORTED_AGENTS) add(agent.id)
     for (const agent of config.agents?.custom || []) add(agent?.id)
     for (const [id, cmd] of agentCommands) {
-      add(id, String(cmd).trim().split(/\s+/)[0].split(/[\\/]/).pop().replace(/\.(exe|cmd|bat|ps1)$/i, ''))
+      const tokens = String(cmd).trim().split(/\s+/).filter(t => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(t))
+      const firstToken = (tokens[0] || '').replace(/^["']|["']$/g, '')
+      if (firstToken) {
+        add(id, firstToken.split(/[\\/]/).pop().replace(/\.(exe|cmd|bat|ps1)$/i, ''))
+      }
     }
     return matchAgentByProcess({ ...proc }, [...candidates.values()])
   }
@@ -1094,6 +1124,7 @@ async function init() {
     store: r('store'),
   }))
   const statusBar = container.resolve('statusBar')
+  statusBarInstance = statusBar
 
   container.register('radialMenu', () => new RadialMenu({ containerEl: terminalContainerEl }))
   radialMenu = container.resolve('radialMenu')
@@ -1197,13 +1228,13 @@ async function init() {
     e.stopPropagation()
   }, { capture: true, passive: false })
 
-  const agentResult = await refreshAgents()
-  if (agentResult) statusBar.setAgentsStatus(agentResult)
   statusBar.setAgentConfigs([
-    ...SUPPORTED_AGENTS.map(a => ({ id: a.id, label: a.label })),
+    ...SUPPORTED_AGENTS.map(a => ({ id: a.id, label: a.label, enabled: true })),
     ...(config.agents?.custom || [])
   ])
   statusBar.setForceDisabled(config.agents?.forceDisabled || {})
+  const agentResult = await refreshAgents()
+  if (agentResult) statusBar.setAgentsStatus(agentResult)
   statusBar.setProxyConfig({ proxy: config.agents.proxy || '', enabled: config.agents.proxyEnabled })
 
   statusBar.start(() => tabBar.getActive()?.rootPath, () => tabBar.getActive()?.nodeVersion)
@@ -1362,12 +1393,25 @@ async function init() {
       appStore.set('settings.fileOpenMode', value)
       fileTree.setFileOpenMode(value)
     }
-    if (key === 'agents.forceDisabled') statusBar.setForceDisabled(value)
+    if (key === 'agents.forceDisabled') {
+      if (!config.agents) config.agents = {}
+      config.agents.forceDisabled = value
+      appStore.set('agents.forceDisabled', value)
+      statusBar.setForceDisabled(value)
+    }
+    if (key === 'agents.launchCommands') {
+      if (!config.agents) config.agents = {}
+      config.agents.launchCommands = value
+      appStore.set('agents.launchCommands', value)
+      applyAgentCommands()
+      refreshAgents()
+    }
     if (key === 'agents.custom') {
       if (!config.agents) config.agents = {}
       config.agents.custom = value
+      appStore.set('agents.custom', value)
       statusBar.setAgentConfigs([
-        ...SUPPORTED_AGENTS.map(a => ({ id: a.id, label: a.label })),
+        ...SUPPORTED_AGENTS.map(a => ({ id: a.id, label: a.label, enabled: true })),
         ...(value || [])
       ])
       refreshAgents()
@@ -1837,6 +1881,16 @@ async function init() {
         if (wasBusy !== isBusy && tabBar.getActive()?.pid === pid) {
           updateNavButtons()
           syncStatusBarTerminalState()
+        }
+
+        // После завершения команды в локальном терминале обновляем статус агентов (с троттлингом),
+        // чтобы пакеты, только что установленные через curl/brew/npm, сразу появились в статус-баре.
+        if (wasBusy && !isBusy && !targetTab.ssh) {
+          const now = Date.now()
+          if (now - (targetTab._lastAgentProbeAt || 0) > 2500) {
+            targetTab._lastAgentProbeAt = now
+            refreshAgents()
+          }
         }
       },
     })

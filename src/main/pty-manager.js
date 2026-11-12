@@ -7,6 +7,7 @@ import { IPC_CHANNELS } from '../shared/ipc-channels.js'
 import { SshControlChannel } from './ssh/ssh-control-channel.js'
 import { SshStdioChannel } from './ssh/ssh-stdio-channel.js'
 import { buildChildEnv } from './env-utils.js'
+import { getCommonUserBinDirs, extractPathDirsFromShellProfiles } from './shell-path-resolver.js'
 import { resolveWindowsShell, SHELL_KINDS, HISTORY_KIND } from './shell-integration/shell-resolver.js'
 import { buildPwshArgs } from './shell-integration/pwsh.js'
 import { createGitBashLaunch } from './shell-integration/git-bash.js'
@@ -73,20 +74,37 @@ export class PtyManager {
 
   /**
    * Создаёт временный ZDOTDIR с кастомными .zshenv и .zshrc.
-   * .zshenv — sourcing пользовательского ~/.zshenv
-   * .zshrc — sourcing ~/.zshrc + настройка истории + zsh-хуки для OSC 7/133
+   * .zshenv — восстанавливает оригинальный ZDOTDIR, загружает ~/.zshenv и переключает ZDOTDIR обратно на tmpDir
+   * .zshrc — убирает подменённый ZDOTDIR (чтобы curl-инсталляторы писали в настоящий ~/.zshrc),
+   *          загружает ~/.zprofile, ~/.zshrc, ~/.zlogin + авто-синхронизирует PATH + хуки OSC 7/133
    * @param {string|null} historyFile — путь к HISTFILE для этой сессии
+   * @param {string} [promptStyle]
    * @returns {string} путь к временной директории ZDOTDIR
    */
   _createZdotdir(historyFile, promptStyle) {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'etty-'))
     const home = os.homedir()
-    const userZshenv = path.join(home, '.zshenv')
-    const userZshrc = path.join(home, '.zshrc')
+    const candidateBins = [
+      ...getCommonUserBinDirs(home, 'darwin'),
+      ...extractPathDirsFromShellProfiles(home)
+    ]
+    const uniqueBinsLiteral = [...new Set(candidateBins)]
+      .map((dir) => `"${dir.replace(/"/g, '\\"')}"`)
+      .join(' ')
 
     fs.writeFileSync(
       path.join(tmpDir, '.zshenv'),
-      `[[ -f "${userZshenv}" ]] && builtin source "${userZshenv}"\n`
+      [
+        `if [[ -n "$ETTY_ORIG_ZDOTDIR" ]]; then`,
+        `  export ZDOTDIR="$ETTY_ORIG_ZDOTDIR"`,
+        `else`,
+        `  unset ZDOTDIR`,
+        `fi`,
+        `unset ETTY_ORIG_ZDOTDIR`,
+        `[[ -f "\${ZDOTDIR:-$HOME}/.zshenv" ]] && builtin source "\${ZDOTDIR:-$HOME}/.zshenv"`,
+        `ETTY_USER_ZDOTDIR="$ZDOTDIR"`,
+        `ZDOTDIR="${tmpDir}"`
+      ].join('\n') + '\n'
     )
 
     const historyLines = historyFile
@@ -103,19 +121,38 @@ export class PtyManager {
     fs.writeFileSync(
       path.join(tmpDir, '.zshrc'),
       [
-        `[[ -f "${userZshrc}" ]] && builtin source "${userZshrc}"`,
+        `if [[ -n "$ETTY_USER_ZDOTDIR" ]]; then`,
+        `  export ZDOTDIR="$ETTY_USER_ZDOTDIR"`,
+        `else`,
+        `  unset ZDOTDIR`,
+        `fi`,
+        `unset ETTY_USER_ZDOTDIR`,
+        `[[ -f "\${ZDOTDIR:-$HOME}/.zprofile" ]] && builtin source "\${ZDOTDIR:-$HOME}/.zprofile"`,
+        `[[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && builtin source "\${ZDOTDIR:-$HOME}/.zshrc"`,
+        `[[ -f "\${ZDOTDIR:-$HOME}/.zlogin" ]] && builtin source "\${ZDOTDIR:-$HOME}/.zlogin"`,
         `PROMPT_EOL_MARK=""`,
         ...historyLines,
         `autoload -Uz add-zsh-hook`,
+        `_etty_sync_path() {`,
+        `  local d`,
+        `  for d in ${uniqueBinsLiteral}; do`,
+        `    if [[ -d "$d" && ":$PATH:" != *":$d:"* ]]; then`,
+        `      export PATH="$d:$PATH"`,
+        `    fi`,
+        `  done`,
+        `  rehash 2>/dev/null`,
+        `}`,
         `_etty_cwd() { printf '\\033]7;file://%s\\007' "$PWD"; }`,
         `_etty_preexec() { printf '\\033]133;C\\007' }`,
         `_etty_precmd_state() { printf '\\033]133;A\\007' }`,
         // OSC 6973: путь к node текущего шелла (по нему renderer определяет версию без поллинга)
         `_etty_node() { printf '\\033]6973;node=%s\\007' "\${commands[node]}" }`,
+        `add-zsh-hook precmd _etty_sync_path`,
         `add-zsh-hook precmd _etty_cwd`,
         `add-zsh-hook preexec _etty_preexec`,
         `add-zsh-hook precmd _etty_precmd_state`,
         `add-zsh-hook precmd _etty_node`,
+        `_etty_sync_path`,
         `_etty_cwd`,
         `_etty_node`,
         ...(PROMPT_MAP[promptStyle] ? [`PROMPT='${PROMPT_MAP[promptStyle]}'`] : [])
@@ -163,6 +200,9 @@ export class PtyManager {
       }
       if (shell.kind === SHELL_KINDS.ZSH) {
         tmpDir = this._createZdotdir(historyFile, promptStyle)
+        if (process.env.ZDOTDIR) {
+          overrides.ETTY_ORIG_ZDOTDIR = process.env.ZDOTDIR
+        }
         overrides.ZDOTDIR = tmpDir
         overrides.LANG = process.env.LANG || 'en_US.UTF-8'
         overrides.LC_CTYPE = process.env.LC_CTYPE || 'en_US.UTF-8'

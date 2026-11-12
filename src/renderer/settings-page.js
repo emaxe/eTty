@@ -17,13 +17,13 @@ function pluralizeReplies(n) {
 }
 
 export const SUPPORTED_AGENTS = [
-  { id: 'claude', label: 'Claude Code' },
-  { id: 'codex', label: 'Codex' },
-  { id: 'copilot', label: 'Copilot' },
-  { id: 'agent', label: 'Agent (Cursor)' },
-  { id: 'opencode', label: 'OpenCode' },
-  { id: 'qwen', label: 'Qwen' },
-  { id: 'agento', label: 'Agento' }
+  { id: 'claude', label: 'Claude Code', defaultCommand: 'claude' },
+  { id: 'codex', label: 'Codex', defaultCommand: 'codex' },
+  { id: 'copilot', label: 'Copilot', defaultCommand: 'gh copilot' },
+  { id: 'agent', label: 'Agent (Cursor)', defaultCommand: 'agent' },
+  { id: 'opencode', label: 'OpenCode', defaultCommand: 'opencode' },
+  { id: 'qwen', label: 'Qwen', defaultCommand: 'qwen' },
+  { id: 'agento', label: 'Agento', defaultCommand: 'agento' }
 ]
 
 /**
@@ -64,6 +64,11 @@ export class SettingsPage {
     this._overlay.classList.remove('hidden')
     document.addEventListener('keydown', this._onKeyDown)
     if (this._currentSection === 'hotkeys') this._renderHotkeys()
+    this._loadAgentStatus().then(() => {
+      if (!document.activeElement?.classList?.contains('settings-agent-cmd-input')) {
+        this._rerenderAgentsCategory()
+      }
+    })
   }
 
   hide() {
@@ -78,7 +83,10 @@ export class SettingsPage {
 
   async _loadAgentStatus() {
     try {
-      const result = await this._api.agentsRefresh(this._config?.agents?.custom)
+      const result = await this._api.agentsRefresh(
+        this._config?.agents?.custom,
+        this._config?.agents?.launchCommands
+      )
       this._agentStatusById = new Map((result?.agents || []).map(agent => [agent.id, agent]))
     } catch {
       this._agentStatusById = new Map()
@@ -88,12 +96,18 @@ export class SettingsPage {
   _ensureAgentSettings() {
     if (!this._config.agents) this._config.agents = {}
     if (!this._config.agents.forceDisabled) this._config.agents.forceDisabled = {}
+    if (!this._config.agents.launchCommands || typeof this._config.agents.launchCommands !== 'object') {
+      this._config.agents.launchCommands = {}
+    }
     if (typeof this._config.agents.proxy !== 'string') this._config.agents.proxy = ''
     if (typeof this._config.agents.proxyEnabled !== 'boolean') this._config.agents.proxyEnabled = false
 
     for (const agent of SUPPORTED_AGENTS) {
       if (typeof this._config.agents.forceDisabled[agent.id] !== 'boolean') {
         this._config.agents.forceDisabled[agent.id] = false
+      }
+      if (typeof this._config.agents.launchCommands[agent.id] !== 'string') {
+        this._config.agents.launchCommands[agent.id] = ''
       }
     }
     if (!Array.isArray(this._config.agents.custom)) {
@@ -651,12 +665,40 @@ export class SettingsPage {
     const wrapper = document.createElement('div')
     wrapper.className = 'settings-agent-control'
 
+    const agentMeta = SUPPORTED_AGENTS.find(a => a.id === agentId)
     const status = this._agentStatusById.get(agentId)
     const detected = !!status?.detected
+    const defaultCmd = status?.defaultLaunchCommand || agentMeta?.defaultCommand || agentId
 
     const badge = document.createElement('span')
     badge.className = `settings-agent-badge ${detected ? 'detected' : 'missing'}`
     badge.textContent = detected ? 'Обнаружен' : 'Не обнаружен'
+
+    const cmdInput = document.createElement('input')
+    cmdInput.type = 'text'
+    cmdInput.className = 'settings-input settings-agent-cmd-input'
+    cmdInput.value = this._config.agents.launchCommands?.[agentId] || ''
+    cmdInput.placeholder = defaultCmd
+    cmdInput.title = `Команда запуска (по умолчанию: ${defaultCmd})`
+
+    let probeTimer = null
+    cmdInput.addEventListener('input', () => {
+      if (!this._config.agents.launchCommands) this._config.agents.launchCommands = {}
+      this._config.agents.launchCommands[agentId] = cmdInput.value.trim()
+      this._bus.emit('settings.changed', {
+        key: 'agents.launchCommands',
+        value: { ...this._config.agents.launchCommands }
+      })
+      this._scheduleSave()
+      clearTimeout(probeTimer)
+      probeTimer = setTimeout(async () => {
+        await this._loadAgentStatus()
+        const updated = this._agentStatusById.get(agentId)
+        const isDetected = !!updated?.detected
+        badge.className = `settings-agent-badge ${isDetected ? 'detected' : 'missing'}`
+        badge.textContent = isDetected ? 'Обнаружен' : 'Не обнаружен'
+      }, 350)
+    })
 
     const stateLabel = document.createElement('span')
     stateLabel.className = 'settings-agent-switch-label'
@@ -690,6 +732,7 @@ export class SettingsPage {
     modeSelect.title = 'Режим работы Shift+Enter для этого агента'
 
     wrapper.appendChild(badge)
+    wrapper.appendChild(cmdInput)
     wrapper.appendChild(stateLabel)
     wrapper.appendChild(toggle)
     wrapper.appendChild(modeLabel)
@@ -1007,7 +1050,9 @@ export class SettingsPage {
 
   _getAllAgentToggles() {
     const customAgents = (this._config?.agents?.custom || []).filter(a => a.enabled)
-    const result = SUPPORTED_AGENTS.map(a => ({ id: a.id, label: a.label }))
+    const result = SUPPORTED_AGENTS
+      .filter(a => !this._config?.agents?.forceDisabled?.[a.id])
+      .map(a => ({ id: a.id, label: a.label }))
     for (const ca of customAgents) {
       result.push({ id: ca.id, label: ca.label })
     }

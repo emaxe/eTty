@@ -188,6 +188,7 @@ export function registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshSt
     let initialHistSize = 0
 
     const shellInfo = ptyManager.resolveLocalShell(options.shell)
+    await shellPathResolver.resolve()
 
     // История по вкладкам — только для оболочек с интеграцией (zsh, pwsh, Git Bash); cmd — без неё
     if (shellInfo.historyKind) {

@@ -101,7 +101,9 @@ export class AppService {
     // Pre-warm the agent cache at startup.
     // Manual agents.forceDisabled toggles must never be overwritten by detection.
     try {
-      await this._agentService.refresh()
+      const settings = this._loadSettings ? await this._loadSettings() : null
+      const agentsCfg = settings?.config?.agents || settings?.agents || {}
+      await this._agentService.refresh(agentsCfg.custom, agentsCfg.launchCommands)
     } catch {}
   }
 

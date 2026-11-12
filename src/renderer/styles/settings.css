@@ -431,7 +431,16 @@
 .settings-agent-control {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--space-3);
+}
+
+.settings-agent-cmd-input {
+  min-width: 150px;
+  width: 180px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
 }
 
 .settings-agent-badge {

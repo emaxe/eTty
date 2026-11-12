@@ -89,7 +89,7 @@ export class ElectronApiAdapter {
 
   // — Agents —
   agentsGetStatus() { return this._api.agentsGetStatus() }
-  agentsRefresh(customAgents) { return this._api.agentsRefresh(customAgents) }
+  agentsRefresh(customAgents, launchCommands) { return this._api.agentsRefresh(customAgents, launchCommands) }
   onAgentsSettingsUpdated(fn) { return this._on('agentsSettingsUpdated', fn) }
 
   // — History —

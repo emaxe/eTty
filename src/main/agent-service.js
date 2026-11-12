@@ -3,7 +3,7 @@
  * Проверяет наличие команд claude, codex, gh copilot, agent, opencode в resolved PATH.
  * Результат кэшируется; обновляется при открытии настроек.
  */
-import { findExecutable, getPathValue } from './env-utils.js'
+import { findExecutable, getPathValue, extractCommandBinary } from './env-utils.js'
 import { execProgram } from './exec-utils.js'
 
 export const SUPPORTED_AGENTS = [
@@ -113,17 +113,37 @@ export class AgentService {
   constructor({ shellPathResolver }) {
     this._shellPathResolver = shellPathResolver
     this._cache = null
+    this._lastCustomAgents = []
+    this._lastLaunchCommands = {}
   }
 
   async getStatus() {
     if (!this._cache) {
-      return this.refresh()
+      return this.refresh(this._lastCustomAgents, this._lastLaunchCommands)
     }
 
     return this._cache
   }
 
-  async refresh(customAgents = []) {
+  async refresh(customAgentsOrOpts, launchCommandsArg) {
+    let customAgents = this._lastCustomAgents
+    let launchCommands = this._lastLaunchCommands
+
+    if (Array.isArray(customAgentsOrOpts)) {
+      customAgents = customAgentsOrOpts
+      if (launchCommandsArg && typeof launchCommandsArg === 'object') {
+        launchCommands = launchCommandsArg
+      }
+    } else if (customAgentsOrOpts && typeof customAgentsOrOpts === 'object') {
+      if (Array.isArray(customAgentsOrOpts.custom)) customAgents = customAgentsOrOpts.custom
+      if (customAgentsOrOpts.launchCommands && typeof customAgentsOrOpts.launchCommands === 'object') {
+        launchCommands = customAgentsOrOpts.launchCommands
+      }
+    }
+
+    this._lastCustomAgents = customAgents || []
+    this._lastLaunchCommands = launchCommands || {}
+
     // Инвалидируем кэш PATH, чтобы подхватить свежие установки
     this._shellPathResolver.invalidate()
     const resolvedPath = await this._shellPathResolver.resolve()
@@ -131,20 +151,37 @@ export class AgentService {
     const builtInAgents = await Promise.all(
       SUPPORTED_AGENTS.map(async (agent) => {
         const result = await detectAgent(agent, resolvedPath)
+        const customCmd = typeof this._lastLaunchCommands?.[agent.id] === 'string'
+          ? this._lastLaunchCommands[agent.id].trim()
+          : ''
+        let detected = result.detected
+        let launchCommand = result.launchCommand
+
+        if (customCmd) {
+          launchCommand = customCmd
+          const customBin = extractCommandBinary(customCmd)
+          if (customBin) {
+            const customDetected = await commandExists(customBin, resolvedPath)
+            detected = customDetected || result.detected
+          }
+        }
+
         return {
           id: agent.id,
           label: agent.label,
-          launchCommand: result.launchCommand,
-          detected: result.detected
+          launchCommand,
+          defaultLaunchCommand: result.launchCommand,
+          detected
         }
       })
     )
 
     const customAgentResults = await Promise.all(
-      (customAgents || []).map(async (agent) => {
+      (this._lastCustomAgents || []).map(async (agent) => {
         let detected = true
         if (agent.checkCommand) {
-          detected = await commandExists(String(agent.checkCommand).trim().split(/\s+/)[0], resolvedPath)
+          const checkBin = extractCommandBinary(String(agent.checkCommand))
+          detected = checkBin ? await commandExists(checkBin, resolvedPath) : true
         }
         return {
           id: agent.id,

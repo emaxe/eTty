@@ -45,7 +45,7 @@ export class StatusBar {
     this._homeDir = null
     this._agentsById = new Map()
     this._forceDisabled = {}
-    this._customAgentsById = new Map()
+    this._agentConfigById = new Map()
     this._activeTabBusy = false
     this._activeAgentId = null
     this._isRemote = false
@@ -134,6 +134,7 @@ export class StatusBar {
 
   setAgentConfigs(agents) {
     this._agentConfigs = Array.isArray(agents) ? agents : []
+    this._agentConfigById = new Map(this._agentConfigs.map(a => [a.id, a]))
     this._regenerateAgentButtons()
   }
 
@@ -179,12 +180,21 @@ export class StatusBar {
     }
   }
 
+  /** Отключён ли агент пользователем в настройках (встроенный forceDisabled или кастомный enabled === false). */
+  _isAgentDisabledBySettings(agentId) {
+    if (this._forceDisabled?.[agentId]) return true
+    const cfg = this._agentConfigById?.get(agentId)
+    if (cfg && cfg.enabled === false) return true
+    return false
+  }
+
   /** Скрытый агент: disabled в настройках / not detected / занят другой агент. */
   _isAgentHidden(agentId) {
+    const disabledBySettings = this._isAgentDisabledBySettings(agentId)
     const agentStatus = this._agentsById.get(agentId)
     const notDetected = agentStatus && !agentStatus.detected
     const isOtherBusy = this._activeTabBusy && this._activeAgentId && this._activeAgentId !== agentId
-    return !!(this._forceDisabled?.[agentId] || notDetected || isOtherBusy)
+    return !!(disabledBySettings || notDetected || isOtherBusy)
   }
 
   /**
@@ -213,11 +223,13 @@ export class StatusBar {
     for (const button of this._agentButtons) {
       const agentId = button.dataset.agentId
       const agentStatus = this._agentsById.get(agentId)
-      const disabledBySettings = !!this._forceDisabled?.[agentId]
+      const disabledBySettings = this._isAgentDisabledBySettings(agentId)
 
       const isActive = this._activeTabBusy && this._activeAgentId === agentId
+      const hidden = this._isAgentHidden(agentId)
 
-      button.style.display = this._isAgentHidden(agentId) ? 'none' : ''
+      button.style.display = hidden ? 'none' : ''
+      button.classList.toggle('hidden', hidden)
 
       // Неактивные кнопки при занятой вкладке — busy class; активная — disabled + подсветка
       const isBusyState = this._activeTabBusy && !isActive

@@ -1,5 +1,6 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import log from 'electron-log'
@@ -8,6 +9,103 @@ const execFileAsync = promisify(execFile)
 
 const IS_WIN = process.platform === 'win32'
 
+export function getCommonUserBinDirs(home = os.homedir(), platform = process.platform) {
+  if (platform === 'win32') {
+    return [
+      path.win32.join(home, '.opencode', 'bin'),
+      path.win32.join(home, '.local', 'bin'),
+      path.win32.join(home, '.bun', 'bin'),
+      path.win32.join(home, '.deno', 'bin'),
+      path.win32.join(home, '.cargo', 'bin'),
+      path.win32.join(home, '.volta', 'bin'),
+      path.win32.join(home, 'go', 'bin')
+    ]
+  }
+  return [
+    path.posix.join(home, '.opencode', 'bin'),
+    path.posix.join(home, '.local', 'bin'),
+    path.posix.join(home, '.bun', 'bin'),
+    path.posix.join(home, '.deno', 'bin'),
+    path.posix.join(home, '.cargo', 'bin'),
+    path.posix.join(home, '.volta', 'bin'),
+    path.posix.join(home, '.asdf', 'shims'),
+    path.posix.join(home, 'go', 'bin'),
+    path.posix.join(home, 'Library', 'pnpm'),
+    path.posix.join(home, '.local', 'share', 'pnpm'),
+    path.posix.join(home, '.local', 'share', 'fnm'),
+    path.posix.join(home, '.amp', 'bin'),
+    path.posix.join(home, '.cursor', 'bin'),
+    path.posix.join(home, '.atuin', 'bin'),
+    path.posix.join(home, '.fly', 'bin'),
+    path.posix.join(home, '.fzf', 'bin'),
+    '/opt/homebrew/bin',
+    '/opt/homebrew/sbin',
+    '/usr/local/bin'
+  ]
+}
+
+/**
+ * Извлекает директории PATH из shell-профилей (~/.bashrc, ~/.bash_profile, ~/.profile, ~/.zshrc, ~/.zprofile, ~/.zshenv).
+ * Позволяет автоматически подхватывать пакеты, установленные через `curl ... | bash` или `curl ... | sh`,
+ * когда инсталлятор прописал export PATH в ~/.bashrc или ~/.bash_profile вместо ~/.zshrc.
+ * @param {string} [home]
+ * @param {{ exists?: (p: string) => boolean, readFile?: (p: string) => string }} [opts]
+ * @returns {string[]}
+ */
+export function extractPathDirsFromShellProfiles(home = os.homedir(), {
+  exists = (p) => {
+    try { return fs.statSync(p).isDirectory() } catch { return false }
+  },
+  readFile = (p) => fs.readFileSync(p, 'utf-8')
+} = {}) {
+  const rcFiles = [
+    '.zshenv',
+    '.zprofile',
+    '.zshrc',
+    '.bash_profile',
+    '.bashrc',
+    '.profile'
+  ]
+  const found = []
+  const seen = new Set()
+
+  const addCandidate = (rawToken) => {
+    if (!rawToken) return
+    const expanded = rawToken
+      .replace(/^\$\{HOME\}(?=\/)/, home)
+      .replace(/^\$HOME(?=\/)/, home)
+      .replace(/^~(?=\/)/, home)
+    if (!expanded.startsWith('/')) return
+    if (expanded.includes('$') || expanded.includes('`') || expanded.includes('*')) return
+    if (seen.has(expanded)) return
+    seen.add(expanded)
+    if (exists(expanded)) {
+      found.push(expanded)
+    }
+  }
+
+  for (const rc of rcFiles) {
+    const filePath = path.posix.join(home, rc)
+    let content = ''
+    try {
+      content = readFile(filePath)
+    } catch {
+      continue
+    }
+    for (const rawLine of content.split(/\r?\n/)) {
+      const line = rawLine.trim()
+      if (!line || line.startsWith('#')) continue
+      if (!/\bPATH\b|\bpath\b/.test(line)) continue
+      const tokens = line.match(/(?:\$\{HOME\}|\$HOME|~)?\/[A-Za-z0-9._/@-]+/g) || []
+      for (const token of tokens) {
+        addCandidate(token)
+      }
+    }
+  }
+
+  return found
+}
+
 const FALLBACK_PATHS = IS_WIN
   ? [
       'C:\\Windows\\System32',
@@ -15,17 +113,14 @@ const FALLBACK_PATHS = IS_WIN
       'C:\\Windows\\System32\\Wbem',
       'C:\\Windows\\System32\\WindowsPowerShell\\v1.0',
       'C:\\Program Files\\PowerShell\\7',
-      path.join(os.homedir(), '.cargo', 'bin'),
+      ...getCommonUserBinDirs()
     ]
   : [
-      '/opt/homebrew/bin',
-      '/usr/local/bin',
+      ...getCommonUserBinDirs(),
       '/usr/bin',
       '/bin',
       '/usr/sbin',
-      '/sbin',
-      os.homedir() + '/.cargo/bin',
-      os.homedir() + '/.local/bin'
+      '/sbin'
     ]
 
 const SHELL = IS_WIN ? (process.env.ComSpec || 'cmd.exe') : '/bin/zsh'
@@ -135,9 +230,11 @@ export class ShellPathResolver {
   }
 
   /**
-   * Гарантирует, что системные пути (/usr/bin, /bin и т.д.) присутствуют в PATH,
-   * даже если dotfiles пользователя перезаписали PATH без сохранения $PATH.
-   * Пользовательские пути идут первыми (приоритет brew/nvm/...), системные — в конце.
+   * Гарантирует, что системные пути (/usr/bin, /bin и т.д.), а также существующие
+   * пользовательские bin-директории (установленные через curl в ~/.opencode/bin, ~/.bun/bin,
+   * ~/.local/bin или прописанные в ~/.bash_profile / ~/.bashrc / ~/.profile) присутствуют в PATH,
+   * даже если они не были вручную перенесены в ~/.zshrc.
+   * Пользовательские пути идут первыми, затем авто-обнаруженные user bin-директории, системные — в конце.
    */
   _mergeWithSystemPath(resolved) {
     const sep = path.delimiter
@@ -146,7 +243,13 @@ export class ShellPathResolver {
     // Очищаем старые маркеры, которые могли остаться в process.env.PATH от предыдущих запусков
     const cleaned = (resolved || '').replace(new RegExp(`_?${DELIMITER}[^${sep.replace(/\\/g, '\\\\')}]*`, 'g'), '')
     const user = cleaned.split(sep).filter(Boolean)
-    const merged = [...new Set([...user, ...system])]
+
+    const existingCommonBins = getCommonUserBinDirs().filter((dir) => {
+      try { return fs.statSync(dir).isDirectory() } catch { return false }
+    })
+    const profileDirs = isUnix() ? extractPathDirsFromShellProfiles() : []
+
+    const merged = [...new Set([...user, ...profileDirs, ...existingCommonBins, ...system])]
     return merged.join(sep)
   }
 
