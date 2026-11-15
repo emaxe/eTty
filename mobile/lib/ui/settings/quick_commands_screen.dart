@@ -6,7 +6,8 @@ import 'package:mobile/core/config/quick_actions_config.dart';
 import 'package:mobile/domain/quick_commands.dart';
 import 'package:mobile/ui/settings/settings_dialogs.dart';
 
-String _newId(String prefix) => '$prefix-${DateTime.now().microsecondsSinceEpoch}';
+String _newId(String prefix) =>
+    '$prefix-${DateTime.now().microsecondsSinceEpoch}';
 
 /// Редактор групп пользовательских команд (второе колесо терминала: двойной тап двумя пальцами).
 /// Каждое изменение сразу сохраняется через [QuickCommandsNotifier.save].
@@ -32,23 +33,35 @@ class QuickCommandsScreen extends ConsumerWidget {
               if (ok) await notifier.resetToDefaults();
             },
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'reset', child: Text('Сбросить к стандартным')),
+              PopupMenuItem(
+                value: 'reset',
+                child: Text('Сбросить к стандартным'),
+              ),
             ],
           ),
         ],
       ),
-      floatingActionButton: groups == null || groups.length >= QuickActionsConfig.maxGroups
+      floatingActionButton:
+          groups == null || groups.length >= QuickActionsConfig.maxGroups
           ? null
           : FloatingActionButton.extended(
               key: const Key('add-group'),
               icon: const Icon(Icons.add),
               label: const Text('Группа'),
               onPressed: () async {
-                final label = await promptTextDialog(context, 'Новая группа', 'Название');
+                final label = await promptTextDialog(
+                  context,
+                  'Новая группа',
+                  'Название',
+                );
                 if (label == null) return;
                 await notifier.save([
                   ...groups,
-                  QuickCommandGroup(id: _newId('g'), label: label, commands: const []),
+                  QuickCommandGroup(
+                    id: _newId('g'),
+                    label: label,
+                    commands: const [],
+                  ),
                 ]);
               },
             ),
@@ -107,7 +120,8 @@ class QuickCommandsScreen extends ConsumerWidget {
                   ),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => QuickCommandGroupScreen(groupId: group.id),
+                      builder: (_) =>
+                          QuickCommandGroupScreen(groupId: group.id),
                     ),
                   ),
                 );
@@ -128,7 +142,10 @@ class QuickCommandGroupScreen extends ConsumerWidget {
     final groups = ref.watch(quickCommandsProvider).value ?? const [];
     final index = groups.indexWhere((g) => g.id == groupId);
     if (index < 0) {
-      return Scaffold(appBar: AppBar(), body: const Center(child: Text('Группа удалена')));
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(child: Text('Группа удалена')),
+      );
     }
     final group = groups[index];
     final notifier = ref.read(quickCommandsProvider.notifier);
@@ -141,7 +158,8 @@ class QuickCommandGroupScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: Text(group.label)),
-      floatingActionButton: group.commands.length >= QuickActionsConfig.maxCommandsPerGroup
+      floatingActionButton:
+          group.commands.length >= QuickActionsConfig.maxCommandsPerGroup
           ? null
           : FloatingActionButton.extended(
               key: const Key('add-command'),
@@ -152,7 +170,11 @@ class QuickCommandGroupScreen extends ConsumerWidget {
                 if (result == null) return;
                 await saveCommands([
                   ...group.commands,
-                  QuickCommand(id: _newId('c'), label: result.$1, text: result.$2),
+                  QuickCommand(
+                    id: _newId('c'),
+                    label: result.$1,
+                    text: result.$2,
+                  ),
                 ]);
               },
             ),
@@ -177,16 +199,27 @@ class QuickCommandGroupScreen extends ConsumerWidget {
                     padding: const EdgeInsets.only(right: 16),
                     child: const Icon(Icons.delete_outline),
                   ),
-                  onDismissed: (_) => saveCommands([...group.commands]..removeAt(i)),
+                  onDismissed: (_) =>
+                      saveCommands([...group.commands]..removeAt(i)),
                   child: ListTile(
                     title: Text(command.label),
-                    subtitle: Text(command.text, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(
+                      command.text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     leading: const Icon(Icons.drag_handle),
                     onTap: () async {
-                      final result = await _promptCommand(context, initial: command);
+                      final result = await _promptCommand(
+                        context,
+                        initial: command,
+                      );
                       if (result == null) return;
                       final next = [...group.commands];
-                      next[i] = command.copyWith(label: result.$1, text: result.$2);
+                      next[i] = command.copyWith(
+                        label: result.$1,
+                        text: result.$2,
+                      );
                       await saveCommands(next);
                     },
                   ),
@@ -198,7 +231,10 @@ class QuickCommandGroupScreen extends ConsumerWidget {
 }
 
 /// (подпись, текст) или `null` при отмене/пустых полях.
-Future<(String, String)?> _promptCommand(BuildContext context, {QuickCommand? initial}) {
+Future<(String, String)?> _promptCommand(
+  BuildContext context, {
+  QuickCommand? initial,
+}) {
   final label = TextEditingController(text: initial?.label ?? '');
   final text = TextEditingController(text: initial?.text ?? '');
   return showDialog<(String, String)>(
@@ -228,7 +264,10 @@ Future<(String, String)?> _promptCommand(BuildContext context, {QuickCommand? in
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
         FilledButton(
           onPressed: () {
             final l = label.text.trim();

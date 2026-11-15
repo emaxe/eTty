@@ -103,7 +103,10 @@ void main() {
     await tester.tap(find.text('Да'));
     await tester.pumpAndSettle();
 
-    expect(decodeQuickCommands(store.json)!.map((g) => g.label), ['Команды', 'Промпты']);
+    expect(decodeQuickCommands(store.json)!.map((g) => g.label), [
+      'Команды',
+      'Промпты',
+    ]);
   });
 
   testWidgets('сброс к стандартным возвращает умолчания', (tester) async {

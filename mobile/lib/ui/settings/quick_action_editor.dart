@@ -50,7 +50,7 @@ class QuickActionEditorList extends StatelessWidget {
           onDismissed: (_) => onChanged([...actions]..removeAt(i)),
           child: ListTile(
             title: Text(action.label),
-            subtitle: Text(_actionSubtitle(action)),
+            subtitle: Text(quickActionSubtitle(action)),
             leading: const Icon(Icons.drag_handle),
             onTap: () async {
               final edited = await promptAction(context, initial: action);
@@ -81,14 +81,18 @@ Widget? quickActionAddButton(
     icon: const Icon(Icons.add),
     label: Text(label),
     onPressed: () async {
-      final added = await pickNewAction(context, existing: actions, catalog: catalog);
+      final added = await pickNewAction(
+        context,
+        existing: actions,
+        catalog: catalog,
+      );
       if (added == null) return;
       await onChanged([...actions, added]);
     },
   );
 }
 
-String _actionSubtitle(QuickAction action) => switch (action.kind) {
+String quickActionSubtitle(QuickAction action) => switch (action.kind) {
   QuickActionKind.send => formatKeySequence(action.data),
   QuickActionKind.paste => 'Вставить из буфера обмена',
   QuickActionKind.copy => 'Копировать выделение',
@@ -115,6 +119,7 @@ Future<QuickAction?> pickNewAction(
     isScrollControlled: true,
     builder: (context) => SafeArea(
       child: ListView(
+        key: const Key('action-picker-list'),
         shrinkWrap: true,
         children: [
           ListTile(
@@ -127,7 +132,7 @@ Future<QuickAction?> pickNewAction(
             ListTile(
               key: Key('catalog-${a.id}'),
               title: Text(a.label),
-              subtitle: Text(_actionSubtitle(a)),
+              subtitle: Text(quickActionSubtitle(a)),
               onTap: () => Navigator.pop(context, a),
             ),
         ],
@@ -141,11 +146,17 @@ Future<QuickAction?> pickNewAction(
 
 /// Подпись + последовательность клавиши. У `paste`/`copy`/`attach` правится только подпись:
 /// поведение задано кодом, подсунуть туда последовательность нельзя.
-Future<QuickAction?> promptAction(BuildContext context, {QuickAction? initial}) {
-  final editableSequence = initial == null || initial.kind == QuickActionKind.send;
+Future<QuickAction?> promptAction(
+  BuildContext context, {
+  QuickAction? initial,
+}) {
+  final editableSequence =
+      initial == null || initial.kind == QuickActionKind.send;
   final label = TextEditingController(text: initial?.label ?? '');
   final seq = TextEditingController(
-    text: initial == null || !editableSequence ? '' : formatKeySequence(initial.data),
+    text: initial == null || !editableSequence
+        ? ''
+        : formatKeySequence(initial.data),
   );
   String? error;
   return showDialog<QuickAction>(

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mobile/app/providers/app_lock_providers.dart';
 import 'package:mobile/data/biometric_gate.dart';
+import 'package:mobile/ui/settings/floating_button_screen.dart';
 import 'package:mobile/ui/settings/quick_actions_screen.dart';
 import 'package:mobile/ui/settings/quick_commands_screen.dart';
 
@@ -47,18 +48,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Быстрые действия'),
             subtitle: const Text('Меню по тапу тремя пальцами в терминале'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () =>
-                Navigator.of(context)
-                    .push(MaterialPageRoute<void>(builder: (_) => const QuickActionsScreen())),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const QuickActionsScreen(),
+              ),
+            ),
           ),
           ListTile(
             key: const Key('open-quick-commands'),
             leading: const Icon(Icons.bolt_outlined),
             title: const Text('Быстрые команды'),
-            subtitle: const Text('Меню по двойному тапу двумя пальцами в терминале'),
+            subtitle: const Text(
+              'Меню по двойному тапу двумя пальцами в терминале',
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const QuickCommandsScreen()),
+              MaterialPageRoute<void>(
+                builder: (_) => const QuickCommandsScreen(),
+              ),
+            ),
+          ),
+          ListTile(
+            key: const Key('open-floating-button'),
+            leading: const Icon(Icons.smart_button_outlined),
+            title: const Text('Плавающая кнопка'),
+            subtitle: const Text(
+              'Кнопка поверх терминала: тап, двойной тап, долгое нажатие',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const FloatingButtonScreen(),
+              ),
             ),
           ),
           if (_biometricAvailable == false)

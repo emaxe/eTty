@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
 
-Future<bool> confirmDialog(BuildContext context, String title, String body) async {
+Future<bool> confirmDialog(
+  BuildContext context,
+  String title,
+  String body,
+) async {
   final result = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(title),
       content: Text(body),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Да')),
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Да'),
+        ),
       ],
     ),
   );
@@ -32,7 +42,10 @@ Future<String?> promptTextDialog(
         decoration: InputDecoration(labelText: hint),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
         FilledButton(
           onPressed: () {
             final value = controller.text.trim();

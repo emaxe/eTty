@@ -33,7 +33,10 @@ class QuickActionsScreen extends ConsumerWidget {
               if (ok) await notifier.resetToDefaults();
             },
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'reset', child: Text('Сбросить к стандартным')),
+              PopupMenuItem(
+                value: 'reset',
+                child: Text('Сбросить к стандартным'),
+              ),
             ],
           ),
         ],
