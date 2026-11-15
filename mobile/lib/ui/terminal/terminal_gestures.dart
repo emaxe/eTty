@@ -442,13 +442,38 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
     final view = _view;
     if (view == null) return;
     final t = widget.terminal;
-    if (_mouseMode) {
+    final lineHeight = view.renderTerminal.lineHeight;
+
+    // tmux-вкладка: жестом владеет tmux. Приложение в панели может включить mouse mode, и tmux
+    // проксирует этот режим наружу — тогда wheel-репорт уходит панели мимо copy-mode, а TUI вроде
+    // Claude Code (1000 = только клики) его игнорирует. Поэтому колесо здесь всегда идёт мостом:
+    // tmux сам выбирает copy-mode для обычного экрана и PgUp для alternate screen.
+    if (widget.isTmux) {
+      // Аккумулятор: положительное = вниз (новый вывод), палец вниз = история вверх.
+      _tmuxScroll.addDelta(-deltaY);
+      return;
+    }
+
+    // DECSET 1007 — alternate scroll mode: в alt-screen приложение просит превращать колесо в
+    // ↑/↓. Так делает Claude Code: он включает 1000 (только клики) вместе с 1007, и wheel-репорт
+    // ему бесполезен. xterm.dart этот режим разбирает, но сам не применяет — применяем здесь.
+    if (t.isUsingAltBuffer && t.altBufferMouseScrollMode) {
       _mouseWheelPx += deltaY;
-      final lineHeight = view.renderTerminal.lineHeight;
-      final cell = _viewportCell(position);
       while (_mouseWheelPx.abs() >= lineHeight) {
         final up = _mouseWheelPx > 0;
-        t.mouseInput(
+        t.keyInput(up ? xterm.TerminalKey.arrowUp : xterm.TerminalKey.arrowDown);
+        _mouseWheelPx -= up ? lineHeight : -lineHeight;
+      }
+      return;
+    }
+
+    if (_mouseMode) {
+      _mouseWheelPx += deltaY;
+      final cell = _viewportCell(position);
+      var handled = true;
+      while (handled && _mouseWheelPx.abs() >= lineHeight) {
+        final up = _mouseWheelPx > 0;
+        handled = t.mouseInput(
           up
               ? xterm.TerminalMouseButton.wheelUp
               : xterm.TerminalMouseButton.wheelDown,
@@ -457,13 +482,15 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
         );
         _mouseWheelPx -= up ? lineHeight : -lineHeight;
       }
-    } else if (widget.isTmux) {
-      // Аккумулятор: положительное = вниз (новый вывод), палец вниз = история вверх.
-      _tmuxScroll.addDelta(-deltaY);
-    } else if (t.isUsingAltBuffer) {
+      // Приложение запросило только клики (DECSET 9) — колесо оно не увидит, и жест не должен
+      // теряться: отдаём прокрутку следующим ветками (PgUp в alt-screen, scrollback в обычном).
+      if (handled) return;
+      _mouseWheelPx = 0;
+    }
+    if (t.isUsingAltBuffer) {
       _mouseWheelPx += deltaY;
       // PgUp/PgDn вместо стрелок: стрелки TUI трактует как историю ввода, а не прокрутку вывода.
-      final stepPx = view.renderTerminal.lineHeight * TerminalGestureConfig.altBufferPageLines;
+      final stepPx = lineHeight * TerminalGestureConfig.altBufferPageLines;
       while (_mouseWheelPx.abs() >= stepPx) {
         final up = _mouseWheelPx > 0;
         t.keyInput(up ? xterm.TerminalKey.pageUp : xterm.TerminalKey.pageDown);

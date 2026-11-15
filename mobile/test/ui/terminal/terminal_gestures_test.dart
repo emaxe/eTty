@@ -716,6 +716,42 @@ void main() {
       expect(out.last, endsWith('m'));
     });
 
+    testWidgets('скролл в alt-screen с ?1007h шлёт стрелки, а не wheel (Claude Code)', (tester) async {
+      await pump(tester, isTmux: false);
+      // Ровно набор режимов, который включает Claude Code: alt-screen + клики + SGR + 1007.
+      terminal.write('\x1b[?1049h\x1b[?1000h\x1b[?1006h\x1b[?1007h');
+      await tester.dragFrom(const Offset(200, 300), const Offset(0, 120));
+      expect(out, isNotEmpty);
+      expect(out.toSet(), {'\x1b[A'});
+    });
+
+    testWidgets('?1007h только в alt-screen: в обычном буфере остаётся локальный scrollback',
+        (tester) async {
+      await pump(tester, isTmux: false);
+      terminal.write('\x1b[?1007h');
+      await tester.dragFrom(const Offset(200, 300), const Offset(0, 120));
+      expect(out, isEmpty);
+      expect(raw, isEmpty);
+    });
+
+    testWidgets('приложение с одними кликами (?9h): колесо не теряется, а уходит PgUp в alt-screen',
+        (tester) async {
+      await pump(tester, isTmux: false);
+      terminal.write('\x1b[?1049h\x1b[?9h');
+      await tester.dragFrom(const Offset(200, 300), const Offset(0, 400));
+      expect(out, isNotEmpty);
+      expect(out.toSet(), {'\x1b[5~'});
+    });
+
+    testWidgets('в tmux mouse mode панели не перехватывает колесо — идёт мост', (tester) async {
+      await pump(tester, isTmux: true);
+      // Тот же набор, что у Claude Code внутри панели: tmux проксирует режим наружу.
+      terminal.write('\x1b[?1049h\x1b[?1000h\x1b[?1006h');
+      await tester.dragFrom(const Offset(200, 300), const Offset(0, 120));
+      expect(out, isEmpty);
+      expect(raw.toSet(), {SshSessionConfig.wheelScrollUpSeq});
+    });
+
     testWidgets('скролл пальцем вниз в tmux шлёт WHEEL_SCROLL_UP', (tester) async {
       await pump(tester, isTmux: true);
       await tester.dragFrom(const Offset(200, 200), const Offset(0, 120));
