@@ -99,11 +99,45 @@ void main() {
       // проверяем, что кнопка уехала вверх-влево примерно на столько, сколько провели пальцем.
       expect(moves.single.$1, closeTo((344 - 100 - 8) / 336, 0.06));
       expect(moves.single.$2, closeTo((552.64 - 200 - 8) / 736, 0.06));
-      // Пока родитель не сохранил позицию, кнопка возвращается туда, где стоит в настройках:
-      // источник истины — настройки, а не локальный сдвиг.
-      expect(tester.getTopLeft(_button), const Offset(344, 552.64));
+
+      // Кнопка осталась там, где её отпустили: запись настроек асинхронная, и прыжок назад к
+      // старой позиции выглядел бы как «перетаскивание не сработало».
+      final topLeft = tester.getTopLeft(_button);
+      expect(topLeft.dx, closeTo(244, 25));
+      expect(topLeft.dy, closeTo(352.64, 25));
+      expect(moves.single.$1, closeTo((topLeft.dx - 8) / 336, 0.001));
+      expect(moves.single.$2, closeTo((topLeft.dy - 8) / 736, 0.001));
     },
   );
+
+  testWidgets('после сохранения настроек кнопка стоит по сохранённой позиции', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.drag(_button, const Offset(-100, -200));
+    await tester.pumpAndSettle();
+    final dropped = moves.single;
+
+    // Родитель сохранил ровно то, что отдала кнопка, — позиция не должна измениться (никакого
+    // «дрожания» на стыке локального состояния и настроек).
+    await pump(
+      tester,
+      settings: FloatingButtonSettings(
+        positionX: dropped.$1,
+        positionY: dropped.$2,
+      ),
+    );
+    final confirmed = tester.getTopLeft(_button);
+    expect(confirmed.dx, closeTo(244, 25));
+    expect(confirmed.dy, closeTo(352.64, 25));
+
+    // Настройки поменялись извне (сброс, поворот) — теперь командует уже они.
+    await pump(
+      tester,
+      settings: const FloatingButtonSettings(positionX: 0, positionY: 0),
+    );
+    expect(tester.getTopLeft(_button), const Offset(8, 8));
+  });
 
   testWidgets('перетаскивание за границу зажимается в 0..1', (tester) async {
     // Кнопка уже на правом краю — тянуть дальше вправо некуда.

@@ -43,6 +43,11 @@ class _FloatingQuickButtonState extends State<FloatingQuickButton> {
   /// Пиксельная позиция во время перетаскивания; `null` — считаем из настроек.
   Offset? _drag;
 
+  /// Нормализованная позиция, отданная в [FloatingQuickButton.onMoved] и ещё не подтверждённая
+  /// настройками. Запись в хранилище асинхронная, поэтому без неё кнопка на кадр-два прыгала бы
+  /// назад к старой позиции и только потом возвращалась на новую.
+  (double, double)? _pending;
+
   static const double _size = FloatingButtonConfig.buttonSize;
   static const double _margin = FloatingButtonConfig.marginPx;
 
@@ -51,7 +56,10 @@ class _FloatingQuickButtonState extends State<FloatingQuickButton> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final area = Size(constraints.maxWidth, constraints.maxHeight);
-        final position = _clamp(_drag ?? _fromSettings(area), area);
+        final position = _clamp(
+          _drag ?? _fromPending(area) ?? _fromSettings(area),
+          area,
+        );
         return Stack(
           children: [
             Positioned(
@@ -62,18 +70,26 @@ class _FloatingQuickButtonState extends State<FloatingQuickButton> {
                 onTap: widget.onTap,
                 onDoubleTap: widget.onDoubleTap,
                 onLongPress: widget.onLongPress,
-                onPanStart: (_) => setState(() => _drag = position),
+                onPanStart: (_) => setState(() {
+                  _drag = position;
+                  _pending = null;
+                }),
                 onPanUpdate: (details) => setState(() {
                   _drag = _clamp((_drag ?? position) + details.delta, area);
                 }),
                 onPanEnd: (_) {
                   final moved = _drag;
-                  setState(() => _drag = null);
-                  if (moved == null) return;
-                  widget.onMoved(
-                    _normalizeX(moved.dx, area),
-                    _normalizeY(moved.dy, area),
-                  );
+                  if (moved == null) {
+                    setState(() => _drag = null);
+                    return;
+                  }
+                  final x = _normalizeX(moved.dx, area);
+                  final y = _normalizeY(moved.dy, area);
+                  setState(() {
+                    _drag = null;
+                    _pending = (x, y);
+                  });
+                  widget.onMoved(x, y);
                 },
                 child: _buttonFace(context),
               ),
@@ -100,6 +116,27 @@ class _FloatingQuickButtonState extends State<FloatingQuickButton> {
           color: scheme.onPrimary,
         ),
       ),
+    );
+  }
+
+  /// Настройки изменились — источник истины они, локальную позицию отпускаем. Сравниваем с
+  /// *предыдущими* настройками: если родитель ещё не записал новую позицию, они те же, и кнопка
+  /// должна остаться там, куда её отпустили, а не прыгнуть назад.
+  @override
+  void didUpdateWidget(FloatingQuickButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.settings.positionX != oldWidget.settings.positionX ||
+        widget.settings.positionY != oldWidget.settings.positionY) {
+      _pending = null;
+    }
+  }
+
+  Offset? _fromPending(Size area) {
+    final pending = _pending;
+    if (pending == null) return null;
+    return Offset(
+      _margin + pending.$1 * _span(area.width),
+      _margin + pending.$2 * _span(area.height),
     );
   }
 
