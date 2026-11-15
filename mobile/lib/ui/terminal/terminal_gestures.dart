@@ -8,7 +8,8 @@ import 'package:xterm/xterm.dart' as xterm;
 import 'package:mobile/core/config/quick_actions_config.dart';
 import 'package:mobile/core/config/terminal_gesture_config.dart';
 import 'package:mobile/domain/quick_commands.dart';
-import 'package:mobile/platform/system_clipboard.dart';
+import 'package:mobile/ui/terminal/clipboard_actions.dart';
+import 'package:mobile/ui/terminal/quick_action_runner.dart';
 import 'package:mobile/ui/terminal/quick_action_wheel.dart';
 import 'package:mobile/ui/terminal/scroll_bridge.dart';
 
@@ -599,9 +600,15 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
       case QuickCommandKind.text:
         widget.terminal.paste(command.text);
       case QuickCommandKind.paste:
-        unawaited(_pasteFromClipboard());
+        unawaited(pasteFromClipboard(context, terminal: widget.terminal));
       case QuickCommandKind.copy:
-        unawaited(_copySelectionToClipboard());
+        unawaited(
+          copySelectionToClipboard(
+            context,
+            terminal: widget.terminal,
+            controller: widget.controller,
+          ),
+        );
     }
   }
 
@@ -633,50 +640,21 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
     });
   }
 
-  void _snack(String text) =>
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(text)));
+  void _snack(String text) => showTerminalMessage(context, text);
 
   void _runQuickAction(int index) {
     final action = widget.quickActions[index];
     HapticFeedback.lightImpact();
-    switch (action.kind) {
-      case QuickActionKind.send:
-        widget.write(action.data);
-      case QuickActionKind.attach:
-        widget.onAttach?.call();
-    }
-  }
-
-  /// «📋 Вставить»: текст из системного буфера → канал через `terminal.paste` (bracketed paste,
-  /// если приложение его включило). Пустой/недоступный буфер — снек, в канал ничего.
-  Future<void> _pasteFromClipboard() async {
-    final text = await readSystemClipboard();
-    if (!mounted) return;
-    if (text == null || text.isEmpty) {
-      _snack('Буфер обмена пуст');
-      return;
-    }
-    widget.terminal.paste(text);
-  }
-
-  /// «⧉ Копировать»: выделение xterm → системный буфер. Без выделения — снек, буфер не трогаем.
-  /// Выделение снимается только после успешной записи: при отказе платформы оно остаётся, чтобы
-  /// пользователь мог повторить, а вместо ложного «Скопировано» показывается ошибка.
-  Future<void> _copySelectionToClipboard() async {
-    final selection = widget.controller.selection;
-    final text = selection == null ? '' : widget.terminal.buffer.getText(selection);
-    if (text.isEmpty) {
-      _snack('Нет выделения: выделите текст long-press');
-      return;
-    }
-    final written = await writeSystemClipboard(text);
-    if (!mounted) return;
-    if (!written) {
-      _snack('Не удалось записать в буфер обмена');
-      return;
-    }
-    widget.controller.clearSelection();
-    _snack('Скопировано: ${text.length} симв.');
+    unawaited(
+      runQuickAction(
+        context,
+        action,
+        terminal: widget.terminal,
+        controller: widget.controller,
+        write: widget.write,
+        onAttach: widget.onAttach,
+      ),
+    );
   }
 
   void _closeWheel() {

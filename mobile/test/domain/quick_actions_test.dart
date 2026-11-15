@@ -32,6 +32,16 @@ void main() {
     test('пустой список — валидный выбор пользователя', () {
       expect(decodeQuickActions('[]'), isEmpty);
     });
+
+    test('виды paste/copy переживают round-trip', () {
+      final decoded = decodeQuickActions(
+        encodeQuickActions(const [
+          QuickAction(id: 'paste', label: '📋 Вставить', kind: QuickActionKind.paste),
+          QuickAction(id: 'copy', label: '⧉ Копировать', kind: QuickActionKind.copy),
+        ]),
+      );
+      expect([for (final a in decoded!) a.kind], [QuickActionKind.paste, QuickActionKind.copy]);
+    });
   });
 
   group('parseKeySequence', () {

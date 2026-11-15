@@ -10,26 +10,39 @@ String encodeQuickActions(List<QuickAction> actions) =>
 List<QuickAction>? decodeQuickActions(String? json) {
   if (json == null || json.isEmpty) return null;
   try {
-    final raw = jsonDecode(json);
-    if (raw is! List) return null;
-    final actions = <QuickAction>[];
-    for (final a in raw.take(QuickActionsConfig.maxActions)) {
-      if (a is! Map) return null;
-      final id = a['id'];
-      final label = a['label'];
-      final kindName = a['kind'];
-      final data = a['data'];
-      if (id is! String || label is! String || kindName is! String || data is! String) {
-        return null;
-      }
-      final kind = QuickActionKind.values.where((k) => k.name == kindName).firstOrNull;
-      if (kind == null) return null;
-      actions.add(QuickAction(id: id, label: label, data: data, kind: kind));
-    }
-    return actions;
+    return decodeQuickActionList(jsonDecode(json), maxItems: QuickActionsConfig.maxActions);
   } on FormatException {
     return null;
   }
+}
+
+/// Одно действие из JSON-объекта; `null` — неверная структура или неизвестный [QuickActionKind].
+/// Отдельно от списка: плавающая кнопка хранит ещё и назначения тапов в том же виде.
+QuickAction? decodeQuickAction(Object? raw) {
+  if (raw is! Map) return null;
+  final id = raw['id'];
+  final label = raw['label'];
+  final kindName = raw['kind'];
+  final data = raw['data'];
+  if (id is! String || label is! String || kindName is! String || data is! String) return null;
+  final kind = QuickActionKind.values.where((k) => k.name == kindName).firstOrNull;
+  if (kind == null) return null;
+  return QuickAction(id: id, label: label, data: data, kind: kind);
+}
+
+/// Список действий из уже разобранного JSON. Любой неверный элемент → `null` (не «частично
+/// прочитать»): иначе пользователь потерял бы часть настроек молча.
+/// [maxItems] — жёсткий лимит; `null` — без лимита (список плавающей кнопки).
+List<QuickAction>? decodeQuickActionList(Object? raw, {int? maxItems}) {
+  if (raw is! List) return null;
+  final items = maxItems == null ? raw : raw.take(maxItems);
+  final actions = <QuickAction>[];
+  for (final a in items) {
+    final action = decodeQuickAction(a);
+    if (action == null) return null;
+    actions.add(action);
+  }
+  return actions;
 }
 
 /// Запись клавиши -> сырые байты: `^X` (Ctrl+буква), `\e`, `\r`, `\n`, `\t`, `\xHH`, `\\`, `\^`.
