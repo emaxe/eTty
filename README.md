@@ -11,7 +11,7 @@
   <a href="https://github.com/emaxe/eTty/commits"><img src="https://img.shields.io/github/last-commit/emaxe/eTty" alt="Last commit" /></a>
   <a href="https://github.com/emaxe/eTty/actions/workflows/mobile.yml"><img src="https://github.com/emaxe/eTty/actions/workflows/mobile.yml/badge.svg" alt="Mobile CI" /></a>
   <a href="https://github.com/emaxe/eTty/actions/workflows/release.yml"><img src="https://github.com/emaxe/eTty/actions/workflows/release.yml/badge.svg" alt="Release build" /></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-0.9.3-blue" alt="Changelog" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-0.9.4-blue" alt="Changelog" /></a>
 </p>
 
 Modern terminal emulator built with Electron — file tree, code editor, Git integration and AI agents. Lightweight, fast, and feature-rich.
@@ -178,6 +178,7 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 - **SSH panel position** — off (default), left, or right; configurable in Settings → SSH Panel
 - **SSH panel mode** — SSH (regular tabs) or tmux (persistent sessions); switched right in the panel header
 - **AI agent quick replies** — CRUD editor with per-agent toggles; drag-and-drop reordering and grouping into a tree
+- **Full settings backup (`*.ettybackup`)** — Settings → Backup exports `config.json` (appearance, terminal, file tree, SSH panel, agents with proxy, quick replies) and your custom themes into one file; SSH connections are optional and, when included, the file is encrypted with a passphrase (PBKDF2-SHA256 + AES-256-GCM), private keys only if you tick the box. Import replaces the config and themes (themes upserted by `id`), merges connections by `id`, keeps a copy of the previous settings in `userData/eTty/backups/<timestamp>/`, and restarts the app so everything applies
 - **Auto-persisted** to disk with debounced saves
 
 ### Session Persistence
@@ -207,7 +208,8 @@ Modern terminal emulator built with Electron — file tree, code editor, Git int
 - **Session picker** — list and open the server's tmux sessions, or start a new one in a folder chosen in the file tree
 - **Remote file tree and editor** — browse (including hidden files), edit and share files over SFTP
 - **Bidirectional clipboard** — TUI apps copy to system clipboard via OSC 52; radial command wheel features a built-in "Clipboard" group with `Paste` (bracketed paste) and `Copy` (terminal selection to clipboard)
-- **Touch gestures in the terminal** — one-finger scroll (tmux history, mouse wheel for TUI apps — Page Up/Down on full-screen TUIs, local scrollback), two-finger swipe sends an arrow key, tap clicks in mouse-aware TUIs (htop, mc, vim), long-press selects text, a plain three-finger tap opens the quick-action wheel (Ctrl+C, Esc, Shift+Tab, Ctrl+O, Ctrl+D, Ctrl+L, attach a photo/file — pick a sector with a tap), two-finger double-tap opens a two-level wheel of your own commands (Settings → Quick commands); a key row above the keyboard has Esc, Tab, arrows, modifiers and Shift+Enter
+- **Floating action button** — a draggable button over the terminal: tap sends Shift+Enter, double-tap pastes from the clipboard, long-press opens a grid panel of your own actions (keys, `Paste`, `Copy`, `Attach file`); enablement, tap bindings, panel contents and position live in Settings → Floating button
+- **Touch gestures in the terminal** — one-finger scroll (tmux history, mouse wheel for TUI apps — Page Up/Down on full-screen TUIs including alternate-screen apps that enable DECSET 1007, local scrollback), two-finger swipe sends an arrow key, tap clicks in mouse-aware TUIs (htop, mc, vim), long-press selects text, a plain three-finger tap opens the quick-action wheel (Ctrl+C, Esc, Shift+Tab, Ctrl+O, Ctrl+D, Ctrl+L, attach a photo/file — pick a sector with a tap), two-finger double-tap opens a two-level wheel of your own commands (Settings → Quick commands); a key row above the keyboard has Esc, Tab, arrows, modifiers and Shift+Enter
 - **Security** — biometric lock (Android `FlutterFragmentActivity` / iOS Face ID/Touch ID); secrets in the OS secure storage; import of desktop connections via `.ettyx`
 
 Build and run instructions: [mobile/README.md](mobile/README.md).
@@ -368,12 +370,13 @@ All user data is stored in `~/.config/eTty/` (Electron `userData`):
 
 | File | Purpose |
 |------|---------|
-| `config.json` | App settings (theme, focus indicator, file tree behavior, prompt style, agent proxy, force-disabled agents, custom agents, quick replies, SSH panel position and mode); versioned, deep-merged with defaults on load |
+| `config.json` | App settings (theme, focus indicator, file tree behavior, prompt style, agent proxy, force-disabled/force-enabled agents, custom agents, quick replies, SSH panel position and mode); versioned, deep-merged with defaults on load |
 | `themes/*.json` | User-defined custom themes, loaded alongside the 14 built-ins |
 | `ssh-connections.json` | Saved SSH connections; passwords/passphrases encrypted via `safeStorage` |
 | `tabs-state.json` | Saved tab state for session restore |
 | `history/global.zsh_history` | Shared command history (5000 lines) |
 | `history/tabs/<id>.zsh_history` | Per-tab command history |
+| `backups/<timestamp>/` | Snapshot of `config.json` and `themes/` taken before a settings-backup import (manual rollback) |
 
 ## Notes
 
