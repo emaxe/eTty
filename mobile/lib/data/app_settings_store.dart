@@ -20,6 +20,11 @@ abstract class AppSettingsStore {
   /// не настраивалось, берётся `QuickActionsConfig.defaultActions`.
   Future<String?> getQuickActionsJson();
   Future<void> setQuickActionsJson(String json);
+
+  /// Плавающая кнопка терминала (JSON, см. `domain/floating_button.dart`); `null` — не
+  /// настраивалась, берутся умолчания `FloatingButtonSettings`.
+  Future<String?> getFloatingButtonJson();
+  Future<void> setFloatingButtonJson(String json);
 }
 
 /// [AppSettingsStore] поверх [SecureKeyValueStore] — тот же backing store, что секреты профилей
@@ -35,6 +40,7 @@ class SecureAppSettingsStore implements AppSettingsStore {
   static const String _showHiddenFilesKey = 'etty.settings.showHiddenFiles';
   static const String _quickCommandsKey = 'etty.settings.quickCommands';
   static const String _quickActionsKey = 'etty.settings.quickActions';
+  static const String _floatingButtonKey = 'etty.settings.floatingButton';
 
   final SecureKeyValueStore _storage;
 
@@ -65,4 +71,10 @@ class SecureAppSettingsStore implements AppSettingsStore {
 
   @override
   Future<void> setQuickActionsJson(String json) => _storage.write(_quickActionsKey, json);
+
+  @override
+  Future<String?> getFloatingButtonJson() => _storage.read(_floatingButtonKey);
+
+  @override
+  Future<void> setFloatingButtonJson(String json) => _storage.write(_floatingButtonKey, json);
 }

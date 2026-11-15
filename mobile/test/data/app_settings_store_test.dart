@@ -119,4 +119,15 @@ void main() {
       expect(await store.getQuickCommandsJson(), isNull);
     });
   });
+
+  group('SecureAppSettingsStore — плавающая кнопка', () {
+    test('нет записи -> null, запись читается обратно, ключ отдельный', () async {
+      final store = SecureAppSettingsStore(_InMemorySecureStore());
+
+      expect(await store.getFloatingButtonJson(), isNull);
+      await store.setFloatingButtonJson('{"enabled":false}');
+      expect(await store.getFloatingButtonJson(), '{"enabled":false}');
+      expect(await store.getQuickActionsJson(), isNull);
+    });
+  });
 }

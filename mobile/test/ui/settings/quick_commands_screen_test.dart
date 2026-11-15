@@ -22,6 +22,12 @@ class _FakeStore implements AppSettingsStore {
   Future<void> setQuickActionsJson(String json) async {}
 
   @override
+  Future<String?> getFloatingButtonJson() async => null;
+
+  @override
+  Future<void> setFloatingButtonJson(String json) async {}
+
+  @override
   Future<bool> getBiometricLockEnabled() async => false;
 
   @override

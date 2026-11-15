@@ -33,6 +33,12 @@ class _FakeSettingsStore implements AppSettingsStore {
 
   @override
   Future<void> setQuickActionsJson(String json) async {}
+
+  @override
+  Future<String?> getFloatingButtonJson() async => null;
+
+  @override
+  Future<void> setFloatingButtonJson(String json) async {}
 }
 
 void main() {
