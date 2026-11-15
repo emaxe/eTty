@@ -22,6 +22,7 @@ import {
   saveTabState, loadTabState, deleteTabState, hasTabState, validatePath
 } from './tab-state'
 import { loadSettings, saveSettings } from './settings-store'
+import * as settingsBackup from './settings-backup.js'
 import * as sshStore from './ssh-store.js'
 import { AppService } from './services/app-service.js'
 import { TrackpadGestureService } from './services/trackpad-gesture-service.js'
@@ -114,7 +115,7 @@ app.whenReady().then(async () => {
   registerAppHandlers(ipcMain)
   registerTabsHandlers(ipcMain, { saveTabState, loadTabState, deleteTabState, hasTabState, validatePath })
   registerHistoryHandlers(ipcMain, { historyManager })
-  registerSettingsHandlers(ipcMain, { loadSettings, saveSettings })
+  registerSettingsHandlers(ipcMain, { loadSettings, saveSettings, settingsBackup })
   registerAgentsHandlers(ipcMain, { agentService })
   registerGitHandlers(ipcMain, { gitRunnerRegistry })
   registerSearchHandlers(ipcMain, { fileManager })

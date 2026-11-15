@@ -1,5 +1,5 @@
 import os from 'os'
-import { shell } from 'electron'
+import { app, shell } from 'electron'
 import log from 'electron-log'
 import { IPC_CHANNELS } from '../../shared/ipc-channels.js'
 
@@ -11,6 +11,13 @@ const OPEN_URL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:'])
  */
 export function registerAppHandlers(ipcMain) {
   ipcMain.handle(IPC_CHANNELS.APP_HOMEDIR, () => os.homedir())
+
+  // Перезапуск после импорта настроек: часть конфига читается только при старте, а живой renderer
+  // хранит свою копию и перезаписал бы импортированную (before-quit сохраняет состояние вкладок).
+  ipcMain.on(IPC_CHANNELS.APP_RELAUNCH, () => {
+    app.relaunch()
+    app.quit()
+  })
 
   ipcMain.handle(IPC_CHANNELS.APP_OPEN_EXTERNAL, async (_, filePath) => {
     const { error } = await shell.openPath(filePath)

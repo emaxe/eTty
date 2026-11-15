@@ -59,6 +59,10 @@ export class ElectronApiAdapter {
   // — Settings —
   settingsLoad() { return this._api.settingsLoad() }
   settingsSave(config) { return this._api.settingsSave(config) }
+  settingsBackupExport(opts) { return this._api.settingsBackupExport(opts) }
+  settingsBackupPickImport() { return this._api.settingsBackupPickImport() }
+  settingsBackupImport(opts) { return this._api.settingsBackupImport(opts) }
+  appRelaunch() { this._api.appRelaunch() }
 
   // — Tabs —
   tabsHasSavedState() { return this._api.tabsHasSavedState() }

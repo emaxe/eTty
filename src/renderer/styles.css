@@ -2003,6 +2003,12 @@ button svg {
   gap: 12px;
 }
 
+/* display:flex перебивает нативный [hidden] — скрытие полей в диалогах должно работать */
+.settings-dialog-row[hidden],
+.settings-dialog-field[hidden] {
+  display: none;
+}
+
 .settings-dialog-row span {
   font-size: 13px;
   color: var(--text);

@@ -5,7 +5,7 @@ import log from 'electron-log'
 import { ETTY_THEMES } from '../shared/etty-themes.js'
 
 const CONFIG_DIR = () => join(app.getPath('userData'), 'eTty')
-const THEMES_DIR = () => join(CONFIG_DIR(), 'themes')
+export const THEMES_DIR = () => join(CONFIG_DIR(), 'themes')
 
 /**
  * Built-in fallback themes. These are always available.
@@ -871,7 +871,7 @@ const REQUIRED_EDITOR_FIELDS = [
   'operator', 'property', 'tag', 'attribute', 'bracket'
 ]
 
-function validateTheme(theme, fileName) {
+export function validateTheme(theme, fileName) {
   const errors = []
 
   if (!theme || typeof theme !== 'object' || Array.isArray(theme)) {
@@ -923,6 +923,50 @@ async function initializeThemesDir() {
     log.error('themes: failed to initialize themes directory:', e.message)
     throw e
   }
+}
+
+/**
+ * Читает только пользовательские темы из `themes/*.json` (без встроенных) — источник для экспорта
+ * резервной копии настроек. Битые и дублирующиеся темы пропускаются с предупреждением.
+ * @returns {Promise<{ themes: object[], warnings: string[] }>}
+ */
+export async function readUserThemes() {
+  const warnings = []
+  const themes = []
+
+  let entries
+  try {
+    entries = await readdir(THEMES_DIR())
+  } catch (e) {
+    if (e.code === 'ENOENT') return { themes, warnings }
+    throw e
+  }
+
+  const seenIds = new Set()
+  for (const fileName of entries.filter(f => f.endsWith('.json'))) {
+    const filePath = join(THEMES_DIR(), fileName)
+    let parsed
+    try {
+      parsed = JSON.parse(await readFile(filePath, 'utf-8'))
+    } catch (e) {
+      warnings.push(`Тема «${fileName}» пропущена: ${e.message}`)
+      continue
+    }
+
+    const errors = validateTheme(parsed, fileName)
+    if (errors.length > 0) {
+      warnings.push(`Тема «${fileName}» пропущена: ${errors.join('; ')}`)
+      continue
+    }
+    if (seenIds.has(parsed.id)) {
+      warnings.push(`Тема «${fileName}» пропущена: повторяющийся id "${parsed.id}"`)
+      continue
+    }
+    seenIds.add(parsed.id)
+    themes.push(parsed)
+  }
+
+  return { themes, warnings }
 }
 
 // Фирменные темы eTty — встроенные (не зависят от userData/themes)

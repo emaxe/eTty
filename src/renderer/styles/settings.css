@@ -467,3 +467,20 @@
   min-width: 30px;
   text-align: right;
 }
+
+/* ── Резервная копия ─────────────────────────────────────────────── */
+
+.settings-backup-message {
+  font-size: var(--fs-13);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.settings-backup-warnings {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--fs-13);
+  color: var(--text-tertiary);
+}

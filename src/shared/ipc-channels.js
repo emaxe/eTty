@@ -63,6 +63,12 @@ export const IPC_CHANNELS = Object.freeze({
   SETTINGS_LOAD: 'settings:load',
   SETTINGS_SAVE: 'settings:save',
 
+  // Полная резервная копия настроек (*.ettybackup): config.json + пользовательские темы,
+  // опционально SSH-подключения (тогда файл шифруется парольной фразой, см. settings-backup.js)
+  SETTINGS_BACKUP_EXPORT: 'settings:backup-export',
+  SETTINGS_BACKUP_PICK_IMPORT: 'settings:backup-pick-import',
+  SETTINGS_BACKUP_IMPORT: 'settings:backup-import',
+
   // Agents
   AGENTS_GET_STATUS: 'agents:get-status',
   AGENTS_REFRESH: 'agents:refresh',
@@ -87,6 +93,7 @@ export const IPC_CHANNELS = Object.freeze({
   APP_HOMEDIR: 'app:homedir',
   APP_OPEN_EXTERNAL: 'app:open-external',
   APP_OPEN_URL: 'app:open-url',
+  APP_RELAUNCH: 'app:relaunch',
 
   // Search
   SEARCH_QUERY: 'search:query',

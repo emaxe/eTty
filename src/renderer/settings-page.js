@@ -1,7 +1,10 @@
 import { registerModal, hasOpenModal } from './components/base/modal/modal.js'
+import { Button } from './components/base/button/button.js'
+import { showToast } from './components/toast/toast.js'
 import { formatHotkey, HOTKEYS } from './core/hotkeys.js'
 import { Icons } from './icons.js'
 import { buildQuickReplyTree, normalizeQuickReplies } from './features/quick-replies/quick-replies-model.js'
+import { BackupDialog } from './features/settings-backup/backup-dialog.js'
 import { APP_CONFIG } from './core/config/app-config.js'
 import { RADIAL_MENU_CONFIG } from './core/config/radial-menu-config.js'
 import { normalizeRadialSettings } from './features/radial-menu/radial-menu-model.js'
@@ -41,6 +44,8 @@ export class SettingsPage {
     this._saveTimer = null
     this._agentsCategory = null
     this._quickRepliesCategory = null
+    this._backupDialog = new BackupDialog()
+    this._backupBusy = false
     this._agentStatusById = new Map()
     this._collapsedGroupIds = new Set()
     this._dragState = null
@@ -442,6 +447,8 @@ export class SettingsPage {
 
     this._quickRepliesCategory = this._buildQuickRepliesCategory()
 
+    this._backupCategory = this._buildBackupCategory()
+
     this._hotkeysEl = document.createElement('div')
     this._hotkeysEl.className = 'settings-category'
 
@@ -452,6 +459,7 @@ export class SettingsPage {
       { id: 'ssh', title: 'Панель SSH', nodes: [sec.ssh] },
       { id: 'agents', title: 'ИИ-агенты', nodes: [this._agentsCategory, this._customAgentsCategory] },
       { id: 'quick-replies', title: 'Быстрые ответы', nodes: [this._quickRepliesCategory] },
+      { id: 'backup', title: 'Резервная копия', nodes: [this._backupCategory] },
       { id: 'hotkeys', title: 'Горячие клавиши', nodes: [this._hotkeysEl] }
     ]
     this._buildShell(overlay)
@@ -1868,6 +1876,9 @@ export class SettingsPage {
   destroy() {
     document.removeEventListener('keydown', this._onKeyDown)
     clearTimeout(this._savedTimer)
+    this._backupDialog?.destroy()
+    this._backupDialog = null
+    this._backupCategory = null
     if (this._saveTimer) {
       clearTimeout(this._saveTimer)
       this._saveTimer = null
@@ -1905,6 +1916,155 @@ export class SettingsPage {
     this._config.terminal.radialMenu = value
     this._bus.emit('settings.changed', { key: 'terminal.radialMenu', value })
     this._scheduleSave()
+  }
+
+  /** Раздел «Резервная копия»: полный экспорт/импорт настроек, тем и (опционально) SSH-подключений. */
+  _buildBackupCategory() {
+    const category = document.createElement('div')
+    category.className = 'settings-category'
+
+    const title = document.createElement('div')
+    title.className = 'settings-category-title'
+    title.textContent = 'Резервная копия'
+    category.appendChild(title)
+
+    const exportBtn = new Button({
+      variant: 'default',
+      label: 'Экспортировать…',
+      onClick: () => this._exportBackup()
+    })
+    const importBtn = new Button({
+      variant: 'default',
+      label: 'Импортировать…',
+      onClick: () => this._importBackup()
+    })
+
+    const rows = [
+      { label: 'Экспорт настроек, тем и SSH-подключений в один файл', control: exportBtn.element },
+      { label: 'Импорт из файла резервной копии', control: importBtn.element }
+    ]
+    for (const { label, control } of rows) {
+      const row = document.createElement('div')
+      row.className = 'settings-row'
+      const labelEl = document.createElement('div')
+      labelEl.className = 'settings-label'
+      labelEl.textContent = label
+      const controlEl = document.createElement('div')
+      controlEl.className = 'settings-control'
+      controlEl.appendChild(control)
+      row.append(labelEl, controlEl)
+      category.appendChild(row)
+    }
+
+    const hint = document.createElement('div')
+    hint.className = 'settings-hint'
+    hint.textContent = 'Файл содержит config.json (внешний вид, терминал, агенты с прокси, быстрые ответы) ' +
+      'и пользовательские темы. SSH-подключения включаются опционально и требуют парольную фразу — ' +
+      'без них файл не шифруется.'
+    category.appendChild(hint)
+
+    return category
+  }
+
+  /** Экспорт: файл читает main с диска, поэтому сначала сбрасываем отложенное сохранение. */
+  async _exportBackup() {
+    if (this._backupBusy) return
+    const form = await this._backupDialog.openExport({
+      proxyHasCredentials: /@/.test(this._config.agents?.proxy || '')
+    })
+    if (!form) return
+
+    this._backupBusy = true
+    try {
+      await this._flushSettings()
+      const result = await this._api.settingsBackupExport(form)
+      if (result?.canceled) return
+      if (!result?.success) {
+        showToast(result?.error || 'Не удалось экспортировать настройки', 'error')
+        return
+      }
+
+      const details = [`тем: ${result.themesCount}`]
+      if (result.connectionsCount > 0) details.push(`подключений: ${result.connectionsCount}`)
+      showToast(`Настройки экспортированы (${details.join(', ')})`, 'success')
+      if (result.warnings?.length) console.warn('Settings backup:', ...result.warnings)
+    } finally {
+      this._backupBusy = false
+    }
+  }
+
+  /** Импорт: замена config.json и тем + upsert SSH-подключений, затем перезапуск приложения. */
+  async _importBackup() {
+    if (this._backupBusy) return
+    const picked = await this._api.settingsBackupPickImport()
+    if (picked?.canceled) return
+    if (!picked || picked.success === false) {
+      showToast(picked?.error || 'Не удалось прочитать файл', 'error')
+      return
+    }
+
+    let passphrase = ''
+    if (picked.encrypted) {
+      const value = await this._backupDialog.openPassphrase()
+      if (value == null) return
+      passphrase = value
+    }
+
+    const confirmed = await this._confirmDialog.open({
+      title: 'Импортировать настройки?',
+      message: 'Текущие настройки и темы будут заменены данными из файла. Копия текущих настроек ' +
+        'сохранится в папке резервных копий, приложение перезапустится.',
+      confirmText: 'Импортировать'
+    })
+    if (!confirmed) return
+
+    this._backupBusy = true
+    try {
+      // После импорта страница не должна сохранять свою копию конфига поверх файла
+      if (this._saveTimer) {
+        clearTimeout(this._saveTimer)
+        this._saveTimer = null
+      }
+
+      for (;;) {
+        const result = await this._api.settingsBackupImport({ path: picked.path, passphrase })
+        if (result?.success) {
+          await this._backupDialog.openResult({
+            message: this._importSummary(result),
+            warnings: result.warnings || []
+          })
+          this._api.appRelaunch()
+          return
+        }
+        if (result?.needPassphrase) {
+          const value = await this._backupDialog.openPassphrase(result.error || '')
+          if (value == null) return
+          passphrase = value
+          continue
+        }
+        showToast(result?.error || 'Не удалось импортировать настройки', 'error')
+        return
+      }
+    } finally {
+      this._backupBusy = false
+    }
+  }
+
+  _importSummary(result) {
+    const parts = [`тем: ${result.themes}`]
+    if (result.connections > 0) parts.push(`SSH-подключений: ${result.connections}`)
+    const backup = result.backupDir ? ` Копия прежних настроек: ${result.backupDir}.` : ''
+    return `Импортировано ${parts.join(', ')}.${backup} ` +
+      'Приложение перезапустится, чтобы применить настройки полностью.'
+  }
+
+  /** Сохраняет config.json немедленно — экспорт читает файл с диска, а не состояние страницы. */
+  async _flushSettings() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer)
+      this._saveTimer = null
+    }
+    await this._api.settingsSave(this._config)
   }
 
   _scheduleSave() {

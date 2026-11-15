@@ -14,6 +14,10 @@
  *
  * Чистый модуль — никакого Electron/fs/диалогов (те остаются в `ssh-store.js`/`ssh-handlers.js`),
  * поэтому тестируется без Electron-рантайма (`src/main/__tests__/ettyx-format.test.mjs`).
+ *
+ * Тем же шифрованием пользуется резервная копия настроек (`backup/backup-format.js`) — конверт
+ * параметризован `format`/`version`, значения по умолчанию остаются `.ettyx` (формат мобильной
+ * совместимости).
  */
 import { randomBytes, pbkdf2Sync, createCipheriv, createDecipheriv } from 'node:crypto'
 
@@ -67,11 +71,15 @@ export function buildEttyxPlaintext(connections, opts = {}) {
 
 /**
  * Шифрует уже собранный JSON payload'а (см. [buildEttyxPlaintext]) парольной фразой пользователя.
+ * `format`/`version` переопределяют конверт — тем же шифрованием пользуется резервная копия
+ * настроек (`backup/backup-format.js`), чей `format` отличается от `.ettyx`.
  * @param {string} plaintextJson
  * @param {string} passphrase
+ * @param {{ format?: string, version?: number }} [opts]
  * @returns {string} содержимое `.ettyx`-файла (JSON-конверт, см. докстринг модуля)
  */
-export function encryptEttyx(plaintextJson, passphrase) {
+export function encryptEttyx(plaintextJson, passphrase, opts = {}) {
+  const { format = ETTYX_FORMAT, version = ETTYX_VERSION } = opts
   const salt = randomBytes(SALT_LENGTH_BYTES)
   const iv = randomBytes(IV_LENGTH_BYTES)
   const key = pbkdf2Sync(passphrase, salt, ETTYX_PBKDF2_ITERATIONS, KEY_LENGTH_BYTES, 'sha256')
@@ -81,8 +89,8 @@ export function encryptEttyx(plaintextJson, passphrase) {
 
   return JSON.stringify(
     {
-      format: ETTYX_FORMAT,
-      version: ETTYX_VERSION,
+      format,
+      version,
       kdf: ETTYX_KDF,
       iterations: ETTYX_PBKDF2_ITERATIONS,
       salt: salt.toString('base64'),
@@ -101,21 +109,28 @@ export function encryptEttyx(plaintextJson, passphrase) {
  * что повреждение файла, различить их криптографически невозможно, поэтому сообщение общее).
  * @param {string} fileContents
  * @param {string} passphrase
+ * @param {{ expectedFormat?: string, expectedVersion?: number, label?: string }} [opts]
+ *   `label` — название формата для сообщений об ошибке («.ettyx» по умолчанию)
  * @returns {{ exportedAt: string, connections: object[] }}
  */
-export function decryptEttyx(fileContents, passphrase) {
+export function decryptEttyx(fileContents, passphrase, opts = {}) {
+  const {
+    expectedFormat = ETTYX_FORMAT,
+    expectedVersion = ETTYX_VERSION,
+    label = '.ettyx'
+  } = opts
   let envelope
   try {
     envelope = JSON.parse(fileContents)
   } catch {
-    throw new Error('Файл повреждён или это не .ettyx')
+    throw new Error(`Файл повреждён или это не ${label}`)
   }
 
-  if (envelope?.format !== ETTYX_FORMAT) {
-    throw new Error('Это не файл экспорта eTty (.ettyx)')
+  if (envelope?.format !== expectedFormat) {
+    throw new Error(`Это не файл экспорта eTty (${label})`)
   }
-  if (envelope.version !== ETTYX_VERSION) {
-    throw new Error(`Неподдерживаемая версия формата .ettyx: ${envelope.version}`)
+  if (envelope.version !== expectedVersion) {
+    throw new Error(`Неподдерживаемая версия формата ${label}: ${envelope.version}`)
   }
 
   let plaintext

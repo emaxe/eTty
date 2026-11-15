@@ -6,7 +6,7 @@ import { CONFIG_VERSION, getConfigDefaults, mergeConfigWithDefaults } from './co
 
 export { getConfigDefaults }
 
-const CONFIG_DIR = () => join(app.getPath('userData'), 'eTty')
+export const CONFIG_DIR = () => join(app.getPath('userData'), 'eTty')
 const CONFIG_FILE = () => join(CONFIG_DIR(), 'config.json')
 
 export async function loadConfig() {
@@ -71,10 +71,15 @@ export async function loadConfig() {
 
 export async function saveConfig(config) {
   try {
-    await mkdir(CONFIG_DIR(), { recursive: true })
-    await writeFile(CONFIG_FILE(), JSON.stringify(config, null, 2), 'utf-8')
+    await writeConfigFile(config)
     log.info('config: saved')
   } catch (e) {
     log.error('config: failed to save', e.message)
   }
+}
+
+/** Запись config.json с пробросом ошибки — для импорта резервной копии, где сбой должен быть виден. */
+export async function writeConfigFile(config) {
+  await mkdir(CONFIG_DIR(), { recursive: true })
+  await writeFile(CONFIG_FILE(), JSON.stringify(config, null, 2), 'utf-8')
 }
