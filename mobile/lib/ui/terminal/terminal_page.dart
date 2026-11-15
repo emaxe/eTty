@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart' as xterm;
 
 import 'package:mobile/app/providers/connection_providers.dart';
+import 'package:mobile/app/providers/floating_button_providers.dart';
 import 'package:mobile/app/providers/host_keys_provider.dart';
 import 'package:mobile/app/providers/quick_actions_providers.dart';
 import 'package:mobile/app/providers/quick_commands_providers.dart';
@@ -17,6 +18,7 @@ import 'package:mobile/app/theme/etty_theme.dart';
 import 'package:mobile/data/connection_store.dart';
 import 'package:mobile/core/config/quick_actions_config.dart';
 import 'package:mobile/domain/attachment_upload.dart';
+import 'package:mobile/domain/floating_button.dart';
 import 'package:mobile/domain/lifecycle_controller.dart';
 import 'package:mobile/domain/quick_commands.dart';
 import 'package:mobile/domain/tab_controller.dart' as domain;
@@ -27,8 +29,11 @@ import 'package:mobile/transport/exec_channel.dart';
 import 'package:mobile/transport/ssh_connection.dart';
 import 'package:mobile/ui/connections/tmux_sessions_sheet.dart';
 import 'package:mobile/ui/files/remote_file_tree_screen.dart';
+import 'package:mobile/ui/terminal/floating_quick_button.dart';
 import 'package:mobile/ui/terminal/input_handler.dart';
 import 'package:mobile/ui/terminal/key_bar.dart';
+import 'package:mobile/ui/terminal/quick_action_runner.dart';
+import 'package:mobile/ui/terminal/quick_actions_panel.dart';
 import 'package:mobile/ui/terminal/terminal_gestures.dart';
 import 'package:mobile/ui/terminal/tab_strip.dart';
 
@@ -369,7 +374,9 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(SnackBar(content: Text('Не удалось загрузить файл: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Не удалось загрузить файл: $e')),
+      );
     }
   }
 
@@ -469,8 +476,14 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
         ? EttyPalette.dark
         : EttyPalette.light;
     final terminalTheme = EttyTheme.terminalTheme(palette);
-    final quickActions = ref.watch(quickActionsProvider).value ?? QuickActionsConfig.defaultActions;
-    final commandGroups = ref.watch(quickCommandsProvider).value ?? QuickCommandsDefaults.groups;
+    final quickActions =
+        ref.watch(quickActionsProvider).value ??
+        QuickActionsConfig.defaultActions;
+    final commandGroups =
+        ref.watch(quickCommandsProvider).value ?? QuickCommandsDefaults.groups;
+    final floating =
+        ref.watch(floatingButtonProvider).value ??
+        const FloatingButtonSettings();
 
     return Scaffold(
       appBar: AppBar(
@@ -524,8 +537,11 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
                 : IndexedStack(
                     index: _activeIndex,
                     children: [
-                      for (final tab in _tabs)
+                      for (final (i, tab) in _tabs.indexed)
                         _TerminalTabView(
+                          // Ключ — сама вкладка: при закрытии соседней состояние (открытая панель)
+                          // не должно «переехать» на чужой терминал.
+                          key: ObjectKey(tab),
                           tab: tab,
                           theme: terminalTheme,
                           brightness: brightness,
@@ -534,6 +550,11 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
                             commandGroups,
                           ),
                           onAttach: _attachFile,
+                          floating: floating,
+                          onFloatingChanged: (next) => ref
+                              .read(floatingButtonProvider.notifier)
+                              .save(next),
+                          isActive: i == _activeIndex,
                         ),
                     ],
                   ),
@@ -545,15 +566,20 @@ class _TerminalPageState extends ConsumerState<TerminalPage>
 }
 
 /// Тело одной вкладки: `xterm.TerminalView` + оверлей статуса поверх него, когда канал не в
-/// состоянии `connected` (подключается/детач/перехвачена/ошибка — REQ-12).
-class _TerminalTabView extends StatelessWidget {
+/// состоянии `connected` (подключается/детач/перехвачена/ошибка — REQ-12), плюс плавающая кнопка
+/// быстрых действий и её панель (REQ-1…REQ-22).
+class _TerminalTabView extends StatefulWidget {
   const _TerminalTabView({
+    super.key,
     required this.tab,
     required this.theme,
     required this.brightness,
     required this.quickActions,
     required this.commandGroups,
     required this.onAttach,
+    required this.floating,
+    required this.onFloatingChanged,
+    required this.isActive,
   });
 
   final _TerminalTab tab;
@@ -562,17 +588,98 @@ class _TerminalTabView extends StatelessWidget {
   final List<QuickAction> quickActions;
   final List<QuickCommandGroup> commandGroups;
   final Future<void> Function() onAttach;
+  final FloatingButtonSettings floating;
+  final void Function(FloatingButtonSettings settings) onFloatingChanged;
+
+  /// Вкладка видима: панель у невидимой вкладки закрывается (REQ-20).
+  final bool isActive;
+
+  @override
+  State<_TerminalTabView> createState() => _TerminalTabViewState();
+}
+
+class _TerminalTabViewState extends State<_TerminalTabView> {
+  bool _panelOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.tab.statusNotifier.addListener(_onStatusChanged);
+  }
+
+  @override
+  void didUpdateWidget(_TerminalTabView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tab != widget.tab) {
+      oldWidget.tab.statusNotifier.removeListener(_onStatusChanged);
+      widget.tab.statusNotifier.addListener(_onStatusChanged);
+      _panelOpen = false;
+    }
+    if (!widget.isActive) _panelOpen = false;
+  }
+
+  @override
+  void dispose() {
+    widget.tab.statusNotifier.removeListener(_onStatusChanged);
+    super.dispose();
+  }
+
+  /// Канал ушёл из `connected` — панель закрываем: иначе после переподключения она всплывёт сама,
+  /// хотя пользователь её не открывал (REQ-18).
+  void _onStatusChanged() {
+    if (!_panelOpen) return;
+    if (widget.tab.statusNotifier.value == domain.TabConnectionStatus.connected) {
+      return;
+    }
+    setState(() => _panelOpen = false);
+  }
+
+  void _openPanel() {
+    HapticFeedback.mediumImpact();
+    setState(() => _panelOpen = true);
+  }
+
+  void _closePanel() {
+    if (!_panelOpen) return;
+    setState(() => _panelOpen = false);
+  }
+
+  /// Тап кнопки/элемент панели — то же исполнение, что у колеса: `runQuickAction` держит одну
+  /// трактовку видов действий для всех трёх входов.
+  void _runFloating(QuickAction action) {
+    HapticFeedback.lightImpact();
+    unawaited(
+      runQuickAction(
+        context,
+        action,
+        terminal: widget.tab.terminal,
+        controller: widget.tab.terminalController,
+        write: widget.tab.sendRaw,
+        onAttach: widget.onAttach,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     // Панель модификаторов (REQ-16) видна, только пока открыта софт-клавиатура — так же, как
     // сама клавиатура, она не нужна, пока пользователь не набирает текст.
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
-    return Column(
-      children: [
-        Expanded(child: _terminalStack(context)),
-        if (keyboardVisible) KeyBar(sticky: tab.sticky, onSend: tab.sendRaw),
-      ],
+    return PopScope(
+      // Системная «назад» сначала закрывает панель (REQ-20). На невидимой вкладке панели нет,
+      // поэтому её PopScope не мешает выходу с экрана.
+      canPop: !_panelOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _closePanel();
+      },
+      child: Column(
+        children: [
+          Expanded(child: _terminalStack(context)),
+          if (keyboardVisible) ...[
+            KeyBar(sticky: widget.tab.sticky, onSend: widget.tab.sendRaw),
+          ],
+        ],
+      ),
     );
   }
 
@@ -585,42 +692,81 @@ class _TerminalTabView extends StatelessWidget {
       children: [
         Positioned.fill(
           child: xterm.TerminalView(
-            tab.terminal,
-            key: tab.viewKey,
-            controller: tab.terminalController,
-            theme: theme,
+            widget.tab.terminal,
+            key: widget.tab.viewKey,
+            controller: widget.tab.terminalController,
+            theme: widget.theme,
             autofocus: true,
             // `visiblePassword`: Gboard не держит слово в composing — символы уходят на сервер сразу,
             // курсор двигается при наборе (как в Termux/ConnectBot).
             keyboardType: TextInputType.visiblePassword,
             deleteDetection: true,
-            keyboardAppearance: brightness,
-            scrollController: tab.scrollController,
+            keyboardAppearance: widget.brightness,
+            scrollController: widget.tab.scrollController,
           ),
         ),
         // Все касания принимает наш слой: встроенные жесты TerminalView конфликтуют друг с другом.
         Positioned.fill(
           child: TerminalGestureLayer(
-            terminal: tab.terminal,
-            viewKey: tab.viewKey,
-            controller: tab.terminalController,
-            scrollController: tab.scrollController,
-            isTmux: tab.isTmux,
-            write: tab.sendRaw,
-            quickActions: quickActions,
-            commandGroups: commandGroups,
-            onAttach: onAttach,
+            terminal: widget.tab.terminal,
+            viewKey: widget.tab.viewKey,
+            controller: widget.tab.terminalController,
+            scrollController: widget.tab.scrollController,
+            isTmux: widget.tab.isTmux,
+            write: widget.tab.sendRaw,
+            quickActions: widget.quickActions,
+            commandGroups: widget.commandGroups,
+            onAttach: widget.onAttach,
+            panelOpen: _panelOpen,
           ),
         ),
+        // Плавающая кнопка и панель — только при живом канале: при `detached`/`error` слать некуда,
+        // а при `connecting` их закрывает оверлей статуса (REQ-18). Оверлей статуса остаётся
+        // верхним слоем, поэтому его `onReconnect` всегда доступен.
         ValueListenableBuilder<domain.TabConnectionStatus>(
-          valueListenable: tab.statusNotifier,
+          valueListenable: widget.tab.statusNotifier,
+          builder: (context, status, _) {
+            if (!widget.floating.enabled ||
+                status != domain.TabConnectionStatus.connected) {
+              return const SizedBox.shrink();
+            }
+            return Positioned.fill(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: FloatingQuickButton(
+                      settings: widget.floating,
+                      onTap: () => _runFloating(widget.floating.tapAction),
+                      onDoubleTap: () =>
+                          _runFloating(widget.floating.doubleTapAction),
+                      onLongPress: _openPanel,
+                      onMoved: (x, y) => widget.onFloatingChanged(
+                        widget.floating.copyWith(positionX: x, positionY: y),
+                      ),
+                    ),
+                  ),
+                  if (_panelOpen)
+                    Positioned.fill(
+                      child: QuickActionsPanel(
+                        actions: widget.floating.actions,
+                        onAction: _runFloating,
+                        onClose: _closePanel,
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+        ValueListenableBuilder<domain.TabConnectionStatus>(
+          valueListenable: widget.tab.statusNotifier,
           builder: (context, status, _) {
             if (status == domain.TabConnectionStatus.connected) {
               return const SizedBox.shrink();
             }
             return _StatusOverlay(
               status: status,
-              onReconnect: tab.controller.connect,
+              onReconnect: widget.tab.controller.connect,
             );
           },
         ),

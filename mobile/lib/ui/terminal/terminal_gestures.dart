@@ -267,6 +267,7 @@ class TerminalGestureLayer extends StatefulWidget {
     this.quickActions = QuickActionsConfig.defaultActions,
     this.commandGroups = const [],
     this.onAttach,
+    this.panelOpen = false,
   });
 
   final xterm.Terminal terminal;
@@ -288,6 +289,10 @@ class TerminalGestureLayer extends StatefulWidget {
 
   /// Действие «📎 Файл» колеса: выбрать файл на телефоне и загрузить на сервер.
   final Future<void> Function()? onAttach;
+
+  /// Открыта панель плавающей кнопки. Колесо при этом закрывается (REQ-19): два меню поверх
+  /// терминала одновременно — это не «больше возможностей», а нечитаемый экран.
+  final bool panelOpen;
 
   @override
   State<TerminalGestureLayer> createState() => _TerminalGestureLayerState();
@@ -336,6 +341,14 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
       onThreeFingerTap: _onThreeFingerTap,
       onTwoFingerDoubleTap: _onTwoFingerDoubleTap,
     );
+  }
+
+  @override
+  void didUpdateWidget(TerminalGestureLayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Панель открыли — закреплённое колесо закрываем без setState: перестройка уже идёт, а
+    // повторный setState в didUpdateWidget — лишний кадр.
+    if (widget.panelOpen && !oldWidget.panelOpen) _clearWheelState();
   }
 
   @override
@@ -659,13 +672,15 @@ class _TerminalGestureLayerState extends State<TerminalGestureLayer> {
 
   void _closeWheel() {
     if (!mounted) return;
-    setState(() {
-      _wheelCenter = null;
-      _wheelHighlight = null;
-      _wheelPinned = false;
-      _commandsWheel = false;
-      _commandGroup = null;
-    });
+    setState(_clearWheelState);
+  }
+
+  void _clearWheelState() {
+    _wheelCenter = null;
+    _wheelHighlight = null;
+    _wheelPinned = false;
+    _commandsWheel = false;
+    _commandGroup = null;
   }
 
   void _onSignal(PointerSignalEvent event) {
