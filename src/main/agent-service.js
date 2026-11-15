@@ -144,9 +144,9 @@ export class AgentService {
     this._lastCustomAgents = customAgents || []
     this._lastLaunchCommands = launchCommands || {}
 
-    // Инвалидируем кэш PATH, чтобы подхватить свежие установки
-    this._shellPathResolver.invalidate()
-    const resolvedPath = await this._shellPathResolver.resolve()
+    // Принудительно перепроверяем PATH, чтобы подхватить свежие установки.
+    // Кэш не обнуляем: PTY продолжает видеть прошлый рабочий PATH, пока идёт проверка.
+    const resolvedPath = await this._shellPathResolver.refresh()
 
     const builtInAgents = await Promise.all(
       SUPPORTED_AGENTS.map(async (agent) => {

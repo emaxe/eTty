@@ -93,9 +93,18 @@ export class SettingsPage {
     }
   }
 
+  /** Доступен ли встроенный агент: отключение сильнее ручного включения, оно — сильнее детекта. */
+  _isAgentEnabled(agentId, detected) {
+    if (this._config.agents.forceDisabled[agentId]) return false
+    return this._config.agents.forceEnabled[agentId] === true || detected
+  }
+
   _ensureAgentSettings() {
     if (!this._config.agents) this._config.agents = {}
     if (!this._config.agents.forceDisabled) this._config.agents.forceDisabled = {}
+    if (!this._config.agents.forceEnabled || typeof this._config.agents.forceEnabled !== 'object' || Array.isArray(this._config.agents.forceEnabled)) {
+      this._config.agents.forceEnabled = {}
+    }
     if (!this._config.agents.launchCommands || typeof this._config.agents.launchCommands !== 'object') {
       this._config.agents.launchCommands = {}
     }
@@ -697,23 +706,34 @@ export class SettingsPage {
         const isDetected = !!updated?.detected
         badge.className = `settings-agent-badge ${isDetected ? 'detected' : 'missing'}`
         badge.textContent = isDetected ? 'Обнаружен' : 'Не обнаружен'
+        // Автообнаружение меняет чекбокс, только если пользователь не выбирал его вручную.
+        if (this._config.agents.forceEnabled[agentId] !== true && toggle.isConnected) {
+          const nextEnabled = this._isAgentEnabled(agentId, isDetected)
+          toggle.querySelector('input').checked = nextEnabled
+          stateLabel.textContent = nextEnabled ? 'Вкл' : 'Выкл'
+        }
       }, 350)
     })
 
     const stateLabel = document.createElement('span')
     stateLabel.className = 'settings-agent-switch-label'
-    stateLabel.textContent = this._config.agents.forceDisabled[agentId] ? 'Выкл' : 'Вкл'
+    const isEnabled = this._isAgentEnabled(agentId, detected)
+    stateLabel.textContent = isEnabled ? 'Вкл' : 'Выкл'
 
     const toggle = this._createToggle(
-      !this._config.agents.forceDisabled[agentId],
-      (isEnabled) => {
-        this._config.agents.forceDisabled[agentId] = !isEnabled
-        stateLabel.textContent = isEnabled ? 'Вкл' : 'Выкл'
+      isEnabled,
+      (enabled) => {
+        this._config.agents.forceDisabled[agentId] = !enabled
+        // false — это обычный авто-режим, отдельная запись для него не нужна.
+        if (enabled) this._config.agents.forceEnabled[agentId] = true
+        else delete this._config.agents.forceEnabled[agentId]
+        stateLabel.textContent = enabled ? 'Вкл' : 'Выкл'
         this._bus.emit('settings.changed', { key: 'agents.forceDisabled', value: { ...this._config.agents.forceDisabled } })
+        this._bus.emit('settings.changed', { key: 'agents.forceEnabled', value: { ...this._config.agents.forceEnabled } })
         this._scheduleSave()
       }
     )
-    toggle.title = 'Включить/выключить агента'
+    toggle.title = 'Включить/выключить агента независимо от автообнаружения'
 
     const modeLabel = document.createElement('span')
     modeLabel.className = 'settings-agent-switch-label'

@@ -45,6 +45,7 @@ export class StatusBar {
     this._homeDir = null
     this._agentsById = new Map()
     this._forceDisabled = {}
+    this._forceEnabled = {}
     this._agentConfigById = new Map()
     this._activeTabBusy = false
     this._activeAgentId = null
@@ -149,6 +150,11 @@ export class StatusBar {
     this._updateAgentButtons()
   }
 
+  setForceEnabled(forceEnabled) {
+    this._forceEnabled = forceEnabled || {}
+    this._updateAgentButtons()
+  }
+
   setTerminalState({ isBusy, activeAgentId, busyOptimistic = false, isRemote = false }) {
     this._isRemote = !!isRemote
     this._activeTabBusy = !!isBusy
@@ -188,11 +194,12 @@ export class StatusBar {
     return false
   }
 
-  /** Скрытый агент: disabled в настройках / not detected / занят другой агент. */
+  /** Ручное включение обходит детект, но не отключение или занятость другим агентом. */
   _isAgentHidden(agentId) {
     const disabledBySettings = this._isAgentDisabledBySettings(agentId)
     const agentStatus = this._agentsById.get(agentId)
-    const notDetected = agentStatus && !agentStatus.detected
+    const manuallyEnabled = this._forceEnabled?.[agentId] === true || this._agentConfigById?.get(agentId)?.enabled === true
+    const notDetected = agentStatus && !agentStatus.detected && !manuallyEnabled
     const isOtherBusy = this._activeTabBusy && this._activeAgentId && this._activeAgentId !== agentId
     return !!(disabledBySettings || notDetected || isOtherBusy)
   }
@@ -435,6 +442,7 @@ export class StatusBar {
     this._homeDir = null
     this._agentsById = null
     this._forceDisabled = null
+    this._forceEnabled = null
   }
 
   _updateGitButton(state) {

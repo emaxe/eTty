@@ -101,7 +101,8 @@ function cleanupOrphanedControlSockets() {
 }
 
 app.whenReady().then(async () => {
-  await shellPathResolver.resolve()
+  // PATH прогревается в фоне (startAgentAutoRefresh): холодный login-shell
+  // с nvm может идти секунды и не должен задерживать окно.
   cleanupOrphanedControlSockets()
 
   appService.startAgentAutoRefresh()

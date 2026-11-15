@@ -157,6 +157,8 @@ export function registerPtyHandlers(ipcMain, { ptyManager, historyManager, sshSt
       if (persistence === 'tmux' && !SSH_SESSION_CONFIG.SESSION_NAME_RE.test(options.ssh.sessionName || '')) {
         return { error: 'invalid-session-name' }
       }
+      // PATH может ещё прогреваться после старта — ждём его, а не собираем запуск с null.
+      await shellPathResolver.resolve()
       const sshLaunch = buildSshLaunch({
         connection,
         resolvedPath: shellPathResolver.getResolvedPath(),

@@ -5,7 +5,9 @@ import path from 'path'
 import { findExecutable, extractCommandBinary } from '../env-utils.js'
 import { getCommonUserBinDirs, extractPathDirsFromShellProfiles } from '../shell-path-resolver.js'
 import { PtyManager } from '../pty-manager.js'
+import { AgentService } from '../agent-service.js'
 import { StatusBar } from '../../renderer/status-bar.js'
+import { SettingsPage } from '../../renderer/settings-page.js'
 
 test('extractCommandBinary: извлекает бинарник с пропуском env-переменных и кавычек', () => {
   assert.equal(extractCommandBinary('claude'), 'claude')
@@ -134,4 +136,153 @@ test('StatusBar: скрывает отключённых встроенных (f
     snapshot.agents.map(a => a.id),
     ['opencode', 'custom-2']
   )
+})
+
+test('StatusBar: manual enable overrides failed detection in buttons and radial menu', () => {
+  const sb = Object.create(StatusBar.prototype)
+  sb._agentConfigs = [{ id: 'codex', label: 'Codex' }]
+  sb._agentConfigById = new Map(sb._agentConfigs.map(a => [a.id, a]))
+  sb._agentsById = new Map([['codex', { id: 'codex', detected: false }]])
+  sb._forceDisabled = { codex: false }
+  sb._forceEnabled = {}
+  sb._activeTabBusy = false
+  sb._activeAgentId = null
+  sb._isRemote = false
+
+  const button = {
+    dataset: { agentId: 'codex' }, style: {}, textContent: 'Codex',
+    classList: { toggle() {} }
+  }
+  sb._agentButtons = [button]
+  sb._updateAgentButtons()
+  assert.equal(button.style.display, 'none')
+  sb.setForceEnabled({ codex: true })
+
+  assert.equal(sb._isAgentHidden('codex'), false)
+  assert.equal(button.style.display, '')
+  assert.equal(button.disabled, false)
+  assert.deepEqual(sb.getQuickAccessSnapshot().agents, [{ id: 'codex', label: 'Codex' }])
+  sb.setAgentsStatus({ agents: [{ id: 'codex', detected: false }] })
+  assert.equal(sb._isAgentHidden('codex'), false, 'refresh must not erase manual choice')
+
+  sb.setForceDisabled({ codex: true })
+  assert.equal(sb._isAgentHidden('codex'), true, 'disable wins over enable')
+  assert.equal(button.style.display, 'none')
+  sb._forceDisabled.codex = false
+  sb._activeTabBusy = true
+  sb._activeAgentId = 'claude'
+  assert.equal(sb._isAgentHidden('codex'), true, 'another busy agent remains protected')
+  sb._activeTabBusy = false
+  sb._forceEnabled = {}
+  assert.equal(sb._isAgentHidden('codex'), true, 'old false defaults are still automatic')
+})
+
+test('StatusBar: enabled custom agent remains available when its check command is missing', () => {
+  const sb = Object.create(StatusBar.prototype)
+  sb._agentConfigs = [{ id: 'custom-1', label: 'Custom', enabled: true }]
+  sb._agentConfigById = new Map(sb._agentConfigs.map(a => [a.id, a]))
+  sb._agentsById = new Map([['custom-1', { detected: false }]])
+  sb._forceDisabled = {}
+  sb._activeTabBusy = false
+  assert.deepEqual(sb.getQuickAccessSnapshot().agents, [{ id: 'custom-1', label: 'Custom' }])
+  sb._agentConfigs[0].enabled = false
+  assert.deepEqual(sb.getQuickAccessSnapshot().agents, [])
+})
+
+// Minimal DOM boundary: exercise real settings control and its change listener.
+class SettingsElement extends EventTarget {
+  children = []
+  isConnected = true
+  appendChild(child) { this.children.push(child) }
+  querySelector() { return this.children.find(child => child.type === 'checkbox') }
+}
+
+test('SettingsPage: missing agent can be checked and manual choice survives reload', (t) => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'document')
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { createElement: () => new SettingsElement() }
+  })
+  t.after(() => {
+    if (original) Object.defineProperty(globalThis, 'document', original)
+    else delete globalThis.document
+  })
+  const page = Object.create(SettingsPage.prototype)
+  page._config = { agents: { forceDisabled: { codex: false } } }
+  page._agentStatusById = new Map([['codex', { id: 'codex', detected: false }]])
+  const changes = []
+  page._bus = { emit: (_, change) => changes.push(change) }
+  let saved
+  page._scheduleSave = () => { saved = JSON.stringify(page._config) }
+  page._ensureAgentSettings()
+  const control = page._buildAgentControl('codex')
+  const checkbox = control.children.find(el => el.className === 'settings-toggle').children[0]
+
+  assert.equal(checkbox.checked, false, 'missing agent must allow an explicit enable action')
+  checkbox.checked = true
+  checkbox.dispatchEvent(new Event('change'))
+  assert.equal(page._config.agents.forceEnabled.codex, true)
+  assert.equal(page._config.agents.forceDisabled.codex, false)
+  assert.ok(changes.some(change => change.key === 'agents.forceEnabled' && change.value.codex === true))
+
+  page._config = JSON.parse(saved)
+  page._ensureAgentSettings()
+  const reloaded = page._buildAgentControl('codex')
+  assert.equal(reloaded.children.find(el => el.className === 'settings-toggle').children[0].checked, true)
+  assert.equal(reloaded.children[0].textContent, 'Не обнаружен', 'enable must not fake detection')
+
+  checkbox.checked = false
+  checkbox.dispatchEvent(new Event('change'))
+  assert.equal(page._config.agents.forceEnabled.codex, undefined, 'auto default must not accumulate explicit false')
+  assert.equal(page._config.agents.forceDisabled.codex, true)
+})
+
+test('AgentService: refresh forces a fresh PATH probe so PTY never sees a cleared cache', async () => {
+  const calls = []
+  const resolver = {
+    getResolvedPath: () => '/resolved/bin:/usr/bin',
+    resolve: async () => { calls.push('resolve'); return '/usr/bin:/bin' },
+    refresh: async () => { calls.push('refresh'); return '/usr/bin:/bin' },
+    invalidate: () => calls.push('invalidate')
+  }
+  const service = new AgentService({ shellPathResolver: resolver })
+  const status = await service.refresh([], {})
+  assert.deepEqual(calls, ['refresh'])
+  assert.ok(status.agents.some(agent => agent.id === 'codex'))
+})
+
+test('SettingsPage: command recheck updates automatic checkbox without overriding manual choice', async (t) => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'document')
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true, value: { createElement: () => new SettingsElement() }
+  })
+  t.after(() => {
+    if (original) Object.defineProperty(globalThis, 'document', original)
+    else delete globalThis.document
+  })
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const page = Object.create(SettingsPage.prototype)
+  page._config = { agents: {} }
+  page._agentStatusById = new Map([['codex', { detected: false }]])
+  page._bus = { emit() {} }
+  page._scheduleSave = () => {}
+  page._api = { agentsRefresh: async () => ({ agents: [{ id: 'codex', detected: true }] }) }
+  page._ensureAgentSettings()
+  const control = page._buildAgentControl('codex')
+  const checkbox = control.children.find(el => el.className === 'settings-toggle').children[0]
+  const input = control.children.find(el => el.type === 'text')
+  assert.equal(checkbox.checked, false)
+  input.value = 'codex'
+  input.dispatchEvent(new Event('input'))
+  t.mock.timers.tick(350)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(control.children[0].textContent, 'Обнаружен')
+  assert.equal(checkbox.checked, true)
+
+  checkbox.checked = false
+  checkbox.dispatchEvent(new Event('change'))
+  input.dispatchEvent(new Event('input'))
+  t.mock.timers.tick(350)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(checkbox.checked, false, 'recheck must not undo manual disable')
 })

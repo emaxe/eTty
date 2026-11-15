@@ -124,7 +124,8 @@ const FALLBACK_PATHS = IS_WIN
     ]
 
 const SHELL = IS_WIN ? (process.env.ComSpec || 'cmd.exe') : '/bin/zsh'
-const TIMEOUT_MS = 3000
+// NVM and other version managers can take several seconds in a cold login shell.
+const TIMEOUT_MS = 10000
 const DELIMITER = '_SHELL_PATH_DELIMITER_'
 
 function isUnix() {
@@ -139,42 +140,64 @@ function isUnix() {
  *   — PATH обёрнут в DELIMITER, извлекается из stdout по маркерам.
  */
 export class ShellPathResolver {
-  constructor() {
+  constructor({ execFile = execFileAsync, env = process.env } = {}) {
+    this._execFile = execFile
+    this._env = env
     this._resolvedPath = null
     this._promise = null
+    this._stale = false
   }
 
   /**
-   * Возвращает (лениво) единый resolved PATH.
-   * При ошибке/таймауте — fallback на process.env.PATH + типовые пути.
+   * Возвращает единый resolved PATH.
+   * Пока кэш свежий, shell не запускается; параллельные вызовы ждут одну проверку.
    */
   async resolve() {
-    if (this._resolvedPath !== null) {
+    if (this._resolvedPath !== null && !this._stale) {
       return this._resolvedPath
     }
+    return this._resolveShared()
+  }
+
+  /**
+   * Принудительно перепроверяет PATH (например, после установки агента или nvm).
+   * Прошлый удачный PATH сохраняется, если новая проверка не удалась.
+   */
+  async refresh() {
+    return this._resolveShared()
+  }
+
+  async _resolveShared() {
     if (this._promise !== null) {
       return this._promise
     }
-    this._promise = this._doResolve()
-    this._resolvedPath = await this._promise
-    this._promise = null
-    return this._resolvedPath
+    const promise = this._doResolve()
+    this._promise = promise
+    this._stale = false
+    try {
+      const resolved = await promise
+      this._resolvedPath = resolved
+      return resolved
+    } finally {
+      // Отклонённая проверка не должна навсегда остаться в _promise.
+      if (this._promise === promise) this._promise = null
+    }
   }
 
   /**
-   * Синхронный доступ к кэшированному PATH.
-   * Возвращает null, если resolve() ещё не вызывался.
+   * Синхронный доступ к последнему удачному PATH.
+   * Возвращает null, пока ни одна проверка не завершилась.
    */
   getResolvedPath() {
     return this._resolvedPath
   }
 
   /**
-   * Сбросить кэш. Следующий resolve() перечитает PATH.
+   * Помечает PATH устаревшим, сохраняя последний удачный для синхронных вызовов.
+   * Следующий resolve() перечитает PATH.
    */
   invalidate() {
-    this._resolvedPath = null
-    this._promise = null
+    this._stale = true
   }
 
   /**
@@ -186,10 +209,21 @@ export class ShellPathResolver {
   }
 
   async _doResolve() {
-    // На Windows zsh отсутствует — сразу fallback
-    if (!isUnix()) {
-      return this._buildFallbackPath()
+    try {
+      const probed = await this._probeShellPath()
+      if (probed) return probed
+    } catch (err) {
+      log.warn('[ShellPathResolver] Unexpected probe failure:', err.message)
     }
+
+    // Неудачная перепроверка не должна ухудшать уже найденный рабочий PATH.
+    return this._resolvedPath ?? this._buildFallbackPath()
+  }
+
+  /** PATH из полного маркированного вывода shell или null, если получить его не удалось. */
+  async _probeShellPath() {
+    // На Windows zsh отсутствует — сразу fallback
+    if (!isUnix()) return null
 
     // Уникальный маркер, чтобы избежать коллизий, если PATH уже содержит старый DELIMITER
     const delimiter = `${DELIMITER}_${Date.now()}_${Math.random().toString(36).slice(2)}_`
@@ -197,36 +231,54 @@ export class ShellPathResolver {
     // $PATH и маркер в одно имя переменной (например $PATH_SHELL_PATH_DELIMITER_...)
     const script = `printf '%s%s%s' '${delimiter}' "\${PATH}" '${delimiter}'`
 
+    const env = { ...this._env }
+    // An inherited eTty wrapper (including one already deleted) must not replace user rc files.
+    // Preserve custom ZDOTDIR outside our temporary directories.
+    const normalizeTempPath = (value) => path.resolve(value).replace(/^\/private(?=\/var\/)/, '')
+    if (env.ZDOTDIR && /^etty-[A-Za-z0-9]{6}$/.test(path.basename(env.ZDOTDIR)) &&
+        normalizeTempPath(path.dirname(env.ZDOTDIR)) === normalizeTempPath(os.tmpdir())) {
+      const original = env.ETTY_ORIG_ZDOTDIR || env.ETTY_USER_ZDOTDIR
+      if (original) env.ZDOTDIR = original
+      else delete env.ZDOTDIR
+      delete env.ETTY_ORIG_ZDOTDIR
+      delete env.ETTY_USER_ZDOTDIR
+    }
+
+    let stdout = ''
+    const startedAt = Date.now()
     try {
-      const { stdout } = await execFileAsync(
+      const result = await this._execFile(
         SHELL,
         ['-l', '-i', '-c', script],
-        { timeout: TIMEOUT_MS, env: process.env }
+        { timeout: TIMEOUT_MS, env }
       )
+      stdout = String(result.stdout ?? '')
+    } catch (err) {
+      // A logout hook can fail after PATH was printed; retain complete marked output.
+      stdout = String(err.stdout ?? '')
+      log.warn('[ShellPathResolver] Shell probe failed:', {
+        code: err.code,
+        signal: err.signal,
+        killed: !!err.killed,
+        elapsedMs: Date.now() - startedAt,
+        timeoutMs: TIMEOUT_MS
+      })
+    }
 
-      // macOS zsh -l -i может выводить OSC-sequences (например, \033]7;…\007) перед командой.
-      const raw = (stdout || '').replace(/\x1b\][0-9]*;[^\x07]*\x07/g, '')
-      const start = raw.indexOf(delimiter)
-      const end = raw.indexOf(delimiter, start + delimiter.length)
-
-      let resolved
-      if (start !== -1 && end !== -1 && end > start) {
-        resolved = raw.slice(start + delimiter.length, end)
-      } else {
-        // Если маркеры не найдены — берём весь stdout, очищаем
-        resolved = raw.trim()
-      }
-
+    // macOS zsh -l -i может выводить OSC-sequences (например, \033]7;…\007) перед командой.
+    const raw = stdout.replace(/\x1b\][0-9]*;[^\x07]*\x07/g, '')
+    const start = raw.indexOf(delimiter)
+    const end = raw.indexOf(delimiter, start + delimiter.length)
+    if (start !== -1 && end !== -1 && end > start) {
+      const resolved = raw.slice(start + delimiter.length, end)
       if (resolved) {
         const merged = this._mergeWithSystemPath(resolved)
         log.info(`[ShellPathResolver] Resolved PATH (${merged.length} chars): ${merged.slice(0, 120)}...`)
         return merged
       }
-    } catch (err) {
-      log.warn('[ShellPathResolver] Failed to resolve via zsh, falling back:', err.message)
     }
 
-    return this._buildFallbackPath()
+    return null
   }
 
   /**
@@ -239,7 +291,7 @@ export class ShellPathResolver {
   _mergeWithSystemPath(resolved) {
     const sep = path.delimiter
     const systemDefault = isUnix() ? '/usr/bin:/bin:/usr/sbin:/sbin' : ''
-    const system = (process.env.PATH || systemDefault).split(sep).filter(Boolean)
+    const system = (this._env.PATH || systemDefault).split(sep).filter(Boolean)
     // Очищаем старые маркеры, которые могли остаться в process.env.PATH от предыдущих запусков
     const cleaned = (resolved || '').replace(new RegExp(`_?${DELIMITER}[^${sep.replace(/\\/g, '\\\\')}]*`, 'g'), '')
     const user = cleaned.split(sep).filter(Boolean)
@@ -256,7 +308,7 @@ export class ShellPathResolver {
   _buildFallbackPath() {
     const sep = path.delimiter
     const systemDefault = isUnix() ? '/usr/bin:/bin:/usr/sbin:/sbin' : ''
-    const base = process.env.PATH || systemDefault
+    const base = this._env.PATH || systemDefault
     const parts = [
       ...base.split(sep),
       ...FALLBACK_PATHS

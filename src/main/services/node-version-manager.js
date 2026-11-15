@@ -305,7 +305,7 @@ export class NodeVersionManager {
     try {
       const { stdout, stderr } = await this._exec(undefined, `curl -o- ${NVM_INSTALL_URL} | bash`, [], { timeoutMs: INSTALL_TIMEOUT_MS })
       this._detectCache.clear()
-      // invalidate() обнуляет кэш PATH — сразу пересобираем, иначе последующие вызовы остались бы без PATH
+      // invalidate() помечает кэш PATH устаревшим — сразу пересобираем, чтобы подхватить новый nvm
       this._resolver.invalidate()
       await this._resolver.resolve()
       return { success: true, output: stdout + stderr }

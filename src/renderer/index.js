@@ -199,6 +199,7 @@ async function init() {
   }
   if (!config.agents) config.agents = {}
   if (!config.agents.forceDisabled || typeof config.agents.forceDisabled !== 'object') config.agents.forceDisabled = {}
+  if (!config.agents.forceEnabled || typeof config.agents.forceEnabled !== 'object' || Array.isArray(config.agents.forceEnabled)) config.agents.forceEnabled = {}
   if (!config.agents.launchCommands || typeof config.agents.launchCommands !== 'object') config.agents.launchCommands = {}
   if (typeof config.agents.proxy !== 'string') config.agents.proxy = ''
   if (typeof config.agents.proxyEnabled !== 'boolean') config.agents.proxyEnabled = false
@@ -238,6 +239,7 @@ async function init() {
     agents: {
       keyboardModes: config.agents?.keyboardModes || {},
       forceDisabled: config.agents?.forceDisabled || {},
+      forceEnabled: config.agents?.forceEnabled || {},
       launchCommands: config.agents?.launchCommands || {},
       custom: config.agents?.custom || [],
       proxy: config.agents?.proxy || '',
@@ -1229,10 +1231,11 @@ async function init() {
   }, { capture: true, passive: false })
 
   statusBar.setAgentConfigs([
-    ...SUPPORTED_AGENTS.map(a => ({ id: a.id, label: a.label, enabled: true })),
+    ...SUPPORTED_AGENTS.map(a => ({ id: a.id, label: a.label })),
     ...(config.agents?.custom || [])
   ])
   statusBar.setForceDisabled(config.agents?.forceDisabled || {})
+  statusBar.setForceEnabled(config.agents?.forceEnabled || {})
   const agentResult = await refreshAgents()
   if (agentResult) statusBar.setAgentsStatus(agentResult)
   statusBar.setProxyConfig({ proxy: config.agents.proxy || '', enabled: config.agents.proxyEnabled })
@@ -1399,6 +1402,12 @@ async function init() {
       appStore.set('agents.forceDisabled', value)
       statusBar.setForceDisabled(value)
     }
+    if (key === 'agents.forceEnabled') {
+      if (!config.agents) config.agents = {}
+      config.agents.forceEnabled = value
+      appStore.set('agents.forceEnabled', value)
+      statusBar.setForceEnabled(value)
+    }
     if (key === 'agents.launchCommands') {
       if (!config.agents) config.agents = {}
       config.agents.launchCommands = value
@@ -1411,7 +1420,7 @@ async function init() {
       config.agents.custom = value
       appStore.set('agents.custom', value)
       statusBar.setAgentConfigs([
-        ...SUPPORTED_AGENTS.map(a => ({ id: a.id, label: a.label, enabled: true })),
+        ...SUPPORTED_AGENTS.map(a => ({ id: a.id, label: a.label })),
         ...(value || [])
       ])
       refreshAgents()
